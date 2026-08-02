@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team NSSUR Telemetry</title>
+  
+  <!-- Google Font (Inter & JetBrains Mono) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- PapaParse for high-performance CSV parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  
+  <!-- Leaflet Map CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="style.css?v=20260728-2">
+</head>
+<body>
+
+  <div class="app-container">
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo-wrapper">
+          <img src="team_logo.png" alt="Team NSSUR Logo">
+        </div>
+        <div class="brand-title-area">
+          <span class="brand-team">Team NSSUR</span>
+          <span class="brand-sub">Telemetry</span>
+        </div>
+        <!-- 탭 버튼 영역 -->
+        <nav class="tab-navigation">
+          <button id="tab-general" class="view-tab active">1: 종합 주행 분석</button>
+          <button id="tab-diagnostics" class="view-tab">2: 입력 및 서스펜션 분석</button>
+          <button id="tab-gps" class="view-tab">3: GPS 주행 경로 지도</button>
+          <button id="tab-temperature" class="view-tab">4: 냉각 및 온도 분석</button>
+        </nav>
+      </div>
+      
+      <div class="header-right">
+        <span id="loaded-file-badge" style="display: none; font-family: monospace; font-size: 12px; font-weight: 700; color: #f97316; background: rgba(249, 115, 22, 0.1); border: 1px solid rgba(249, 115, 22, 0.2); padding: 5px 10px; border-radius: 4px; margin-right: 8px;"></span>
+        <button id="btn-theme-toggle" class="btn btn-theme">🌓 테마 전환</button>
+        <!-- 간단 파일 업로드 버튼 -->
+        <label for="csv-upload-input" class="btn btn-archive" style="cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+          <svg class="icon-archive" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;flex-shrink:0;">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <span>CSV 열기</span>
+        </label>
+        <input type="file" id="csv-upload-input" accept=".csv,.CSV" style="display:none;">
+        
+        <div id="file-status" class="status-badge inactive">
+          <span class="status-pulse"></span>
+          <span id="status-text">로그 대기 중</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace Area -->
+    <div class="workspace">
+      
+      <!-- [페이지 1] MoTeC 스타일 2단 차트 레이아웃 (기본 활성화, 100% 꽉 찬 화면) -->
+      <section id="page-general" class="analysis-split-view page-view active">
+        
+        <!-- Left Column: Vehicle State (Speed, RPM, Gear) -->
+        <div class="view-column">
+          <!-- 1페이지 좌측 세로 관통 커서선 -->
+          <div id="cursor-line-page1-left" class="motec-cursor-line"></div>
+          <!-- Chart 1: Wheel Speed -->
+          <div class="motec-chart-card">
+            <div class="chart-label-bar">
+              <span class="signal-title color-orange">FL Wheel Speed [EMU VSS]</span>
+              <span class="signal-val val-sep" id="cursor-speed">--.-</span>
+              <span class="signal-title color-blue">RL Wheel Speed [km/h]</span>
+              <span class="signal-val" id="cursor-speed-rl">--.-</span>
+            </div>
+            <div class="canvas-holder">
+              <canvas id="chart-ground-speed"></canvas>
+            </div>
+          </div>
+
+          <!-- Chart 2: Engine RPM -->
+          <div class="motec-chart-card">
+            <div class="chart-label-bar">
+              <span class="signal-title color-red">Engine RPM [rpm]</span>
+              <span class="signal-val" id="cursor-rpm">----</span>
+            </div>
+            <div class="canvas-holder">
+              <canvas id="chart-engine-rpm"></canvas>
+            </div>
+          </div>
+
+          <!-- Chart 3: Gear -->
+          <div class="motec-chart-card">
+            <div class="chart-label-bar">
+              <span class="signal-title color-blue">Gear</span>
+              <span class="signal-val" id="cursor-gear">-</span>
+            </div>
+            <div class="canvas-holder">
+              <canvas id="chart-vehicle-gear"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Driver Input (Steering, Throttle vs Brake) -->
+        <div class="view-column">
+          <!-- 1페이지 우측 세로 관통 커서선 -->
+          <div id="cursor-line-page1-right" class="motec-cursor-line"></div>
+          <!-- Chart 4: Steering Angle -->
+          <div class="motec-chart-card double-height">
+            <div class="chart-label-bar">
+              <span class="signal-title color-magenta">Steering Angle [°]</span>
+              <span class="signal-val" id="cursor-steering">--.-</span>
+            </div>
+            <div class="canvas-holder">
+              <canvas id="chart-steering-angle"></canvas>
+              <!-- 캔버스 우측 상단 여백에 절대 위치로 큼직하게 띄운 스티어링 휠 오버레이 위젯 -->
+              <div class="steering-wheel-overlay">
+                <svg id="steering-wheel-graphic" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="40" stroke="var(--text-primary)" stroke-width="8" fill="none" opacity="0.8" />
+                  <line x1="50" y1="50" x2="50" y2="90" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
+                  <line x1="50" y1="50" x2="10" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
+                  <line x1="50" y1="50" x2="90" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
+                  <circle cx="50" cy="50" r="10" fill="var(--accent-magenta)" />
+                  <rect x="47" y="6" width="6" height="8" fill="var(--accent-orange)" rx="1" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart 5: Throttle & Brake Overlap -->
+          <div class="motec-chart-card double-height">
+            <div class="chart-label-bar">
+              <span class="signal-title color-green">Throttle Pos [%]</span>
+              <span class="signal-val val-sep" id="cursor-throttle">---.-</span>
+              <span class="signal-title color-red">Brake Pos [%]</span>
+              <span class="signal-val" id="cursor-brake">---.-</span>
+            </div>
+            <div class="canvas-holder">
+              <canvas id="chart-throttle-brake"></canvas>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- [페이지 2] MoTeC 2: Suspension & Driver Inputs (100% 꽉 찬 화면) -->
+      <section id="page-diagnostics" class="diagnostic-panel page-view">
+        <div class="panel-header">
+          <div class="panel-title-area">
+            <span class="col-indicator yellow"></span>
+            <h3>입력 및 서스펜션 분석</h3>
+          </div>
+          <div class="header-right-group">
+            <!-- 가로 한줄 요약 통계 바 -->
+            <div class="diag-stats-bar">
+              <span class="stat-item">Max RPM: <strong id="stat-max-rpm">0</strong></span>
+              <span class="stat-item">Max Speed: <strong id="stat-max-speed">0.0 km/h</strong></span>
+              <span class="stat-item">Min Batt: <strong id="stat-min-batt">0.00 V</strong></span>
+              <span class="stat-item">Duration: <strong id="stat-duration">0.0s</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="diag-workspace">
+          
+          <!-- 상단 영역: 드라이버 제어 입력 3종 묶음 (Throttle, Brake, Steering - 동일 프레임 세로 분리 스택형) -->
+          <div class="diag-top-section">
+            <div class="motec-chart-card diag-stacked-card">
+              <div class="chart-label-bar diag-label-bar">
+                <div class="diag-label-cell">
+                  <span class="signal-title color-green">Throttle [%]</span>
+                  <span class="signal-val" id="diag-cursor-throttle">--.-</span>
+                </div>
+                <div class="diag-label-cell">
+                  <span class="signal-title color-red">Brake [%]</span>
+                  <span class="signal-val" id="diag-cursor-brake">--.-</span>
+                </div>
+                <div class="diag-label-cell">
+                  <span class="signal-title color-magenta">Steering Angle [°]</span>
+                  <span class="signal-val" id="diag-cursor-steering">--.-</span>
+                  <!-- 2페이지 핸들 그래픽 (1페이지와 동일 디자인) -->
+                  <div class="diag-steering-wheel-wrapper">
+                    <svg id="diag-steering-wheel-graphic" class="diag-steering-wheel-svg" viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="40" stroke="var(--text-primary)" stroke-width="8" fill="none" opacity="0.8" />
+                      <line x1="50" y1="50" x2="50" y2="90" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
+                      <line x1="50" y1="50" x2="10" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
+                      <line x1="50" y1="50" x2="90" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
+                      <circle cx="50" cy="50" r="10" fill="var(--accent-magenta)" />
+                      <rect x="47" y="6" width="6" height="8" fill="var(--accent-orange)" rx="1" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              <div class="stacked-canvas-container">
+                <!-- 2페이지 상단 세로 관통 커서선 -->
+                <div id="cursor-line-page2-top" class="motec-cursor-line" style="top: 0; bottom: 0;"></div>
+                <!-- 상단 서브 시트: 스로틀 및 브레이크 -->
+                <div class="canvas-holder-stacked top-pane">
+                  <canvas id="diag-chart-throttle-brake"></canvas>
+                </div>
+                <!-- 하단 서브 시트: 조향각 -->
+                <div class="canvas-holder-stacked bottom-pane">
+                  <canvas id="diag-chart-steering"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 하단 영역: 4바퀴 서스펜션 트래블 분할 차트 (FL, FR, RL, RR 레이아웃) -->
+          <div class="diag-bottom-section">
+            <!-- 좌측 열: FL(상) & RL(하) -->
+            <div class="diag-column">
+              <!-- 2페이지 하단 좌측 세로 관통 커서선 -->
+              <div id="cursor-line-page2-bot-left" class="motec-cursor-line" style="top: 0; bottom: 0;"></div>
+              <div class="motec-chart-card sus-card">
+                <div class="chart-label-bar">
+                  <span class="signal-title color-orange">Suspension FL [ADC6 / PC5]</span>
+                  <span class="signal-val" id="cursor-sus-fl">----</span>
+                </div>
+                <div class="canvas-holder-sub">
+                  <canvas id="chart-sus-fl"></canvas>
+                </div>
+              </div>
+              
+              <div class="motec-chart-card sus-card">
+                <div class="chart-label-bar">
+                  <span class="signal-title color-blue">Suspension RL [EMU ADC4]</span>
+                  <span class="signal-val" id="cursor-sus-rl">----</span>
+                </div>
+                <div class="canvas-holder-sub">
+                  <canvas id="chart-sus-rl"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <!-- 우측 열: FR(상) & RR(하) -->
+            <div class="diag-column">
+              <!-- 2페이지 하단 우측 세로 관통 커서선 -->
+              <div id="cursor-line-page2-bot-right" class="motec-cursor-line" style="top: 0; bottom: 0;"></div>
+              <div class="motec-chart-card sus-card">
+                <div class="chart-label-bar">
+                  <span class="signal-title color-red">Suspension FR [ADC4 / PC3]</span>
+                  <span class="signal-val" id="cursor-sus-fr">----</span>
+                </div>
+                <div class="canvas-holder-sub">
+                  <canvas id="chart-sus-fr"></canvas>
+                </div>
+              </div>
+              
+              <div class="motec-chart-card sus-card">
+                <div class="chart-label-bar">
+                  <span class="signal-title color-green">Suspension RR [EMU ADC5]</span>
+                  <span class="signal-val" id="cursor-sus-rr">----</span>
+                </div>
+                <div class="canvas-holder-sub">
+                  <canvas id="chart-sus-rr"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- [페이지 3] GPS 주행 경로 지도 (Leaflet.js 기반) -->
+      <section id="page-gps" class="analysis-split-view page-view">
+        <!-- Left Side: Map Container (80% width) -->
+        <div class="motec-chart-card" style="flex: 4; height: 100%; position: relative; min-height: 550px; display: flex; flex-direction: column;">
+          <div class="chart-label-bar">
+            <span class="signal-title color-orange">GPS Track Map</span>
+            <span class="signal-val" id="cursor-gps-coords">--.------, ---.------</span>
+          </div>
+          <div id="gps-map" style="flex: 1; width: 100%; background: #1e293b; border-radius: 4px; z-index: 1;"></div>
+        </div>
+
+        <!-- Right Side: GPS Metric Panel (20% width) -->
+        <div class="view-column" style="flex: 1; gap: 16px; border: none; background: transparent; padding: 0;">
+          <!-- GPS Speed Card -->
+          <div class="motec-chart-card" style="flex: none; height: auto; padding: 16px; border-radius: 12px;">
+            <div style="font-size: 12px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">GPS Speed</div>
+            <div style="font-size: 36px; font-weight: 800; font-family: monospace; color: #f97316; margin-top: 8px;">
+              <span id="gps-cursor-speed">0.0</span> <span style="font-size: 16px; font-weight: 400; color: #64748b;">km/h</span>
+            </div>
+          </div>
+
+          <!-- GPS Clock Time Card -->
+          <div class="motec-chart-card" style="flex: none; height: auto; padding: 16px; border-radius: 12px;">
+            <div style="font-size: 12px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">GPS Clock Time</div>
+            <div id="gps-cursor-time" style="font-size: 24px; font-weight: 700; font-family: monospace; color: #eab308; margin-top: 8px;">00:00:00.00</div>
+          </div>
+          
+          <!-- Satellites count Card -->
+          <div class="motec-chart-card" style="flex: none; height: auto; padding: 16px; border-radius: 12px;">
+            <div style="font-size: 12px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Satellites</div>
+            <div id="gps-cursor-sats" style="font-size: 28px; font-weight: 700; font-family: monospace; color: #10b981; margin-top: 8px;">0</div>
+          </div>
+          
+          <!-- Fix Quality Card -->
+          <div class="motec-chart-card" style="flex: none; height: auto; padding: 16px; border-radius: 12px;">
+            <div style="font-size: 12px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Fix Quality</div>
+            <div id="gps-cursor-qual" style="font-size: 20px; font-weight: 700; font-family: monospace; color: #3b82f6; margin-top: 8px;">No Fix</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- [페이지 4] EMU 냉각 및 온도 분석 -->
+      <section id="page-temperature" class="temperature-panel page-view">
+        <div class="temperature-summary-grid">
+          <div class="temperature-metric coolant">
+            <span class="temperature-metric-label">냉각수 온도 · EMU CLT</span>
+            <strong><span id="temp-cursor-coolant">--</span> °C</strong>
+            <small>최고 <span id="temp-max-coolant">--</span> °C</small>
+          </div>
+          <div class="temperature-metric oil">
+            <span class="temperature-metric-label">엔진 오일 온도 · EMU Oil Temp</span>
+            <strong><span id="temp-cursor-oil">--</span> °C</strong>
+            <small>최고 <span id="temp-max-oil">--</span> °C</small>
+          </div>
+          <div class="temperature-metric intake">
+            <span class="temperature-metric-label">Intake Air Temperature</span>
+            <strong><span id="temp-cursor-iat">--</span> °C</strong>
+            <small>최고 <span id="temp-max-iat">--</span> °C</small>
+          </div>
+          <div class="temperature-metric ecu">
+            <span class="temperature-metric-label">ECU Temperature</span>
+            <strong><span id="temp-cursor-ecu">--</span> °C</strong>
+            <small>최고 <span id="temp-max-ecu">--</span> °C</small>
+          </div>
+        </div>
+
+        <div class="temperature-chart-grid">
+          <div class="motec-chart-card temperature-chart-card">
+            <div class="chart-label-bar">
+              <span class="signal-title color-blue">Cooling System — Coolant / Oil [°C] + FL Wheel Speed [km/h]</span>
+              <span class="temperature-source">EMU 0x602 · dual axis</span>
+            </div>
+            <div class="canvas-holder">
+              <canvas id="chart-coolant-oil"></canvas>
+            </div>
+          </div>
+          <div class="motec-chart-card temperature-chart-card">
+            <div class="chart-label-bar">
+              <span class="signal-title color-orange">Thermal Environment — Intake / ECU [°C]</span>
+              <span class="temperature-source">EMU 0x600 / 0x604</span>
+            </div>
+            <div class="canvas-holder">
+              <canvas id="chart-intake-ecu"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- 타임라인 네비게이터 컨트롤러 (시간 범위 설정 및 드래그 스크롤바) -->
+    <section class="timeline-navigator">
+      <div class="zoom-control-group">
+        <span class="nav-label">🔍 구간 설정 (초):</span>
+        <input type="number" id="input-start-time" class="num-input" value="0" min="0" step="0.5">
+        <span class="wave-tilde">~</span>
+        <input type="number" id="input-end-time" class="num-input" value="30" min="0" step="0.5">
+        <button id="btn-apply-zoom" class="btn btn-nav-action">적용</button>
+        <button id="btn-reset-zoom" class="btn btn-nav-action">전체 보기</button>
+      </div>
+
+      <div class="scroll-control-group">
+        <span class="nav-label" id="lbl-scroll-type">📊 그래프 좌우 스크롤:</span>
+        <input type="range" id="timeline-scroll-bar" class="timeline-slider" min="0" max="100" value="0">
+        <span class="current-time-indicator" id="current-time-val">0.00s</span>
+      </div>
+    </section>
+  </div>
+
+  <!-- 드래그앤드롭 파일 업로드 시각적 오버레이 -->
+  <div id="drag-drop-overlay" class="drag-drop-overlay">
+    <div class="drag-drop-box">
+      <div class="drag-drop-icon">📂</div>
+      <div class="drag-drop-text">NSSUR 텔레메트리 로그 파일 업로드</div>
+      <div class="drag-drop-subtext">CSV 파일을 화면 아무 곳에나 놓아주세요. 바로 시각화가 시작됩니다.</div>
+    </div>
+  </div>
+
+  <!-- Custom JS -->
+  <script src="app.js?v=20260728-5"></script>
+</body>
+</html>

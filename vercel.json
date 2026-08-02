@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "**/*", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/app.js",       "dest": "/app.js" },
+    { "src": "/style.css",    "dest": "/style.css" },
+    { "src": "/nssur_logo.png",    "dest": "/nssur_logo.png" },
+    { "src": "/nssur_raw_logo.png","dest": "/nssur_raw_logo.png" },
+    { "src": "/team_logo.png",     "dest": "/team_logo.png" },
+    { "src": "/(.*)",         "dest": "/index.html" }
+  ]
+}
