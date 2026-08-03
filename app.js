@@ -31,10 +31,14 @@ let limitEndSec = 0;
 let activeSampledData = [];
 let currentCursorIndex = 0;
 
+// 화면용 다운샘플 인덱스 (전체 globalData 기준 위치) 및 그 시각값.
+// 노이즈 필터는 100Hz 원본 전체에 먼저 적용된 뒤 이 인덱스로 추출됩니다.
+let sampleIndices = [];
+let sampleTimes = [];
+
 // DOM Elements
 const statusBadge = document.getElementById('file-status');
 const statusText = document.getElementById('status-text');
-const selectSharedLog = document.getElementById('select-shared-log'); // 공유 로그 셀렉트 드롭다운
 
 // Cursor Realtime Value DOMs (Page 1)
 const cursorSpeed = document.getElementById('cursor-speed');
@@ -56,6 +60,8 @@ const cursorSusRr = document.getElementById('cursor-sus-rr');
 
 // Interactive Steering Wheel Graphic Widget DOM
 const steeringWheelGraphic = document.getElementById('steering-wheel-graphic');
+const gpsSteeringWheelGraphic = document.getElementById('gps-steering-wheel-graphic');
+const gpsCursorSteering = document.getElementById('gps-cursor-steering');
 
 // Diag Summary DOMs
 const statMaxRpm = document.getElementById('stat-max-rpm');
@@ -82,6 +88,9 @@ const pageDiagnostics = document.getElementById('page-diagnostics');
 const pageGps = document.getElementById('page-gps');
 const tabTemperature = document.getElementById('tab-temperature');
 const pageTemperature = document.getElementById('page-temperature');
+const tabRealtime = document.getElementById('tab-realtime');
+const pageRealtime = document.getElementById('page-realtime');
+const timelineNavigator = document.querySelector('.timeline-navigator');
 
 // Temperature DOMs (Page 4)
 const tempCursorCoolant = document.getElementById('temp-cursor-coolant');
@@ -96,6 +105,8 @@ const tempMaxEcu = document.getElementById('temp-max-ecu');
 // GPS DOMs
 const cursorGpsCoords = document.getElementById('cursor-gps-coords');
 const gpsCursorSpeed = document.getElementById('gps-cursor-speed');
+const gpsCursorWheelSpeed = document.getElementById('gps-cursor-wheel-speed');
+const gpsSpeedDelta = document.getElementById('gps-speed-delta');
 const gpsCursorSats = document.getElementById('gps-cursor-sats');
 const gpsCursorQual = document.getElementById('gps-cursor-qual');
 const gpsCursorTime = document.getElementById('gps-cursor-time');
@@ -188,16 +199,24 @@ function getCalibratedBrake(rawValue) {
   return Math.max(0, Math.min(100, percent));
 }
 
-// Calibrated Steering (+105 offset shift)
+// Calibrated Steering
+// 영점/배율/반전은 steering.js의 steeringCal에서 조정합니다 (핸들 그래픽 클릭).
+// 기본값 {zeroRaw:998, degPerLsb:0.1, invert:false}는 기존 하드코딩 식과 동일:
+//   (raw - 2048) * 0.1 + 105 = 0.1*raw - 99.8 = (raw - 998) * 0.1
 function getCalibratedSteering(rawValue) {
-  const rawVal = (rawValue === undefined || rawValue === null || isNaN(rawValue)) ? 2048 : rawValue;
-  return ((rawVal - 2048) * 0.1) + 105.0;
+  const cal = (typeof steeringCal !== 'undefined') ? steeringCal : { zeroRaw: 998, degPerLsb: 0.1, invert: false };
+  const rawVal = (rawValue === undefined || rawValue === null || isNaN(rawValue)) ? cal.zeroRaw : rawValue;
+  const deg = (rawVal - cal.zeroRaw) * cal.degPerLsb;
+  return cal.invert ? -deg : deg;
 }
 
 // GPS Map Global Variables
 let gpsMap = null;
 let gpsRouteLine = null;
 let gpsCursorMarker = null;
+let gpsGraphicLayer = null;
+let gpsSatelliteLayer = null;
+let currentGpsLayerMode = 'graphic'; // 'graphic' | 'satellite'
 
 // NMEA coordinate converter helper
 function convertNmeaToDecimal(val, isLongitude = false) {
@@ -226,19 +245,78 @@ function convertNmeaToDecimal(val, isLongitude = false) {
 }
 
 // Leaflet Map Initialization
+// 지도 확대 한도를 크게 늘려서(줌 22까지) 일반 도로 폭 안에서도 GPS 포인트가
+// 어느 위치(차선/갓길 등)에 찍혔는지 구분할 수 있도록 합니다. 타일 자체의
+// 최대 해상도(maxNativeZoom)를 넘어가면 Leaflet이 남은 배율만큼 타일을
+// 확대(오버줌)해서 보여줍니다 — 화질은 약간 흐려지지만 위치 판독에는 충분합니다.
+const GPS_MAP_MAX_ZOOM = 22;
+
 function initGpsMap() {
   if (gpsMap) return;
   gpsMap = L.map('gps-map', {
-    zoomControl: false
+    zoomControl: false,
+    maxZoom: GPS_MAP_MAX_ZOOM
   }).setView([36.5, 127.8], 7);
-  
+
   L.control.zoom({ position: 'bottomright' }).addTo(gpsMap);
-  
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+
+  // 그래픽(다크 벡터 스타일) 지도 레이어 — 기존 기본 지도
+  gpsGraphicLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; CartoDB',
-    maxZoom: 20
-  }).addTo(gpsMap);
-  
+    maxZoom: GPS_MAP_MAX_ZOOM,
+    maxNativeZoom: 20
+  });
+
+  // 위성 지도 레이어 (Esri World Imagery — 별도 API 키 불필요, 무료)
+  gpsSatelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri — Esri, Maxar, Earthstar Geographics, GIS User Community',
+    maxZoom: GPS_MAP_MAX_ZOOM,
+    maxNativeZoom: 19
+  });
+
+  // 마지막으로 선택한 지도 모드 기억 (브라우저별 로컬 저장)
+  const savedMode = (() => {
+    try { return localStorage.getItem('nssur_gps_map_mode'); } catch (err) { return null; }
+  })();
+  currentGpsLayerMode = savedMode === 'satellite' ? 'satellite' : 'graphic';
+  (currentGpsLayerMode === 'satellite' ? gpsSatelliteLayer : gpsGraphicLayer).addTo(gpsMap);
+
+  // 위성 ↔ 그래픽 지도 전환 커스텀 컨트롤 버튼
+  // 우측 상단은 조향각 위젯이 쓰므로 지도 전환 버튼은 좌측 상단에 둡니다.
+  const MapModeToggleControl = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd: function () {
+      const container = L.DomUtil.create('div', 'map-mode-toggle');
+      const button = L.DomUtil.create('a', 'map-mode-toggle-btn', container);
+      button.href = '#';
+      button.title = '위성 지도 / 그래픽 지도 전환';
+
+      const refreshLabel = () => {
+        button.innerHTML = currentGpsLayerMode === 'satellite' ? '🗺️ 그래픽 지도' : '🛰️ 위성 지도';
+      };
+      refreshLabel();
+
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.on(button, 'click', (e) => {
+        L.DomEvent.preventDefault(e);
+        if (currentGpsLayerMode === 'graphic') {
+          gpsMap.removeLayer(gpsGraphicLayer);
+          gpsSatelliteLayer.addTo(gpsMap);
+          currentGpsLayerMode = 'satellite';
+        } else {
+          gpsMap.removeLayer(gpsSatelliteLayer);
+          gpsGraphicLayer.addTo(gpsMap);
+          currentGpsLayerMode = 'graphic';
+        }
+        try { localStorage.setItem('nssur_gps_map_mode', currentGpsLayerMode); } catch (err) { /* ignore */ }
+        refreshLabel();
+      });
+
+      return container;
+    }
+  });
+  new MapModeToggleControl().addTo(gpsMap);
+
   gpsRouteLine = L.polyline([], {
     color: '#f97316',
     weight: 5,
@@ -349,6 +427,9 @@ if (tabGps) {
 if (tabTemperature) {
   tabTemperature.addEventListener('click', () => switchTab('temperature'));
 }
+if (tabRealtime) {
+  tabRealtime.addEventListener('click', () => switchTab('realtime'));
+}
 
 // Keyboard shortcuts: number row and numeric keypad 1–4 switch pages.
 document.addEventListener('keydown', (event) => {
@@ -368,7 +449,9 @@ document.addEventListener('keydown', (event) => {
     Digit3: 'gps',
     Numpad3: 'gps',
     Digit4: 'temperature',
-    Numpad4: 'temperature'
+    Numpad4: 'temperature',
+    Digit5: 'realtime',
+    Numpad5: 'realtime'
   };
   const mode = pageByKey[event.code];
   if (!mode) return;
@@ -383,13 +466,32 @@ function switchTab(mode) {
   tabDiagnostics.classList.remove('active');
   if (tabGps) tabGps.classList.remove('active');
   if (tabTemperature) tabTemperature.classList.remove('active');
+  if (tabRealtime) tabRealtime.classList.remove('active');
 
   pageGeneral.classList.remove('active');
   pageDiagnostics.classList.remove('active');
   if (pageGps) pageGps.classList.remove('active');
   if (pageTemperature) pageTemperature.classList.remove('active');
+  if (pageRealtime) pageRealtime.classList.remove('active');
 
   clearAllDomCursors();
+
+  // 실시간 페이지는 로그 재생용 타임라인이 필요 없으므로 숨깁니다.
+  if (timelineNavigator) {
+    timelineNavigator.style.display = (mode === 'realtime') ? 'none' : '';
+  }
+
+  if (mode === 'realtime') {
+    if (tabRealtime) tabRealtime.classList.add('active');
+    if (pageRealtime) pageRealtime.classList.add('active');
+    setTimeout(() => {
+      Object.values((typeof rtState !== 'undefined' && rtState.cards) || {}).forEach(c => {
+        if (c.chart) { c.chart.resize(); c.chart.update('none'); }
+      });
+      if (typeof rtScheduleRender === 'function') rtScheduleRender();
+    }, 50);
+    return;
+  }
 
   if (mode === 'general') {
     tabGeneral.classList.add('active');
@@ -736,6 +838,16 @@ const handleTimelineScrollDrag = (e) => {
 scrollBar.addEventListener('input', handleTimelineScrollDrag);
 scrollBar.addEventListener('change', handleTimelineScrollDrag);
 
+// 커서 위치의 채널 값을 읽습니다. 노이즈 필터가 걸려 있으면 필터 적용값을
+// 반환해서 그래프와 숫자 표시가 항상 같은 값을 가리키도록 합니다.
+function cursorChannelValue(key, fallback) {
+  if (typeof channelValueAt === 'function' && sampleIndices.length) {
+    const v = channelValueAt(key, sampleIndices[currentCursorIndex]);
+    if (v !== null && Number.isFinite(v)) return v;
+  }
+  return fallback;
+}
+
 // Numeric labels updates helper
 function updateNumericDisplays(row) {
   if (currentTimeVal) {
@@ -750,25 +862,27 @@ function updateNumericDisplays(row) {
     scrollBar.value = row.time_sec.toFixed(2);
   }
 
-  // Page 1 Labels
-  cursorSpeed.textContent = (row.fl_speed_kmh || 0).toFixed(1);
-  if (cursorSpeedRl) cursorSpeedRl.textContent = (row.rl_speed_kmh || 0).toFixed(1);
-  cursorRpm.textContent = Math.round(row.rpm || 0);
-  if (row.gear === 0) {
+  // Page 1 Labels (노이즈 필터 적용값 기준)
+  cursorSpeed.textContent = cursorChannelValue('fl_speed', row.fl_speed_kmh || 0).toFixed(1);
+  if (cursorSpeedRl) cursorSpeedRl.textContent = cursorChannelValue('rl_speed', row.rl_speed_kmh || 0).toFixed(1);
+  cursorRpm.textContent = Math.round(cursorChannelValue('rpm', row.rpm || 0));
+
+  const gearVal = Math.round(cursorChannelValue('gear', row.gear !== undefined ? row.gear : NaN));
+  if (gearVal === 0) {
     cursorGear.textContent = 'N';
   } else {
-    cursorGear.textContent = row.gear !== undefined ? row.gear : '-';
+    cursorGear.textContent = Number.isFinite(gearVal) ? gearVal : '-';
   }
-  
-  const steeringDeg = getCalibratedSteering(row.steering_raw);
+
+  const steeringDeg = cursorChannelValue('steering', getCalibratedSteering(row.steering_raw));
   cursorSteering.textContent = (steeringDeg >= 0 ? '+' : '') + steeringDeg.toFixed(1);
 
   if (steeringWheelGraphic) {
     steeringWheelGraphic.style.transform = `rotate(${steeringDeg}deg)`;
   }
 
-  const throttleVal = (row.decoded_tps || 0).toFixed(1);
-  const brakeVal = getCalibratedBrake(row.front_brake_raw).toFixed(1);
+  const throttleVal = cursorChannelValue('throttle', row.decoded_tps || 0).toFixed(1);
+  const brakeVal = cursorChannelValue('brake', getCalibratedBrake(row.front_brake_raw)).toFixed(1);
 
   cursorThrottle.textContent = throttleVal;
   cursorBrake.textContent = brakeVal;
@@ -784,16 +898,28 @@ function updateNumericDisplays(row) {
     diagWheel.style.transform = `rotate(${steeringDeg}deg)`;
   }
 
-  cursorSusFl.textContent = row.suspension_fl_raw ?? '----';
-  cursorSusFr.textContent = row.suspension_fr_raw ?? '----';
-  cursorSusRl.textContent = row.suspension_rl_raw ?? '----';
-  cursorSusRr.textContent = row.suspension_rr_raw ?? '----';
+  // 3페이지(GPS 지도) 우측 상단 조향각 위젯 연동
+  if (gpsSteeringWheelGraphic) {
+    gpsSteeringWheelGraphic.style.transform = `rotate(${steeringDeg}deg)`;
+  }
+  if (gpsCursorSteering) {
+    gpsCursorSteering.textContent = (steeringDeg >= 0 ? '+' : '') + steeringDeg.toFixed(1);
+  }
+
+  const susText = (key, raw) => {
+    const v = cursorChannelValue(key, raw);
+    return Number.isFinite(v) ? Math.round(v) : '----';
+  };
+  cursorSusFl.textContent = susText('sus_fl', row.suspension_fl_raw);
+  cursorSusFr.textContent = susText('sus_fr', row.suspension_fr_raw);
+  cursorSusRl.textContent = susText('sus_rl', row.suspension_rl_raw);
+  cursorSusRr.textContent = susText('sus_rr', row.suspension_rr_raw);
 
   // Page 4 temperature values
-  if (tempCursorCoolant) tempCursorCoolant.textContent = Math.round(row.water_c || 0);
-  if (tempCursorOil) tempCursorOil.textContent = Math.round(row.oil_c || 0);
-  if (tempCursorIat) tempCursorIat.textContent = Math.round(row.iat_c || 0);
-  if (tempCursorEcu) tempCursorEcu.textContent = Math.round(row.ecu_c || 0);
+  if (tempCursorCoolant) tempCursorCoolant.textContent = Math.round(cursorChannelValue('water', row.water_c || 0));
+  if (tempCursorOil) tempCursorOil.textContent = Math.round(cursorChannelValue('oil', row.oil_c || 0));
+  if (tempCursorIat) tempCursorIat.textContent = Math.round(cursorChannelValue('iat', row.iat_c || 0));
+  if (tempCursorEcu) tempCursorEcu.textContent = Math.round(cursorChannelValue('ecu', row.ecu_c || 0));
 
   // Page 3 GPS Elements update
   if (cursorGpsCoords) {
@@ -821,8 +947,17 @@ function updateNumericDisplays(row) {
     }
   }
 
-  if (gpsCursorSpeed) {
-    gpsCursorSpeed.textContent = (parseFloat(row.gps_speed_kmh) || 0.0).toFixed(1);
+  // GPS 속도 vs FL 휠속도 비교 (휠 슬립 / 속도 보정 오차 확인용)
+  const gpsSpd = parseFloat(row.gps_speed_kmh) || 0.0;
+  const wheelSpd = cursorChannelValue('fl_speed', row.fl_speed_kmh || 0);
+  if (gpsCursorSpeed) gpsCursorSpeed.textContent = gpsSpd.toFixed(1);
+  if (gpsCursorWheelSpeed) gpsCursorWheelSpeed.textContent = wheelSpd.toFixed(1);
+  if (gpsSpeedDelta) {
+    const d = wheelSpd - gpsSpd;
+    gpsSpeedDelta.textContent = (d >= 0 ? '+' : '') + d.toFixed(1) + ' km/h';
+    // 저속에서는 GPS 속도 자체가 부정확하므로 판정에서 제외
+    const meaningful = gpsSpd > 10 || wheelSpd > 10;
+    gpsSpeedDelta.classList.toggle('warn', meaningful && Math.abs(d) > 5);
   }
 
   if (gpsCursorSats) {
@@ -860,7 +995,13 @@ function handleFile(file) {
 
   Papa.parse(file, {
     header: true,
-    dynamicTyping: true,
+    // [중요] CAN 프레임 컬럼은 16진수 문자열이므로 절대 숫자로 변환하면 안 됩니다.
+    // dynamicTyping:true 로 전부 변환하면 'E'가 지수 표기로 해석되어
+    //   '9E01082950004002' → 9e1082950004002 → Infinity → 'Infinity' → 헥사 정리 → '000000000000000f'
+    // 처럼 프레임이 통째로 망가집니다. (Telemetry_001.csv 기준 전체 CAN 프레임의
+    // 3.85%인 16,096개가 이 경로로 손상됨 — RPM/기어/온도/서스펜션 값이 순간적으로 튀는 원인)
+    // 16자리 전부 숫자인 프레임도 2^53을 넘으면 하위 바이트가 잘려나갑니다.
+    dynamicTyping: header => !/^can\d+_data$/i.test(String(header)),
     skipEmptyLines: true,
     complete: function (results) {
       globalData = results.data;
@@ -1067,9 +1208,18 @@ function initDataAndDashboard() {
     adcAlertBadge.style.display = hasAdcAnomaly ? 'block' : 'none';
   }
 
+  // [노이즈 필터] 100Hz 원본 전체를 채널별 배열로 만들어 둡니다.
+  // 필터는 반드시 다운샘플링 "이전"의 원본에 적용해야 에일리어싱 없이 동작합니다.
+  if (typeof buildRawChannels === 'function') {
+    statusText.textContent = '채널 구성 중...';
+    buildRawChannels(globalData);
+  }
+
   // [성능 초고속 최적화]: 전체 원본 로그 데이터를 최대 4,500 포인트 크기로 1회 정밀 샘플링하여 꽂아둡니다.
   // 이로 인해 휠 확대 시 11개 차트 객체를 완전 파괴(destroy)하고 새로 그리지 않고, X축 범위(scale min/max)만 초고속 갱신하게 됩니다.
-  activeSampledData = downsampleData(globalData, 4500);
+  sampleIndices = downsampleIndices(globalData.length, 4500);
+  activeSampledData = sampleIndices.map(i => globalData[i]);
+  sampleTimes = activeSampledData.map(r => r.time_sec);
 
   // 최초 1회 전체 차트 생성 기동
   renderMotecCharts(activeSampledData);
@@ -1190,6 +1340,60 @@ function downsampleData(data, limit) {
   return result;
 }
 
+// 위 downsampleData와 동일한 규칙으로 "인덱스"만 뽑습니다.
+// 필터가 적용된 100Hz 배열에서 화면용 값을 추출할 때 사용합니다.
+function downsampleIndices(len, limit) {
+  const idx = [];
+  if (len <= 0) return idx;
+  if (len <= limit) {
+    for (let i = 0; i < len; i++) idx.push(i);
+    return idx;
+  }
+  const step = Math.floor(len / limit);
+  for (let i = 0; i < len; i += step) idx.push(i);
+  if (idx[idx.length - 1] !== len - 1) idx.push(len - 1);
+  return idx;
+}
+
+// 필터 설정이 바뀌었을 때 모든 차트의 데이터셋을 교체하고 즉시 다시 그립니다.
+function refreshChartsAfterFilter() {
+  if (!globalData.length || !sampleIndices.length) return;
+
+  const pairs = [
+    [chartSpeed, 'chart-ground-speed'],
+    [chartRpm, 'chart-engine-rpm'],
+    [chartGear, 'chart-vehicle-gear'],
+    [chartSteering, 'chart-steering-angle'],
+    [chartThrottleBrake, 'chart-throttle-brake'],
+    [diagChartThrottleBrake, 'diag-chart-throttle-brake'],
+    [diagChartSteering, 'diag-chart-steering'],
+    [chartFL, 'chart-sus-fl'],
+    [chartFR, 'chart-sus-fr'],
+    [chartRL, 'chart-sus-rl'],
+    [chartRR, 'chart-sus-rr'],
+    [chartCoolantOil, 'chart-coolant-oil'],
+    [chartIntakeEcu, 'chart-intake-ecu']
+  ];
+
+  pairs.forEach(([chart, canvasId]) => {
+    if (!chart) return;
+    const keys = CHART_CHANNELS[canvasId];
+    if (!keys) return;
+    keys.forEach((key, i) => {
+      if (chart.data.datasets[i]) {
+        chart.data.datasets[i].data = channelSeries(key, sampleIndices, sampleTimes);
+      }
+    });
+    chart.update('none');
+  });
+
+  if (typeof refreshFilterBadges === 'function') refreshFilterBadges();
+
+  const row = activeSampledData[currentCursorIndex];
+  if (row) updateNumericDisplays(row);
+  drawCssIntersectionDots(currentCursorIndex);
+}
+
 let hoverSyncPending = false;
 let lastActiveChart = null;
 let lastChartEvent = null;
@@ -1255,6 +1459,15 @@ function renderMotecCharts(data) {
 
   const labels = data.map(r => r.time_sec);
 
+  // 채널 키로 {x,y} 시리즈를 뽑는 헬퍼. 노이즈 필터가 적용된 값을 사용합니다.
+  // (filters.js 미로딩 등 예외 상황에서는 원본 row에서 직접 계산해 폴백)
+  const S = (key, fallbackFn) => {
+    if (typeof channelSeries === 'function' && sampleIndices.length) {
+      return channelSeries(key, sampleIndices, sampleTimes);
+    }
+    return data.map(r => ({ x: r.time_sec, y: fallbackFn(r) }));
+  };
+
   const isDark = document.body.classList.contains('dark-mode');
   const gridColor = isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)';
   const tickColor = isDark ? '#8c96a8' : '#64748b';
@@ -1315,7 +1528,7 @@ function renderMotecCharts(data) {
       datasets: [
         {
           label: 'FL Wheel Speed',
-          data: data.map(r => ({ x: r.time_sec, y: r.fl_speed_kmh || 0 })),
+          data: S('fl_speed', r => r.fl_speed_kmh || 0),
           borderColor: '#f97316',
           borderWidth: 1.5,
           pointRadius: 0,
@@ -1323,7 +1536,7 @@ function renderMotecCharts(data) {
         },
         {
           label: 'RL Wheel Speed',
-          data: data.map(r => ({ x: r.time_sec, y: r.rl_speed_kmh || 0 })),
+          data: S('rl_speed', r => r.rl_speed_kmh || 0),
           borderColor: '#2563eb',
           borderWidth: 1.4,
           pointRadius: 0,
@@ -1339,7 +1552,7 @@ function renderMotecCharts(data) {
     type: 'line',
     data: {
       datasets: [{
-        data: data.map(r => ({ x: r.time_sec, y: r.rpm })),
+        data: S('rpm', r => r.rpm),
         borderColor: '#dc2626',
         borderWidth: 1.5,
         pointRadius: 0,
@@ -1354,7 +1567,7 @@ function renderMotecCharts(data) {
     type: 'line',
     data: {
       datasets: [{
-        data: data.map(r => ({ x: r.time_sec, y: r.gear })),
+        data: S('gear', r => r.gear),
         borderColor: '#2563eb',
         borderWidth: 1.8,
         pointRadius: 0,
@@ -1383,7 +1596,7 @@ function renderMotecCharts(data) {
     type: 'line',
     data: {
       datasets: [{
-        data: data.map(r => ({ x: r.time_sec, y: getCalibratedSteering(r.steering_raw) })),
+        data: S('steering', r => getCalibratedSteering(r.steering_raw)),
         borderColor: '#db2777',
         borderWidth: 1.2,
         pointRadius: 0,
@@ -1400,7 +1613,7 @@ function renderMotecCharts(data) {
       datasets: [
         {
           label: 'Throttle',
-          data: data.map(r => ({ x: r.time_sec, y: r.decoded_tps || 0 })),
+          data: S('throttle', r => r.decoded_tps || 0),
           borderColor: '#16a34a',
           borderWidth: 1.2,
           pointRadius: 0,
@@ -1408,7 +1621,7 @@ function renderMotecCharts(data) {
         },
         {
           label: 'Brake',
-          data: data.map(r => ({ x: r.time_sec, y: getCalibratedBrake(r.front_brake_raw) })),
+          data: S('brake', r => getCalibratedBrake(r.front_brake_raw)),
           borderColor: '#dc2626',
           borderWidth: 1.2,
           pointRadius: 0,
@@ -1428,7 +1641,7 @@ function renderMotecCharts(data) {
       datasets: [
         {
           label: 'Throttle',
-          data: data.map(r => ({ x: r.time_sec, y: r.decoded_tps || 0 })),
+          data: S('throttle', r => r.decoded_tps || 0),
           borderColor: '#16a34a',
           borderWidth: 1.2,
           pointRadius: 0,
@@ -1436,7 +1649,7 @@ function renderMotecCharts(data) {
         },
         {
           label: 'Brake',
-          data: data.map(r => ({ x: r.time_sec, y: getCalibratedBrake(r.front_brake_raw) })),
+          data: S('brake', r => getCalibratedBrake(r.front_brake_raw)),
           borderColor: '#dc2626',
           borderWidth: 1.2,
           pointRadius: 0,
@@ -1457,7 +1670,7 @@ function renderMotecCharts(data) {
     type: 'line',
     data: {
       datasets: [{
-        data: data.map(r => ({ x: r.time_sec, y: getCalibratedSteering(r.steering_raw) })),
+        data: S('steering', r => getCalibratedSteering(r.steering_raw)),
         borderColor: '#db2777',
         borderWidth: 1.2,
         pointRadius: 0,
@@ -1472,7 +1685,7 @@ function renderMotecCharts(data) {
     type: 'line',
     data: {
       datasets: [{
-        data: data.map(r => ({ x: r.time_sec, y: r.suspension_fl_raw })),
+        data: S('sus_fl', r => r.suspension_fl_raw),
         borderColor: '#db2777',
         borderWidth: 1.2,
         pointRadius: 0,
@@ -1487,7 +1700,7 @@ function renderMotecCharts(data) {
     type: 'line',
     data: {
       datasets: [{
-        data: data.map(r => ({ x: r.time_sec, y: r.suspension_rl_raw })),
+        data: S('sus_rl', r => r.suspension_rl_raw),
         borderColor: '#06b6d4',
         borderWidth: 1.2,
         pointRadius: 0,
@@ -1528,7 +1741,7 @@ function renderMotecCharts(data) {
       datasets: [
         {
           label: 'Coolant',
-          data: data.map(r => ({ x: r.time_sec, y: r.water_c })),
+          data: S('water', r => r.water_c),
           borderColor: '#2563eb',
           borderWidth: 1.6,
           pointRadius: 0,
@@ -1536,7 +1749,7 @@ function renderMotecCharts(data) {
         },
         {
           label: 'Oil',
-          data: data.map(r => ({ x: r.time_sec, y: r.oil_c })),
+          data: S('oil', r => r.oil_c),
           borderColor: '#f97316',
           borderWidth: 1.6,
           pointRadius: 0,
@@ -1544,7 +1757,7 @@ function renderMotecCharts(data) {
         },
         {
           label: 'FL Wheel Speed',
-          data: data.map(r => ({ x: r.time_sec, y: r.fl_speed_kmh || 0 })),
+          data: S('fl_speed', r => r.fl_speed_kmh || 0),
           yAxisID: 'ySpeed',
           borderColor: '#06b6d4',
           borderWidth: 1.4,
@@ -1569,7 +1782,7 @@ function renderMotecCharts(data) {
       datasets: [
         {
           label: 'Intake Air',
-          data: data.map(r => ({ x: r.time_sec, y: r.iat_c })),
+          data: S('iat', r => r.iat_c),
           borderColor: '#16a34a',
           borderWidth: 1.6,
           pointRadius: 0,
@@ -1577,7 +1790,7 @@ function renderMotecCharts(data) {
         },
         {
           label: 'ECU',
-          data: data.map(r => ({ x: r.time_sec, y: r.ecu_c })),
+          data: S('ecu', r => r.ecu_c),
           borderColor: '#db2777',
           borderWidth: 1.6,
           pointRadius: 0,
@@ -1593,7 +1806,7 @@ function renderMotecCharts(data) {
     type: 'line',
     data: {
       datasets: [{
-        data: data.map(r => ({ x: r.time_sec, y: r.suspension_fr_raw })),
+        data: S('sus_fr', r => r.suspension_fr_raw),
         borderColor: '#dc2626',
         borderWidth: 1.2,
         pointRadius: 0,
@@ -1608,7 +1821,7 @@ function renderMotecCharts(data) {
     type: 'line',
     data: {
       datasets: [{
-        data: data.map(r => ({ x: r.time_sec, y: r.suspension_rr_raw })),
+        data: S('sus_rr', r => r.suspension_rr_raw),
         borderColor: '#2563eb',
         borderWidth: 1.2,
         pointRadius: 0,
@@ -1620,6 +1833,28 @@ function renderMotecCharts(data) {
 
   // 테마 상태에 맞는 차트 선 색상(다크모드 전용 파스텔톤 포함) 즉시 동기화
   updateChartsTheme();
+
+  // 라벨바에 현재 적용된 노이즈 필터 배지 표시
+  if (typeof refreshFilterBadges === 'function') refreshFilterBadges();
+
+  // 조향 보정값에 맞춰 조향 차트 Y축 범위 조정 및 핸들 위젯 상태 표시
+  if (typeof updateSteeringAxisRange === 'function') updateSteeringAxisRange();
+  if (typeof updateSteeringCalBadges === 'function') updateSteeringCalBadges();
+}
+
+// 그래프 우클릭 → 노이즈 필터 메뉴 활성화
+if (typeof initFilterContextMenu === 'function') {
+  initFilterContextMenu();
+}
+
+// 핸들 그래픽 클릭 → 조향 영점 보정 패널 활성화
+if (typeof initSteeringCalibration === 'function') {
+  initSteeringCalibration();
+}
+
+// 5번 탭: 실시간 무선 텔레메트리 초기화
+if (typeof rtInit === 'function') {
+  rtInit();
 }
 
 let arrowRepeatCount = 0;

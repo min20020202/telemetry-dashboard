@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260728-2">
+  <link rel="stylesheet" href="style.css?v=20260802-4">
 </head>
 <body>
 
@@ -45,6 +45,7 @@
           <button id="tab-diagnostics" class="view-tab">2: 입력 및 서스펜션 분석</button>
           <button id="tab-gps" class="view-tab">3: GPS 주행 경로 지도</button>
           <button id="tab-temperature" class="view-tab">4: 냉각 및 온도 분석</button>
+          <button id="tab-realtime" class="view-tab">5: 실시간 텔레메트리</button>
         </nav>
       </div>
       
@@ -285,15 +286,43 @@
             <span class="signal-val" id="cursor-gps-coords">--.------, ---.------</span>
           </div>
           <div id="gps-map" style="flex: 1; width: 100%; background: #1e293b; border-radius: 4px; z-index: 1;"></div>
+
+          <!-- 지도 우측 상단: 현재 GPS 커서 지점의 조향각 위젯 -->
+          <div class="gps-steering-widget">
+            <div class="gps-steering-label">Steering</div>
+            <div class="gps-steering-wheel">
+              <svg id="gps-steering-wheel-graphic" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="40" stroke="var(--text-primary)" stroke-width="8" fill="none" opacity="0.8" />
+                <line x1="50" y1="50" x2="50" y2="90" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
+                <line x1="50" y1="50" x2="10" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
+                <line x1="50" y1="50" x2="90" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
+                <circle cx="50" cy="50" r="10" fill="var(--accent-magenta)" />
+                <rect x="47" y="6" width="6" height="8" fill="var(--accent-orange)" rx="1" />
+              </svg>
+            </div>
+            <div class="gps-steering-value"><span id="gps-cursor-steering">--.-</span><span class="gps-steering-unit">°</span></div>
+          </div>
         </div>
 
         <!-- Right Side: GPS Metric Panel (20% width) -->
         <div class="view-column" style="flex: 1; gap: 16px; border: none; background: transparent; padding: 0;">
-          <!-- GPS Speed Card -->
-          <div class="motec-chart-card" style="flex: none; height: auto; padding: 16px; border-radius: 12px;">
-            <div style="font-size: 12px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">GPS Speed</div>
-            <div style="font-size: 36px; font-weight: 800; font-family: monospace; color: #f97316; margin-top: 8px;">
-              <span id="gps-cursor-speed">0.0</span> <span style="font-size: 16px; font-weight: 400; color: #64748b;">km/h</span>
+          <!-- 속도 비교 카드: GPS 속도 vs FL 휠속도 -->
+          <div class="motec-chart-card gps-speed-card" style="flex: none; height: auto; padding: 16px; border-radius: 12px;">
+            <div class="gps-metric-label">GPS Speed</div>
+            <div class="gps-speed-main">
+              <span id="gps-cursor-speed">0.0</span><span class="gps-speed-unit">km/h</span>
+            </div>
+
+            <div class="gps-speed-divider"></div>
+
+            <div class="gps-metric-label">FL Wheel Speed <small>(EMU VSS)</small></div>
+            <div class="gps-speed-sub">
+              <span id="gps-cursor-wheel-speed">0.0</span><span class="gps-speed-unit">km/h</span>
+            </div>
+
+            <div class="gps-speed-delta">
+              <span>휠 − GPS</span>
+              <strong id="gps-speed-delta">--</strong>
             </div>
           </div>
 
@@ -364,6 +393,59 @@
         </div>
       </section>
 
+      <!-- [페이지 5] 실시간 무선 텔레메트리 -->
+      <section id="page-realtime" class="realtime-panel page-view">
+
+        <!-- 접속 및 링크 상태 바 -->
+        <div class="rt-topbar">
+          <div class="rt-conn">
+            <span class="rt-conn-label">수신 서버</span>
+            <input type="text" id="rt-url" class="rt-url-input" spellcheck="false"
+                   placeholder="wss://your-rf-pc.example.com  또는  ws://192.168.0.10:8765">
+            <select id="rt-transport" class="rt-select" title="전송 방식">
+              <option value="auto">자동</option>
+              <option value="ws">WebSocket</option>
+              <option value="sse">SSE</option>
+              <option value="poll">HTTP 폴링</option>
+            </select>
+            <button id="rt-connect" class="btn rt-btn rt-btn-primary">연결</button>
+            <button id="rt-demo" class="btn rt-btn" title="하드웨어 없이 UI를 시험합니다">데모 모드</button>
+          </div>
+
+          <div class="rt-link">
+            <div class="rt-signal" id="rt-signal">
+              <div class="rt-signal-bars" id="rt-signal-bars">
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
+              <div class="rt-signal-text">
+                <strong id="rt-signal-grade">신호없음</strong>
+                <small id="rt-signal-reason">연결되지 않음</small>
+              </div>
+            </div>
+            <div class="rt-stats">
+              <div class="rt-stat"><label>수신률</label><b id="rt-stat-rate">0.0 Hz</b></div>
+              <div class="rt-stat"><label>손실률</label><b id="rt-stat-loss">--</b></div>
+              <div class="rt-stat"><label>RSSI</label><b id="rt-stat-rssi">-- dBm</b></div>
+              <div class="rt-stat"><label>SNR</label><b id="rt-stat-snr">-- dB</b></div>
+              <div class="rt-stat"><label>최종 수신</label><b id="rt-stat-age">--</b></div>
+              <div class="rt-stat"><label>총 패킷</label><b id="rt-stat-count">0</b></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 실시간 카드 그리드 (JS가 채널을 감지해 생성) -->
+        <div class="rt-grid" id="rt-grid">
+          <div class="rt-empty" id="rt-empty">
+            <div class="rt-empty-icon">📡</div>
+            <div class="rt-empty-title">실시간 텔레메트리 대기 중</div>
+            <div class="rt-empty-text">
+              차량과 RF 통신하는 PC가 중계 서버를 실행하면, 그 주소를 위에 입력하고 <b>연결</b>을 누르세요.<br>
+              장비 없이 화면만 확인하려면 <b>데모 모드</b>를 누르면 됩니다.
+            </div>
+          </div>
+        </div>
+      </section>
+
     </div>
 
     <!-- 타임라인 네비게이터 컨트롤러 (시간 범위 설정 및 드래그 스크롤바) -->
@@ -395,6 +477,9 @@
   </div>
 
   <!-- Custom JS -->
-  <script src="app.js?v=20260728-5"></script>
+  <script src="filters.js?v=20260802-4"></script>
+  <script src="steering.js?v=20260802-4"></script>
+  <script src="realtime.js?v=20260802-4"></script>
+  <script src="app.js?v=20260802-4"></script>
 </body>
 </html>

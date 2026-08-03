@@ -100,6 +100,10 @@ GitHub의 최신 코드 → 내 컴퓨터
 | `index.html` | 화면 구성, 버튼, 문구 |
 | `style.css` | 색상, 크기, 위치 등 디자인 |
 | `app.js` | CSV 분석, 차트, GPS 등 기능 |
+| `filters.js` | 노이즈 필터 (그래프 우클릭 메뉴) |
+| `steering.js` | 조향 영점 보정 (핸들 위젯 ⚙ 버튼) |
+| `realtime.js` | 5번 탭 실시간 무선 텔레메트리 |
+| `tools/rf_bridge.py` | RF 수신 PC에서 실행하는 중계 서버 (웹사이트와 별개) |
 | `team_logo.png` | 팀 로고 |
 | `vercel.json` | 배포 설정 — 특별한 이유가 없으면 수정하지 않기 |
 
