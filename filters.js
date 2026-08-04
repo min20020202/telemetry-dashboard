@@ -343,6 +343,12 @@ const CHANNELS = {
     dropoutDef: { on: false, lo: 0.01, hi: null, gap: 20 },
     recommend: { dropout: { on: true, lo: 0.01, hi: null, gap: 20 }, type: 'median', params: { win: 5 } }
   },
+  rr_speed: {
+    label: 'RR Wheel Speed', unit: 'km/h', clamp: [0, 400],
+    from: r => r.rr_speed_kmh || 0,
+    dropoutDef: { on: false, lo: 0.01, hi: null, gap: 20 },
+    recommend: { dropout: { on: true, lo: 0.01, hi: null, gap: 20 }, type: 'median', params: { win: 5 } }
+  },
   rpm: {
     label: 'Engine RPM', unit: 'rpm', clamp: [0, 20000],
     from: r => r.rpm || 0,
@@ -425,7 +431,7 @@ const CHANNELS = {
 
 /** 차트 canvas id → 그 차트가 그리는 채널 키 (데이터셋 순서와 일치) */
 const CHART_CHANNELS = {
-  'chart-ground-speed': ['fl_speed', 'rl_speed'],
+  'chart-ground-speed': ['fl_speed', 'rl_speed', 'rr_speed'],
   'chart-engine-rpm': ['rpm'],
   'chart-vehicle-gear': ['gear'],
   'chart-steering-angle': ['steering'],

@@ -43,6 +43,7 @@ const statusText = document.getElementById('status-text');
 // Cursor Realtime Value DOMs (Page 1)
 const cursorSpeed = document.getElementById('cursor-speed');
 const cursorSpeedRl = document.getElementById('cursor-speed-rl');
+const cursorSpeedRr = document.getElementById('cursor-speed-rr');
 const cursorRpm = document.getElementById('cursor-rpm');
 const cursorGear = document.getElementById('cursor-gear');
 const cursorSteering = document.getElementById('cursor-steering');
@@ -164,6 +165,7 @@ function normalizeTelemetryRow(row) {
     adc4_raw: 'fr_potentiometer_raw',
     adc5_raw: 'steering_angle_raw',
     adc6_raw: 'fl_potentiometer_raw',
+    wheel3_speed_centi_kmh: 'rr_wheel_speed_centi_kmh',
     wheel4_speed_centi_kmh: 'rl_wheel_speed_centi_kmh'
   };
 
@@ -865,6 +867,7 @@ function updateNumericDisplays(row) {
   // Page 1 Labels (노이즈 필터 적용값 기준)
   cursorSpeed.textContent = cursorChannelValue('fl_speed', row.fl_speed_kmh || 0).toFixed(1);
   if (cursorSpeedRl) cursorSpeedRl.textContent = cursorChannelValue('rl_speed', row.rl_speed_kmh || 0).toFixed(1);
+  if (cursorSpeedRr) cursorSpeedRr.textContent = cursorChannelValue('rr_speed', row.rr_speed_kmh || 0).toFixed(1);
   cursorRpm.textContent = Math.round(cursorChannelValue('rpm', row.rpm || 0));
 
   const gearVal = Math.round(cursorChannelValue('gear', row.gear !== undefined ? row.gear : NaN));
@@ -1156,6 +1159,9 @@ function initDataAndDashboard() {
     // Rear-left wheel speed comes from the dedicated datalogger wheel channel.
     row.rl_speed_kmh = (parseHexOrInt(row.rl_wheel_speed_centi_kmh ??
       row.wheel4_speed_centi_kmh) || 0) / 100.0;
+    // Rear-right wheel speed comes from Wheel Speed 3 on the datalogger.
+    row.rr_speed_kmh = (parseHexOrInt(row.rr_wheel_speed_centi_kmh ??
+      row.wheel3_speed_centi_kmh) || 0) / 100.0;
   });
 
   let lastValidRow = globalData[globalData.length - 1];
@@ -1538,6 +1544,14 @@ function renderMotecCharts(data) {
           label: 'RL Wheel Speed',
           data: S('rl_speed', r => r.rl_speed_kmh || 0),
           borderColor: '#2563eb',
+          borderWidth: 1.4,
+          pointRadius: 0,
+          fill: false
+        },
+        {
+          label: 'RR Wheel Speed',
+          data: S('rr_speed', r => r.rr_speed_kmh || 0),
+          borderColor: '#16a34a',
           borderWidth: 1.4,
           pointRadius: 0,
           fill: false
