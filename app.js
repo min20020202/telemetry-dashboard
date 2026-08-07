@@ -762,10 +762,10 @@ function updateColumnCursorLine(lineId, chart, index) {
 }
 
 // HIGH-PERFORMANCE: Places bright circles directly on the intersection points of the chart lines
-function drawCssIntersectionDots(index) {
+function drawCssIntersectionDots(index, chartSubset = null) {
   if (globalData.length === 0 || activeSampledData.length === 0) return;
 
-  const targetCharts = [
+  const targetCharts = chartSubset || [
     chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
     diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
     chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
@@ -839,18 +839,40 @@ function findSampleIndexAtTime(targetTime) {
   return lo;
 }
 
-function updateGpsCursorAtTime(targetTime) {
+function findGlobalIndexAtTime(targetTime) {
+  let lo = 0;
+  let hi = globalData.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (globalData[mid].time_sec < targetTime) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo > 0) {
+    const before = globalData[lo - 1];
+    const after = globalData[lo];
+    if (Math.abs(before.time_sec - targetTime) <= Math.abs(after.time_sec - targetTime)) return lo - 1;
+  }
+  return lo;
+}
+
+function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
   if (!activeSampledData.length || !Number.isFinite(targetTime)) return;
   const minTime = Number(scrollBar.min) || 0;
   const maxTime = Number(scrollBar.max) || totalDurationSec;
   const clampedTime = Math.max(minTime, Math.min(maxTime, targetTime));
   currentCursorIndex = findSampleIndexAtTime(clampedTime);
-  const row = activeSampledData[currentCursorIndex];
+  // Numeric widgets, G meter and map use the original 100 Hz row. Charts keep
+  // their 4,500-point series and only move the cursor to the nearest sample.
+  const globalIndex = globalData.length ? findGlobalIndexAtTime(clampedTime) : -1;
+  const row = globalIndex >= 0 ? globalData[globalIndex] : activeSampledData[currentCursorIndex];
   scrollBar.value = clampedTime.toFixed(2);
   if (gpsPlayTime) gpsPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
   if (row) {
     updateNumericDisplays(row);
-    drawCssIntersectionDots(currentCursorIndex);
+    drawCssIntersectionDots(
+      currentCursorIndex,
+      playbackFrame ? [chartImuAccel, chartImuGyro] : null
+    );
   }
 }
 
@@ -887,9 +909,10 @@ function setGpsPlayback(shouldPlay) {
       return;
     }
 
-    // 약 30fps로 지도와 다수 차트를 갱신해 CPU 부하를 제한합니다.
+    // requestAnimationFrame을 약 60fps로 제한합니다. 120Hz 디스플레이에서도
+    // 두 프레임마다 한 번만 갱신해 재생 속도와 CPU 사용량을 일정하게 유지합니다.
     const elapsedMs = timestamp - gpsPlaybackLastTimestamp;
-    if (elapsedMs < 32) {
+    if (elapsedMs < 15) {
       gpsPlaybackFrame = requestAnimationFrame(playbackStep);
       return;
     }
@@ -903,7 +926,7 @@ function setGpsPlayback(shouldPlay) {
       return;
     }
 
-    updateGpsCursorAtTime(gpsPlaybackCursorSec);
+    updateGpsCursorAtTime(gpsPlaybackCursorSec, true);
     gpsPlaybackFrame = requestAnimationFrame(playbackStep);
   };
 
