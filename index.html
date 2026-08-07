@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260802-4">
+  <link rel="stylesheet" href="style.css?v=20260808-1">
 </head>
 <body>
 
@@ -43,7 +43,7 @@
         <nav class="tab-navigation">
           <button id="tab-general" class="view-tab active">1: 종합 주행 분석</button>
           <button id="tab-diagnostics" class="view-tab">2: 입력 및 서스펜션 분석</button>
-          <button id="tab-gps" class="view-tab">3: GPS 주행 경로 지도</button>
+          <button id="tab-gps" class="view-tab">3: GPS + IMU 주행 분석</button>
           <button id="tab-temperature" class="view-tab">4: 냉각 및 온도 분석</button>
           <button id="tab-realtime" class="view-tab">5: 실시간 텔레메트리</button>
         </nav>
@@ -281,33 +281,81 @@
 
       <!-- [페이지 3] GPS 주행 경로 지도 (Leaflet.js 기반) -->
       <section id="page-gps" class="analysis-split-view page-view">
-        <!-- Left Side: Map Container (80% width) -->
-        <div class="motec-chart-card" style="flex: 4; height: 100%; position: relative; min-height: 550px; display: flex; flex-direction: column;">
-          <div class="chart-label-bar">
-            <span class="signal-title color-orange">GPS Track Map</span>
-            <span class="signal-val" id="cursor-gps-coords">--.------, ---.------</span>
-          </div>
-          <div id="gps-map" style="flex: 1; width: 100%; background: #1e293b; border-radius: 4px; z-index: 1;"></div>
-
-          <!-- 지도 우측 상단: 현재 GPS 커서 지점의 조향각 위젯 -->
-          <div class="gps-steering-widget">
-            <div class="gps-steering-label">Steering</div>
-            <div class="gps-steering-wheel">
-              <svg id="gps-steering-wheel-graphic" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="40" stroke="var(--text-primary)" stroke-width="8" fill="none" opacity="0.8" />
-                <line x1="50" y1="50" x2="50" y2="90" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
-                <line x1="50" y1="50" x2="10" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
-                <line x1="50" y1="50" x2="90" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
-                <circle cx="50" cy="50" r="10" fill="var(--accent-magenta)" />
-                <rect x="47" y="6" width="6" height="8" fill="var(--accent-orange)" rx="1" />
-              </svg>
+        <!-- Left Side: GPS map + synchronized IMU timelines -->
+        <div class="gps-main-column">
+          <div class="motec-chart-card gps-map-card">
+            <div class="chart-label-bar">
+              <span class="signal-title color-orange">GPS Track Map</span>
+              <span class="signal-val" id="cursor-gps-coords">--.------, ---.------</span>
             </div>
-            <div class="gps-steering-value"><span id="gps-cursor-steering">--.-</span><span class="gps-steering-unit">°</span></div>
+            <div id="gps-map"></div>
+
+            <!-- 지도 우측 상단: 현재 GPS 커서 지점의 조향각 위젯 -->
+            <div class="gps-steering-widget">
+              <div class="gps-steering-label">Steering</div>
+              <div class="gps-steering-wheel">
+                <svg id="gps-steering-wheel-graphic" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="40" stroke="var(--text-primary)" stroke-width="8" fill="none" opacity="0.8" />
+                  <line x1="50" y1="50" x2="50" y2="90" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
+                  <line x1="50" y1="50" x2="10" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
+                  <line x1="50" y1="50" x2="90" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
+                  <circle cx="50" cy="50" r="10" fill="var(--accent-magenta)" />
+                  <rect x="47" y="6" width="6" height="8" fill="var(--accent-orange)" rx="1" />
+                </svg>
+              </div>
+              <div class="gps-steering-value"><span id="gps-cursor-steering">--.-</span><span class="gps-steering-unit">°</span></div>
+            </div>
+          </div>
+
+          <div class="gps-imu-chart-grid">
+            <div class="motec-chart-card gps-imu-chart-card">
+              <div class="chart-label-bar imu-chart-label">
+                <span class="signal-title">IMU Acceleration [g]</span>
+                <span><b class="imu-x">X</b> <b class="imu-y">Y</b> <b class="imu-z">Z</b></span>
+              </div>
+              <div class="canvas-holder"><canvas id="chart-imu-accel"></canvas></div>
+            </div>
+            <div class="motec-chart-card gps-imu-chart-card">
+              <div class="chart-label-bar imu-chart-label">
+                <span class="signal-title">IMU Gyroscope [°/s]</span>
+                <span><b class="imu-x">X</b> <b class="imu-y">Y</b> <b class="imu-z">Z</b></span>
+              </div>
+              <div class="canvas-holder"><canvas id="chart-imu-gyro"></canvas></div>
+            </div>
           </div>
         </div>
 
-        <!-- Right Side: GPS Metric Panel (20% width) -->
-        <div class="view-column" style="flex: 1; gap: 16px; border: none; background: transparent; padding: 0;">
+        <!-- Right Side: GPS + IMU live metrics -->
+        <div class="view-column gps-metrics-column">
+          <div class="motec-chart-card imu-g-card">
+            <div class="gps-metric-label">IMU G-Force · Sensor X/Y</div>
+            <div class="imu-g-meter">
+              <span class="imu-g-axis imu-g-axis-x">X</span>
+              <span class="imu-g-axis imu-g-axis-y">Y</span>
+              <i class="imu-g-ring ring-1"></i>
+              <i class="imu-g-ring ring-2"></i>
+              <div id="imu-g-dot" class="imu-g-dot"></div>
+            </div>
+            <div class="imu-live-values">
+              <span><b class="imu-x">X</b><strong id="imu-accel-x">--.--</strong> g</span>
+              <span><b class="imu-y">Y</b><strong id="imu-accel-y">--.--</strong> g</span>
+              <span><b class="imu-z">Z</b><strong id="imu-accel-z">--.--</strong> g</span>
+            </div>
+          </div>
+
+          <div class="motec-chart-card imu-attitude-card">
+            <div class="gps-metric-label">IMU Attitude</div>
+            <div class="imu-attitude-grid">
+              <span>Roll<strong id="imu-roll">--.-°</strong></span>
+              <span>Pitch<strong id="imu-pitch">--.-°</strong></span>
+              <span>Yaw<strong id="imu-yaw">--.-°</strong></span>
+            </div>
+            <div class="imu-health-row">
+              <span>Battery <strong id="imu-battery">--%</strong></span>
+              <span>Age <strong id="imu-age">-- ms</strong></span>
+            </div>
+          </div>
+
           <!-- 속도 비교 카드: GPS 속도 vs FL 휠속도 -->
           <div class="motec-chart-card gps-speed-card" style="flex: none; height: auto; padding: 16px; border-radius: 12px;">
             <div class="gps-metric-label">GPS Speed</div>
@@ -482,6 +530,6 @@
   <script src="filters.js?v=20260805-1"></script>
   <script src="steering.js?v=20260802-4"></script>
   <script src="realtime.js?v=20260802-4"></script>
-  <script src="app.js?v=20260805-1"></script>
+  <script src="app.js?v=20260808-1"></script>
 </body>
 </html>

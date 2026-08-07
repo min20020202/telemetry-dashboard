@@ -1772,6 +1772,181 @@ body {
 }
 
 /* ==================== GPS 속도 비교 카드 ==================== */
+.gps-main-column {
+  flex: 4;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gps-map-card {
+  flex: 3;
+  position: relative;
+  min-height: 320px;
+}
+
+#gps-map {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  background: #1e293b;
+  border-radius: 4px;
+  z-index: 1;
+}
+
+.gps-imu-chart-grid {
+  flex: 1.55;
+  min-height: 210px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.gps-imu-chart-card {
+  min-height: 0;
+}
+
+.imu-chart-label > span:last-child {
+  display: flex;
+  gap: 9px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.imu-x { color: #f97316; }
+.imu-y { color: #2563eb; }
+.imu-z { color: #16a34a; }
+
+.gps-metrics-column {
+  flex: 1;
+  gap: 10px;
+  border: none;
+  background: transparent;
+  padding: 0 4px 0 0;
+  overflow-y: auto;
+}
+
+.imu-g-card,
+.imu-attitude-card {
+  flex: none;
+  height: auto;
+  padding: 12px;
+}
+
+.imu-g-meter {
+  position: relative;
+  width: min(150px, 90%);
+  aspect-ratio: 1;
+  margin: 6px auto 3px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  background:
+    linear-gradient(transparent 49.5%, var(--border-color) 49.5%, var(--border-color) 50.5%, transparent 50.5%),
+    linear-gradient(90deg, transparent 49.5%, var(--border-color) 49.5%, var(--border-color) 50.5%, transparent 50.5%),
+    radial-gradient(circle, rgba(249, 115, 22, 0.08), transparent 66%);
+}
+
+.imu-g-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border: 1px dashed rgba(128, 128, 128, 0.35);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.imu-g-ring.ring-1 { width: 45%; height: 45%; }
+.imu-g-ring.ring-2 { width: 90%; height: 90%; }
+
+.imu-g-axis {
+  position: absolute;
+  z-index: 2;
+  color: var(--text-secondary);
+  font: 700 9px var(--font-mono);
+}
+
+.imu-g-axis-x { right: 5px; top: calc(50% - 12px); }
+.imu-g-axis-y { left: calc(50% + 5px); top: 4px; }
+
+.imu-g-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--accent-orange);
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.8);
+  transform: translate(-50%, -50%);
+  transition: left 0.06s linear, top 0.06s linear;
+}
+
+.imu-live-values {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  font: 700 9px var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.imu-live-values span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.imu-live-values strong {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.imu-attitude-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.imu-attitude-grid span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 4px;
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.06);
+  color: var(--text-secondary);
+  font-size: 9px;
+  text-align: center;
+}
+
+.imu-attitude-grid strong {
+  color: var(--text-primary);
+  font: 700 12px var(--font-mono);
+}
+
+.imu-health-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px dashed var(--border-color);
+  color: var(--text-secondary);
+  font-size: 9px;
+}
+
+.imu-health-row strong {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.imu-health-row strong.stale { color: var(--accent-red); }
+
 .gps-metric-label {
   font-size: 11px;
   font-weight: 600;
@@ -1899,6 +2074,12 @@ body {
   font-size: 11px;
   color: var(--text-secondary);
   margin-left: 1px;
+}
+
+@media (max-width: 1100px) {
+  #page-gps.active { overflow-y: auto; }
+  .gps-imu-chart-grid { grid-template-columns: 1fr; min-height: 420px; }
+  .gps-metrics-column { min-width: 220px; overflow: visible; }
 }
 
 /* 차트 라벨바에 표시되는 활성 필터 배지 */

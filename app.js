@@ -17,6 +17,10 @@ let chartRR = null;
 let chartCoolantOil = null;
 let chartIntakeEcu = null;
 
+// Global state variables for Page 3 IMU charts
+let chartImuAccel = null;
+let chartImuGyro = null;
+
 // Zoom, Slicing & Scroll configurations
 let globalData = [];
 let currentStartSec = 0;
@@ -111,6 +115,15 @@ const gpsSpeedDelta = document.getElementById('gps-speed-delta');
 const gpsCursorSats = document.getElementById('gps-cursor-sats');
 const gpsCursorQual = document.getElementById('gps-cursor-qual');
 const gpsCursorTime = document.getElementById('gps-cursor-time');
+const imuAccelX = document.getElementById('imu-accel-x');
+const imuAccelY = document.getElementById('imu-accel-y');
+const imuAccelZ = document.getElementById('imu-accel-z');
+const imuRoll = document.getElementById('imu-roll');
+const imuPitch = document.getElementById('imu-pitch');
+const imuYaw = document.getElementById('imu-yaw');
+const imuBattery = document.getElementById('imu-battery');
+const imuAge = document.getElementById('imu-age');
+const imuGDot = document.getElementById('imu-g-dot');
 
 // Theme Switcher DOM
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
@@ -342,7 +355,7 @@ function updateChartsTheme() {
   const targetCharts = [
     chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
     diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
-    chartCoolantOil, chartIntakeEcu
+    chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
   ];
   targetCharts.forEach(chart => {
     if (!chart) return;
@@ -416,6 +429,10 @@ function updateDatasetColors(chart, isDark) {
       dataset.borderColor = idx === 0
         ? (isDark ? '#55efc4' : '#16a34a')
         : (isDark ? '#fd79a8' : '#db2777');
+    } else if (id === 'chart-imu-accel' || id === 'chart-imu-gyro') {
+      const light = ['#f97316', '#2563eb', '#16a34a'];
+      const dark = ['#ffb07c', '#74b9ff', '#55efc4'];
+      dataset.borderColor = (isDark ? dark : light)[idx] || dataset.borderColor;
     }
   });
 }
@@ -533,9 +550,9 @@ function switchTab(mode) {
     if (lblScrollType) {
       lblScrollType.textContent = '📍 실시간 주행 시점 슬라이더:';
     }
-    // Invalidate map size so Leaflet renders correctly
-    if (gpsMap) {
-      setTimeout(() => {
+    // Invalidate map and charts after their previously hidden page becomes visible.
+    setTimeout(() => {
+      if (gpsMap) {
         gpsMap.invalidateSize();
         // GPS 페이지 진입 시점에 즉시 현재 커서 위치로 핀 갱신
         const row = activeSampledData[currentCursorIndex];
@@ -546,8 +563,12 @@ function switchTab(mode) {
         if (gpsRouteLine && gpsRouteLine.getLatLngs().length > 0) {
           gpsMap.fitBounds(gpsRouteLine.getBounds(), { padding: [30, 30] });
         }
-      }, 50);
-    }
+      }
+      [chartImuAccel, chartImuGyro].forEach(c => {
+        if (c) { c.resize(); c.update('none'); }
+      });
+      drawCssIntersectionDots(currentCursorIndex);
+    }, 50);
   } else if (mode === 'temperature') {
     if (tabTemperature) tabTemperature.classList.add('active');
     if (pageTemperature) pageTemperature.classList.add('active');
@@ -736,7 +757,7 @@ function drawCssIntersectionDots(index) {
   const targetCharts = [
     chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
     diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
-    chartCoolantOil, chartIntakeEcu
+    chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
   ];
   
   targetCharts.forEach(chart => {
@@ -980,6 +1001,40 @@ function updateNumericDisplays(row) {
   if (gpsCursorTime) {
     gpsCursorTime.textContent = (row.gps_time && row.gps_time.trim() !== "") ? row.gps_time : "00:00:00.00";
   }
+
+  // GPS 페이지 IMU 현황: 지도 커서와 동일한 CSV 행을 사용해 완전히 동기화합니다.
+  const ax = Number(row.imu_accel_x_g);
+  const ay = Number(row.imu_accel_y_g);
+  const az = Number(row.imu_accel_z_g);
+  const roll = Number(row.imu_roll_deg);
+  const pitch = Number(row.imu_pitch_deg);
+  const yaw = Number(row.imu_yaw_deg);
+  const imuValid = [ax, ay, az].every(Number.isFinite);
+
+  if (imuAccelX) imuAccelX.textContent = Number.isFinite(ax) ? ax.toFixed(2) : '--.--';
+  if (imuAccelY) imuAccelY.textContent = Number.isFinite(ay) ? ay.toFixed(2) : '--.--';
+  if (imuAccelZ) imuAccelZ.textContent = Number.isFinite(az) ? az.toFixed(2) : '--.--';
+  if (imuRoll) imuRoll.textContent = Number.isFinite(roll) ? `${roll.toFixed(1)}°` : '--.-°';
+  if (imuPitch) imuPitch.textContent = Number.isFinite(pitch) ? `${pitch.toFixed(1)}°` : '--.-°';
+  if (imuYaw) imuYaw.textContent = Number.isFinite(yaw) ? `${yaw.toFixed(1)}°` : '--.-°';
+
+  const batteryPct = Number(row.imu_battery_pct);
+  if (imuBattery) imuBattery.textContent = Number.isFinite(batteryPct) ? `${Math.round(batteryPct)}%` : '--%';
+  const ageMs = Number(row.imu_age_us) / 1000;
+  if (imuAge) {
+    imuAge.textContent = Number.isFinite(ageMs) ? `${ageMs.toFixed(0)} ms` : '-- ms';
+    imuAge.classList.toggle('stale', Number.isFinite(ageMs) && ageMs > 200);
+  }
+
+  if (imuGDot) {
+    const limitG = 2.0;
+    const clamp = value => Math.max(-limitG, Math.min(limitG, value));
+    const left = imuValid ? 50 + (clamp(ax) / limitG) * 45 : 50;
+    const top = imuValid ? 50 - (clamp(ay) / limitG) * 45 : 50;
+    imuGDot.style.left = `${left}%`;
+    imuGDot.style.top = `${top}%`;
+    imuGDot.style.opacity = imuValid ? '1' : '0.25';
+  }
 }
 
 function handleFile(file) {
@@ -1062,6 +1117,17 @@ function initDataAndDashboard() {
   globalData.forEach(row => {
     // timestamp_us in the new CSV is already in seconds, so we don't divide by 1,000,000!
     row.time_sec = (row.timestamp_us || 0) - startUs;
+
+    // IMU logger units → dashboard engineering units.
+    row.imu_gyro_x_dps = Number(row.imu_gyro_x_deci_dps) / 10.0;
+    row.imu_gyro_y_dps = Number(row.imu_gyro_y_deci_dps) / 10.0;
+    row.imu_gyro_z_dps = Number(row.imu_gyro_z_deci_dps) / 10.0;
+    row.imu_accel_x_g = Number(row.imu_accel_x_milli_g) / 1000.0;
+    row.imu_accel_y_g = Number(row.imu_accel_y_milli_g) / 1000.0;
+    row.imu_accel_z_g = Number(row.imu_accel_z_milli_g) / 1000.0;
+    row.imu_roll_deg = Number(row.imu_roll_centi_deg) / 100.0;
+    row.imu_pitch_deg = Number(row.imu_pitch_centi_deg) / 100.0;
+    row.imu_yaw_deg = Number(row.imu_yaw_centi_deg) / 100.0;
 
     const hasPackedCan = row.can600_data !== undefined;
 
@@ -1311,7 +1377,7 @@ function applyZoomRange(start, end) {
   const targetCharts = [
     chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
     diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
-    chartCoolantOil, chartIntakeEcu
+    chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
   ];
 
   targetCharts.forEach(c => {
@@ -1437,7 +1503,7 @@ function renderMotecCharts(data) {
   const allCharts = [
     chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
     diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
-    chartCoolantOil, chartIntakeEcu
+    chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
   ];
   allCharts.forEach(c => {
     if (c) {
@@ -1462,6 +1528,8 @@ function renderMotecCharts(data) {
   chartRR = null;
   chartCoolantOil = null;
   chartIntakeEcu = null;
+  chartImuAccel = null;
+  chartImuGyro = null;
 
   const labels = data.map(r => r.time_sec);
 
@@ -1513,7 +1581,7 @@ function renderMotecCharts(data) {
         const allCharts = {
           chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
           diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
-          chartCoolantOil, chartIntakeEcu
+          chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
         };
         for (const [key, chart] of Object.entries(allCharts)) {
           if (chart && chart.canvas === e.chart.canvas) {
@@ -1724,6 +1792,61 @@ function renderMotecCharts(data) {
     options: getCommonOptions(0, 1023, { stepSize: 256 })
   });
 
+  // ==================== PAGE 3 GPS + IMU CHARTS ====================
+  const accelCanvas = document.getElementById('chart-imu-accel');
+  if (accelCanvas) {
+    chartImuAccel = new Chart(accelCanvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        datasets: [
+          {
+            label: 'Accel X',
+            data: data.map(r => ({ x: r.time_sec, y: r.imu_accel_x_g })),
+            borderColor: '#f97316', borderWidth: 1.1, pointRadius: 0, fill: false
+          },
+          {
+            label: 'Accel Y',
+            data: data.map(r => ({ x: r.time_sec, y: r.imu_accel_y_g })),
+            borderColor: '#2563eb', borderWidth: 1.1, pointRadius: 0, fill: false
+          },
+          {
+            label: 'Accel Z',
+            data: data.map(r => ({ x: r.time_sec, y: r.imu_accel_z_g })),
+            borderColor: '#16a34a', borderWidth: 1.1, pointRadius: 0, fill: false
+          }
+        ]
+      },
+      options: getCommonOptions(-2.5, 2.5, { stepSize: 1 })
+    });
+  }
+
+  const gyroCanvas = document.getElementById('chart-imu-gyro');
+  if (gyroCanvas) {
+    chartImuGyro = new Chart(gyroCanvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        datasets: [
+          {
+            label: 'Gyro X',
+            data: data.map(r => ({ x: r.time_sec, y: r.imu_gyro_x_dps })),
+            borderColor: '#f97316', borderWidth: 1.1, pointRadius: 0, fill: false
+          },
+          {
+            label: 'Gyro Y',
+            data: data.map(r => ({ x: r.time_sec, y: r.imu_gyro_y_dps })),
+            borderColor: '#2563eb', borderWidth: 1.1, pointRadius: 0, fill: false
+          },
+          {
+            label: 'Gyro Z',
+            data: data.map(r => ({ x: r.time_sec, y: r.imu_gyro_z_dps })),
+            borderColor: '#16a34a', borderWidth: 1.1, pointRadius: 0, fill: false
+          }
+        ]
+      },
+      options: getCommonOptions(-100, 100, { stepSize: 50 })
+    });
+  }
+
   // ==================== PAGE 4 TEMPERATURE CHARTS ====================
   const temperatureOptions = getCommonOptions(0, 130, { stepSize: 10 });
   temperatureOptions.scales.y.title = {
@@ -1904,7 +2027,7 @@ window.addEventListener('keydown', (e) => {
     const targetCharts = [
       chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
       diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
-      chartCoolantOil, chartIntakeEcu
+      chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
     ];
     targetCharts.forEach(c => {
       if (c) {
