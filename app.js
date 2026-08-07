@@ -855,6 +855,101 @@ function findGlobalIndexAtTime(targetTime) {
   return lo;
 }
 
+// GPS fixes are recorded less frequently than the 100 Hz telemetry rows. Move
+// the map marker continuously between consecutive fixes instead of holding it
+// still and jumping whenever a new fix arrives.
+function getInterpolatedGpsPosition(targetTime, nearbyIndex) {
+  if (!globalData.length || nearbyIndex < 0) return null;
+
+  let floorIndex = nearbyIndex;
+  while (floorIndex > 0 && globalData[floorIndex].time_sec > targetTime) floorIndex--;
+
+  const coordsAt = index => {
+    const row = globalData[index];
+    const lat = convertNmeaToDecimal(row.gps_lat, false);
+    const lon = convertNmeaToDecimal(row.gps_lon, true);
+    return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+  };
+
+  let previousIndex = floorIndex;
+  let previous = coordsAt(previousIndex);
+  while (!previous && previousIndex > 0) previous = coordsAt(--previousIndex);
+  if (!previous) return null;
+
+  // Repeated rows carry the last fix forward. Use the first row of that fix as
+  // the interpolation start so progress remains linear throughout the interval.
+  while (previousIndex > 0) {
+    const earlier = coordsAt(previousIndex - 1);
+    if (!earlier || earlier.lat !== previous.lat || earlier.lon !== previous.lon) break;
+    previousIndex--;
+  }
+
+  // Locate the first following row whose GPS fix is actually different.
+  let nextIndex = Math.max(floorIndex + 1, previousIndex + 1);
+  let next = null;
+  while (nextIndex < globalData.length) {
+    const candidate = coordsAt(nextIndex);
+    if (candidate && (candidate.lat !== previous.lat || candidate.lon !== previous.lon)) {
+      next = candidate;
+      break;
+    }
+    nextIndex++;
+  }
+  if (!next) return previous;
+
+  // Do not invent motion across a long GPS outage.
+  const previousTime = globalData[previousIndex].time_sec;
+  const nextTime = globalData[nextIndex].time_sec;
+  const gap = nextTime - previousTime;
+  if (!(gap > 0) || gap > 10) return previous;
+  const ratio = Math.max(0, Math.min(1, (targetTime - previousTime) / gap));
+  return {
+    lat: previous.lat + (next.lat - previous.lat) * ratio,
+    lon: previous.lon + (next.lon - previous.lon) * ratio
+  };
+}
+
+// Chart.js lines are downsampled for performance, but the playback cursor must
+// use the exact playback time and the original 100 Hz IMU values.
+function drawExactImuCursor(targetTime, row) {
+  const specs = [
+    [chartImuAccel, ['imu_accel_x_g', 'imu_accel_y_g', 'imu_accel_z_g']],
+    [chartImuGyro, ['imu_gyro_x_dps', 'imu_gyro_y_dps', 'imu_gyro_z_dps']]
+  ];
+
+  specs.forEach(([chart, keys]) => {
+    if (!chart || !chart.chartArea || !chart.scales.x || !chart.scales.y) return;
+    const holder = chart.canvas.parentElement;
+    holder.querySelectorAll('.visual-cursor-dot').forEach(dot => dot.style.display = 'none');
+    const x = chart.scales.x.getPixelForValue(targetTime);
+
+    keys.forEach((key, datasetIndex) => {
+      const value = Number(row[key]);
+      const meta = chart.getDatasetMeta(datasetIndex);
+      if (!Number.isFinite(value) || !Number.isFinite(x) || !meta || meta.hidden) return;
+      const y = chart.scales.y.getPixelForValue(value);
+      if (!Number.isFinite(y)) return;
+      let dot = holder.querySelector(`.visual-cursor-dot-ds-${datasetIndex}`);
+      if (!dot) {
+        dot = document.createElement('div');
+        dot.className = `visual-cursor-dot visual-cursor-dot-ds-${datasetIndex}`;
+        Object.assign(dot.style, {
+          position: 'absolute', width: '10px', height: '10px', borderRadius: '50%',
+          border: '2px solid #ffffff', pointerEvents: 'none', zIndex: '12',
+          transform: 'translate(-50%, -50%)'
+        });
+        holder.appendChild(dot);
+      }
+      const color = chart.data.datasets[datasetIndex].borderColor || '#00d2ff';
+      dot.style.backgroundColor = color;
+      dot.style.boxShadow = `0 0 8px ${color}, 0 0 2px #ffffff`;
+      dot.style.left = `${x}px`;
+      dot.style.top = `${y}px`;
+      dot.style.display = 'block';
+    });
+  });
+}
+
 function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
   if (!activeSampledData.length || !Number.isFinite(targetTime)) return;
   const minTime = Number(scrollBar.min) || 0;
@@ -868,11 +963,9 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
   scrollBar.value = clampedTime.toFixed(2);
   if (gpsPlayTime) gpsPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
   if (row) {
-    updateNumericDisplays(row);
-    drawCssIntersectionDots(
-      currentCursorIndex,
-      playbackFrame ? [chartImuAccel, chartImuGyro] : null
-    );
+    const gpsPosition = getInterpolatedGpsPosition(clampedTime, globalIndex);
+    updateNumericDisplays(row, gpsPosition, clampedTime);
+    drawExactImuCursor(clampedTime, row);
   }
 }
 
@@ -983,9 +1076,10 @@ function cursorChannelValue(key, fallback) {
 }
 
 // Numeric labels updates helper
-function updateNumericDisplays(row) {
+function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverride = null) {
+  const displayTime = Number.isFinite(displayTimeOverride) ? displayTimeOverride : row.time_sec;
   if (currentTimeVal) {
-    let timeText = row.time_sec.toFixed(2) + 's';
+    let timeText = displayTime.toFixed(2) + 's';
     if (row.gps_time && row.gps_time.trim() !== "" && row.gps_time !== "00:00:00.00") {
       timeText += ` (${row.gps_time})`;
     }
@@ -993,8 +1087,8 @@ function updateNumericDisplays(row) {
   }
 
   if (scrollBar && tabGps && tabGps.classList.contains('active')) {
-    scrollBar.value = row.time_sec.toFixed(2);
-    if (gpsPlayTime) gpsPlayTime.textContent = `${row.time_sec.toFixed(2)} s`;
+    scrollBar.value = displayTime.toFixed(2);
+    if (gpsPlayTime) gpsPlayTime.textContent = `${displayTime.toFixed(2)} s`;
   }
 
   // Page 1 Labels (노이즈 필터 적용값 기준)
@@ -1059,9 +1153,9 @@ function updateNumericDisplays(row) {
 
   // Page 3 GPS Elements update
   if (cursorGpsCoords) {
-    const lat = convertNmeaToDecimal(row.gps_lat, false);
-    const lon = convertNmeaToDecimal(row.gps_lon, true);
-    if (lat && lon) {
+    const lat = gpsPositionOverride ? gpsPositionOverride.lat : convertNmeaToDecimal(row.gps_lat, false);
+    const lon = gpsPositionOverride ? gpsPositionOverride.lon : convertNmeaToDecimal(row.gps_lon, true);
+    if (Number.isFinite(lat) && Number.isFinite(lon)) {
       cursorGpsCoords.textContent = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
       
       // Update cursor marker on the map
