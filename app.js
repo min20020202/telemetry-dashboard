@@ -124,6 +124,9 @@ const imuYaw = document.getElementById('imu-yaw');
 const imuBattery = document.getElementById('imu-battery');
 const imuAge = document.getElementById('imu-age');
 const imuGDot = document.getElementById('imu-g-dot');
+const gpsPlayToggle = document.getElementById('gps-play-toggle');
+const gpsPlayRate = document.getElementById('gps-play-rate');
+const gpsPlayTime = document.getElementById('gps-play-time');
 
 // Theme Switcher DOM
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
@@ -232,6 +235,12 @@ let gpsCursorMarker = null;
 let gpsGraphicLayer = null;
 let gpsSatelliteLayer = null;
 let currentGpsLayerMode = 'graphic'; // 'graphic' | 'satellite'
+
+// GPS + IMU synchronized playback state.
+let gpsPlaybackActive = false;
+let gpsPlaybackFrame = null;
+let gpsPlaybackLastTimestamp = null;
+let gpsPlaybackCursorSec = 0;
 
 // NMEA coordinate converter helper
 function convertNmeaToDecimal(val, isLongitude = false) {
@@ -480,6 +489,8 @@ document.addEventListener('keydown', (event) => {
 });
 
 function switchTab(mode) {
+  if (mode !== 'gps' && gpsPlaybackActive) setGpsPlayback(false);
+
   // Remove active from all tabs and pages
   tabGeneral.classList.remove('active');
   tabDiagnostics.classList.remove('active');
@@ -812,6 +823,100 @@ function drawCssIntersectionDots(index) {
 let dragSyncPending = false;
 let lastDragEvent = null;
 
+function findSampleIndexAtTime(targetTime) {
+  let lo = 0;
+  let hi = activeSampledData.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (activeSampledData[mid].time_sec < targetTime) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo > 0) {
+    const before = activeSampledData[lo - 1];
+    const after = activeSampledData[lo];
+    if (Math.abs(before.time_sec - targetTime) <= Math.abs(after.time_sec - targetTime)) return lo - 1;
+  }
+  return lo;
+}
+
+function updateGpsCursorAtTime(targetTime) {
+  if (!activeSampledData.length || !Number.isFinite(targetTime)) return;
+  const minTime = Number(scrollBar.min) || 0;
+  const maxTime = Number(scrollBar.max) || totalDurationSec;
+  const clampedTime = Math.max(minTime, Math.min(maxTime, targetTime));
+  currentCursorIndex = findSampleIndexAtTime(clampedTime);
+  const row = activeSampledData[currentCursorIndex];
+  scrollBar.value = clampedTime.toFixed(2);
+  if (gpsPlayTime) gpsPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
+  if (row) {
+    updateNumericDisplays(row);
+    drawCssIntersectionDots(currentCursorIndex);
+  }
+}
+
+function setGpsPlayback(shouldPlay) {
+  const canPlay = shouldPlay && activeSampledData.length > 0 &&
+    tabGps && tabGps.classList.contains('active');
+  gpsPlaybackActive = Boolean(canPlay);
+
+  if (gpsPlaybackFrame !== null) {
+    cancelAnimationFrame(gpsPlaybackFrame);
+    gpsPlaybackFrame = null;
+  }
+  gpsPlaybackLastTimestamp = null;
+
+  if (gpsPlayToggle) {
+    gpsPlayToggle.textContent = gpsPlaybackActive ? '❚❚ 일시정지' : '▶ 재생';
+    gpsPlayToggle.classList.toggle('playing', gpsPlaybackActive);
+  }
+  if (!gpsPlaybackActive) return;
+
+  const minTime = Number(scrollBar.min) || 0;
+  const maxTime = Number(scrollBar.max) || totalDurationSec;
+  gpsPlaybackCursorSec = Number(scrollBar.value);
+  if (!Number.isFinite(gpsPlaybackCursorSec) || gpsPlaybackCursorSec >= maxTime - 0.01) {
+    gpsPlaybackCursorSec = minTime;
+    updateGpsCursorAtTime(gpsPlaybackCursorSec);
+  }
+
+  const playbackStep = timestamp => {
+    if (!gpsPlaybackActive) return;
+    if (gpsPlaybackLastTimestamp === null) {
+      gpsPlaybackLastTimestamp = timestamp;
+      gpsPlaybackFrame = requestAnimationFrame(playbackStep);
+      return;
+    }
+
+    // 약 30fps로 지도와 다수 차트를 갱신해 CPU 부하를 제한합니다.
+    const elapsedMs = timestamp - gpsPlaybackLastTimestamp;
+    if (elapsedMs < 32) {
+      gpsPlaybackFrame = requestAnimationFrame(playbackStep);
+      return;
+    }
+    gpsPlaybackLastTimestamp = timestamp;
+
+    const rate = Number(gpsPlayRate ? gpsPlayRate.value : 1) || 1;
+    gpsPlaybackCursorSec += (elapsedMs / 1000) * rate;
+    if (gpsPlaybackCursorSec >= maxTime) {
+      updateGpsCursorAtTime(maxTime);
+      setGpsPlayback(false);
+      return;
+    }
+
+    updateGpsCursorAtTime(gpsPlaybackCursorSec);
+    gpsPlaybackFrame = requestAnimationFrame(playbackStep);
+  };
+
+  gpsPlaybackFrame = requestAnimationFrame(playbackStep);
+}
+
+if (gpsPlayToggle) {
+  gpsPlayToggle.addEventListener('click', () => setGpsPlayback(!gpsPlaybackActive));
+}
+if (scrollBar) {
+  scrollBar.addEventListener('pointerdown', () => setGpsPlayback(false));
+}
+
 const handleTimelineScrollDrag = (e) => {
   lastDragEvent = e;
   if (dragSyncPending) return;
@@ -826,24 +931,7 @@ const handleTimelineScrollDrag = (e) => {
     // GPS 페이지 활성화 시: 시간 스크러버(Scrubber)로 동작
     if (tabGps && tabGps.classList.contains('active')) {
       const targetTime = parseFloat(lastDragEvent.target.value);
-      if (!isNaN(targetTime)) {
-        // activeSampledData에서 targetTime에 가장 가까운 행 인덱스 검색
-        let closestIndex = 0;
-        let minDiff = Infinity;
-        for (let i = 0; i < activeSampledData.length; i++) {
-          const diff = Math.abs(activeSampledData[i].time_sec - targetTime);
-          if (diff < minDiff) {
-            minDiff = diff;
-            closestIndex = i;
-          }
-        }
-        currentCursorIndex = closestIndex;
-        const row = activeSampledData[closestIndex];
-        if (row) {
-          updateNumericDisplays(row);
-          drawCssIntersectionDots(closestIndex);
-        }
-      }
+      if (!isNaN(targetTime)) updateGpsCursorAtTime(targetTime);
     } else {
       // 일반 차트 페이지 활성화 시: 뷰포트 스크롤(Panning)로 동작
       const scrollStart = parseFloat(lastDragEvent.target.value);
@@ -883,6 +971,7 @@ function updateNumericDisplays(row) {
 
   if (scrollBar && tabGps && tabGps.classList.contains('active')) {
     scrollBar.value = row.time_sec.toFixed(2);
+    if (gpsPlayTime) gpsPlayTime.textContent = `${row.time_sec.toFixed(2)} s`;
   }
 
   // Page 1 Labels (노이즈 필터 적용값 기준)
@@ -1029,8 +1118,9 @@ function updateNumericDisplays(row) {
   if (imuGDot) {
     const limitG = 2.0;
     const clamp = value => Math.max(-limitG, Math.min(limitG, value));
-    const left = imuValid ? 50 + (clamp(ax) / limitG) * 45 : 50;
-    const top = imuValid ? 50 - (clamp(ay) / limitG) * 45 : 50;
+    // Vehicle axes: +X is forward (screen up), +Y is left (screen left).
+    const left = imuValid ? 50 - (clamp(ay) / limitG) * 45 : 50;
+    const top = imuValid ? 50 - (clamp(ax) / limitG) * 45 : 50;
     imuGDot.style.left = `${left}%`;
     imuGDot.style.top = `${top}%`;
     imuGDot.style.opacity = imuValid ? '1' : '0.25';
@@ -1096,6 +1186,7 @@ function uploadFileToServer(file) {
 
 function initDataAndDashboard() {
   if (globalData.length === 0) return;
+  setGpsPlayback(false);
   statusText.textContent = '지표 연산 중...';
 
   globalData = globalData.map(normalizeTelemetryRow);
@@ -1800,17 +1891,17 @@ function renderMotecCharts(data) {
       data: {
         datasets: [
           {
-            label: 'Accel X',
+            label: 'Longitudinal G (+Forward X)',
             data: data.map(r => ({ x: r.time_sec, y: r.imu_accel_x_g })),
             borderColor: '#f97316', borderWidth: 1.1, pointRadius: 0, fill: false
           },
           {
-            label: 'Accel Y',
+            label: 'Lateral G (+Left Y)',
             data: data.map(r => ({ x: r.time_sec, y: r.imu_accel_y_g })),
             borderColor: '#2563eb', borderWidth: 1.1, pointRadius: 0, fill: false
           },
           {
-            label: 'Accel Z',
+            label: 'Vertical G (Z)',
             data: data.map(r => ({ x: r.time_sec, y: r.imu_accel_z_g })),
             borderColor: '#16a34a', borderWidth: 1.1, pointRadius: 0, fill: false
           }
@@ -1827,17 +1918,17 @@ function renderMotecCharts(data) {
       data: {
         datasets: [
           {
-            label: 'Gyro X',
+            label: 'Roll Rate (X)',
             data: data.map(r => ({ x: r.time_sec, y: r.imu_gyro_x_dps })),
             borderColor: '#f97316', borderWidth: 1.1, pointRadius: 0, fill: false
           },
           {
-            label: 'Gyro Y',
+            label: 'Pitch Rate (Y)',
             data: data.map(r => ({ x: r.time_sec, y: r.imu_gyro_y_dps })),
             borderColor: '#2563eb', borderWidth: 1.1, pointRadius: 0, fill: false
           },
           {
-            label: 'Gyro Z',
+            label: 'Yaw Rate (Z)',
             data: data.map(r => ({ x: r.time_sec, y: r.imu_gyro_z_dps })),
             borderColor: '#16a34a', borderWidth: 1.1, pointRadius: 0, fill: false
           }

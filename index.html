@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260808-1">
+  <link rel="stylesheet" href="style.css?v=20260808-2">
 </head>
 <body>
 
@@ -311,14 +311,14 @@
             <div class="motec-chart-card gps-imu-chart-card">
               <div class="chart-label-bar imu-chart-label">
                 <span class="signal-title">IMU Acceleration [g]</span>
-                <span><b class="imu-x">X</b> <b class="imu-y">Y</b> <b class="imu-z">Z</b></span>
+                <span><b class="imu-x">전후 X</b> <b class="imu-y">좌우 Y</b> <b class="imu-z">수직 Z</b></span>
               </div>
               <div class="canvas-holder"><canvas id="chart-imu-accel"></canvas></div>
             </div>
             <div class="motec-chart-card gps-imu-chart-card">
               <div class="chart-label-bar imu-chart-label">
                 <span class="signal-title">IMU Gyroscope [°/s]</span>
-                <span><b class="imu-x">X</b> <b class="imu-y">Y</b> <b class="imu-z">Z</b></span>
+                <span><b class="imu-x">Roll X</b> <b class="imu-y">Pitch Y</b> <b class="imu-z">Yaw Z</b></span>
               </div>
               <div class="canvas-holder"><canvas id="chart-imu-gyro"></canvas></div>
             </div>
@@ -327,19 +327,31 @@
 
         <!-- Right Side: GPS + IMU live metrics -->
         <div class="view-column gps-metrics-column">
+          <div class="motec-chart-card gps-playback-card">
+            <button id="gps-play-toggle" class="gps-play-button" type="button" aria-label="주행 데이터 재생">▶ 재생</button>
+            <select id="gps-play-rate" class="gps-play-rate" aria-label="재생 속도">
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+            </select>
+            <span id="gps-play-time" class="gps-play-time">0.00 s</span>
+          </div>
+
           <div class="motec-chart-card imu-g-card">
-            <div class="gps-metric-label">IMU G-Force · Sensor X/Y</div>
+            <div class="gps-metric-label">Vehicle G-Force</div>
             <div class="imu-g-meter">
-              <span class="imu-g-axis imu-g-axis-x">X</span>
-              <span class="imu-g-axis imu-g-axis-y">Y</span>
+              <span class="imu-g-axis imu-g-axis-forward">+전방 X</span>
+              <span class="imu-g-axis imu-g-axis-left">+좌측 Y</span>
               <i class="imu-g-ring ring-1"></i>
               <i class="imu-g-ring ring-2"></i>
+              <span class="imu-g-car">↑</span>
               <div id="imu-g-dot" class="imu-g-dot"></div>
             </div>
             <div class="imu-live-values">
-              <span><b class="imu-x">X</b><strong id="imu-accel-x">--.--</strong> g</span>
-              <span><b class="imu-y">Y</b><strong id="imu-accel-y">--.--</strong> g</span>
-              <span><b class="imu-z">Z</b><strong id="imu-accel-z">--.--</strong> g</span>
+              <span><b class="imu-x">전후 X</b><strong id="imu-accel-x">--.--</strong> g</span>
+              <span><b class="imu-y">좌우 Y</b><strong id="imu-accel-y">--.--</strong> g</span>
+              <span><b class="imu-z">수직 Z</b><strong id="imu-accel-z">--.--</strong> g</span>
             </div>
           </div>
 
@@ -530,6 +542,6 @@
   <script src="filters.js?v=20260805-1"></script>
   <script src="steering.js?v=20260802-4"></script>
   <script src="realtime.js?v=20260802-4"></script>
-  <script src="app.js?v=20260808-1"></script>
+  <script src="app.js?v=20260808-2"></script>
 </body>
 </html>

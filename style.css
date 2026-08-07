@@ -1828,6 +1828,49 @@ body {
   overflow-y: auto;
 }
 
+.gps-playback-card {
+  flex: none;
+  height: auto;
+  padding: 9px;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.gps-play-button,
+.gps-play-rate {
+  height: 34px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: rgba(128, 128, 128, 0.08);
+  color: var(--text-primary);
+  font: 700 11px var(--font-mono);
+}
+
+.gps-play-button {
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.gps-play-button:hover,
+.gps-play-button.playing {
+  border-color: var(--accent-orange);
+  background: rgba(249, 115, 22, 0.16);
+}
+
+.gps-play-rate {
+  padding: 0 6px;
+  cursor: pointer;
+}
+
+.gps-play-time {
+  min-width: 58px;
+  color: var(--accent-orange);
+  font: 700 11px var(--font-mono);
+  text-align: right;
+}
+
 .imu-g-card,
 .imu-attitude-card {
   flex: none;
@@ -1869,8 +1912,28 @@ body {
   font: 700 9px var(--font-mono);
 }
 
-.imu-g-axis-x { right: 5px; top: calc(50% - 12px); }
-.imu-g-axis-y { left: calc(50% + 5px); top: 4px; }
+.imu-g-axis-forward {
+  left: 50%;
+  top: 4px;
+  transform: translateX(-50%);
+}
+
+.imu-g-axis-left {
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+  transform-origin: center;
+}
+
+.imu-g-car {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  color: var(--text-secondary);
+  font: 700 22px var(--font-mono);
+  opacity: 0.35;
+  transform: translate(-50%, -50%);
+}
 
 .imu-g-dot {
   position: absolute;
