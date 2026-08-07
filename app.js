@@ -660,8 +660,18 @@ document.addEventListener('wheel', (e) => {
   if (!e.target.closest('.motec-chart-card')) return;
   if (globalData.length === 0 || totalDurationSec <= 0) return;
 
-  const targetTime = parseFloat(scrollBar.value);
-  if (isNaN(targetTime)) return;
+  // On chart pages the timeline slider stores the viewport start, not the
+  // selected cursor time. Anchor zoom to the actual cursor so its horizontal
+  // position stays fixed while the surrounding time range changes.
+  const cursorRow = activeSampledData[currentCursorIndex];
+  let targetTime = cursorRow ? Number(cursorRow.time_sec) : NaN;
+  if (tabGps && tabGps.classList.contains('active')) {
+    const gpsCursorTime = Number(scrollBar.value);
+    if (Number.isFinite(gpsCursorTime)) targetTime = gpsCursorTime;
+  }
+  if (!Number.isFinite(targetTime) || targetTime < currentStartSec || targetTime > currentEndSec) {
+    targetTime = (currentStartSec + currentEndSec) / 2;
+  }
 
   e.preventDefault(); // 스크롤바 바운스 차단
 
