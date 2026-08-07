@@ -128,6 +128,7 @@ const imuGDot = document.getElementById('imu-g-dot');
 const gpsPlayToggle = document.getElementById('gps-play-toggle');
 const gpsPlayRate = document.getElementById('gps-play-rate');
 const gpsPlayTime = document.getElementById('gps-play-time');
+const gpsImuLpf = document.getElementById('gps-imu-lpf');
 
 // Theme Switcher DOM
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
@@ -964,9 +965,24 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
   scrollBar.value = clampedTime.toFixed(2);
   if (gpsPlayTime) gpsPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
   if (row) {
+    let displayRow = row;
+    if (globalIndex >= 0 && gpsImuLpf && gpsImuLpf.checked && typeof channelValueAt === 'function') {
+      displayRow = Object.create(row);
+      const values = {
+        imu_accel_x_g: channelValueAt('imu_ax', globalIndex),
+        imu_accel_y_g: channelValueAt('imu_ay', globalIndex),
+        imu_accel_z_g: channelValueAt('imu_az', globalIndex),
+        imu_gyro_x_dps: channelValueAt('imu_gx', globalIndex),
+        imu_gyro_y_dps: channelValueAt('imu_gy', globalIndex),
+        imu_gyro_z_dps: channelValueAt('imu_gz', globalIndex)
+      };
+      Object.entries(values).forEach(([key, value]) => {
+        if (Number.isFinite(value)) displayRow[key] = value;
+      });
+    }
     const gpsPosition = getInterpolatedGpsPosition(clampedTime, globalIndex);
-    updateNumericDisplays(row, gpsPosition, clampedTime);
-    drawExactImuCursor(clampedTime, row);
+    updateNumericDisplays(displayRow, gpsPosition, clampedTime);
+    drawExactImuCursor(clampedTime, displayRow);
   }
 }
 
@@ -1029,6 +1045,21 @@ function setGpsPlayback(shouldPlay) {
 
 if (gpsPlayToggle) {
   gpsPlayToggle.addEventListener('click', () => setGpsPlayback(!gpsPlaybackActive));
+}
+if (gpsImuLpf) {
+  gpsImuLpf.addEventListener('change', () => {
+    const keys = ['imu_ax', 'imu_ay', 'imu_az', 'imu_gx', 'imu_gy', 'imu_gz'];
+    if (typeof getFilterState === 'function' && typeof recomputeChannel === 'function') {
+      keys.forEach(key => {
+        const state = getFilterState(key);
+        state.type = gpsImuLpf.checked ? 'butter' : 'none';
+        state.params = gpsImuLpf.checked ? { fc: 5, order: 2 } : {};
+        recomputeChannel(key);
+      });
+      refreshChartsAfterFilter();
+      updateGpsCursorAtTime(Number(scrollBar.value) || 0);
+    }
+  });
 }
 if (scrollBar) {
   scrollBar.addEventListener('pointerdown', () => setGpsPlayback(false));
@@ -1653,7 +1684,9 @@ function refreshChartsAfterFilter() {
     [chartRL, 'chart-sus-rl'],
     [chartRR, 'chart-sus-rr'],
     [chartCoolantOil, 'chart-coolant-oil'],
-    [chartIntakeEcu, 'chart-intake-ecu']
+    [chartIntakeEcu, 'chart-intake-ecu'],
+    [chartImuAccel, 'chart-imu-accel'],
+    [chartImuGyro, 'chart-imu-gyro']
   ];
 
   pairs.forEach(([chart, canvasId]) => {
@@ -2058,17 +2091,17 @@ function renderMotecCharts(data) {
         datasets: [
           {
             label: 'Longitudinal G (+Forward X)',
-            data: data.map(r => ({ x: r.time_sec, y: r.imu_accel_x_g })),
+            data: S('imu_ax', r => r.imu_accel_x_g),
             borderColor: '#f97316', borderWidth: 1.1, pointRadius: 0, fill: false
           },
           {
             label: 'Lateral G (+Left Y)',
-            data: data.map(r => ({ x: r.time_sec, y: r.imu_accel_y_g })),
+            data: S('imu_ay', r => r.imu_accel_y_g),
             borderColor: '#2563eb', borderWidth: 1.1, pointRadius: 0, fill: false
           },
           {
             label: 'Vertical G (Z)',
-            data: data.map(r => ({ x: r.time_sec, y: r.imu_accel_z_g })),
+            data: S('imu_az', r => r.imu_accel_z_g),
             borderColor: '#16a34a', borderWidth: 1.1, pointRadius: 0, fill: false
           }
         ]
@@ -2085,17 +2118,17 @@ function renderMotecCharts(data) {
         datasets: [
           {
             label: 'Roll Rate (X)',
-            data: data.map(r => ({ x: r.time_sec, y: r.imu_gyro_x_dps })),
+            data: S('imu_gx', r => r.imu_gyro_x_dps),
             borderColor: '#f97316', borderWidth: 1.1, pointRadius: 0, fill: false
           },
           {
             label: 'Pitch Rate (Y)',
-            data: data.map(r => ({ x: r.time_sec, y: r.imu_gyro_y_dps })),
+            data: S('imu_gy', r => r.imu_gyro_y_dps),
             borderColor: '#2563eb', borderWidth: 1.1, pointRadius: 0, fill: false
           },
           {
             label: 'Yaw Rate (Z)',
-            data: data.map(r => ({ x: r.time_sec, y: r.imu_gyro_z_dps })),
+            data: S('imu_gz', r => r.imu_gyro_z_dps),
             borderColor: '#16a34a', borderWidth: 1.1, pointRadius: 0, fill: false
           }
         ]

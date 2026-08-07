@@ -426,7 +426,13 @@ const CHANNELS = {
     from: r => r.ecu_c,
     dropoutDef: { on: false, lo: -40, hi: 150, gap: 50 },
     recommend: { dropout: { on: true, lo: -40, hi: 150, gap: 50 }, type: 'median', params: { win: 9 } }
-  }
+  },
+  imu_ax: { label: 'IMU Accel X', unit: 'g', from: r => r.imu_accel_x_g || 0, dropoutDef: { on: false }, recommend: { type: 'butter', params: { fc: 5, order: 2 } } },
+  imu_ay: { label: 'IMU Accel Y', unit: 'g', from: r => r.imu_accel_y_g || 0, dropoutDef: { on: false }, recommend: { type: 'butter', params: { fc: 5, order: 2 } } },
+  imu_az: { label: 'IMU Accel Z', unit: 'g', from: r => r.imu_accel_z_g || 0, dropoutDef: { on: false }, recommend: { type: 'butter', params: { fc: 5, order: 2 } } },
+  imu_gx: { label: 'IMU Gyro X', unit: '°/s', from: r => r.imu_gyro_x_dps || 0, dropoutDef: { on: false }, recommend: { type: 'butter', params: { fc: 5, order: 2 } } },
+  imu_gy: { label: 'IMU Gyro Y', unit: '°/s', from: r => r.imu_gyro_y_dps || 0, dropoutDef: { on: false }, recommend: { type: 'butter', params: { fc: 5, order: 2 } } },
+  imu_gz: { label: 'IMU Gyro Z', unit: '°/s', from: r => r.imu_gyro_z_dps || 0, dropoutDef: { on: false }, recommend: { type: 'butter', params: { fc: 5, order: 2 } } }
 };
 
 /** 차트 canvas id → 그 차트가 그리는 채널 키 (데이터셋 순서와 일치) */
@@ -443,7 +449,9 @@ const CHART_CHANNELS = {
   'chart-sus-rl': ['sus_rl'],
   'chart-sus-rr': ['sus_rr'],
   'chart-coolant-oil': ['water', 'oil', 'fl_speed'],
-  'chart-intake-ecu': ['iat', 'ecu']
+  'chart-intake-ecu': ['iat', 'ecu'],
+  'chart-imu-accel': ['imu_ax', 'imu_ay', 'imu_az'],
+  'chart-imu-gyro': ['imu_gx', 'imu_gy', 'imu_gz']
 };
 
 // ==================== [4] 필터 상태 & 적용 엔진 ====================

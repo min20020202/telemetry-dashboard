@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260808-2">
+  <link rel="stylesheet" href="style.css?v=20260808-3">
 </head>
 <body>
 
@@ -336,6 +336,11 @@
               <option value="4">4×</option>
             </select>
             <span id="gps-play-time" class="gps-play-time">0.00 s</span>
+            <label class="gps-imu-filter-toggle">
+              <input id="gps-imu-lpf" type="checkbox">
+              <span>IMU Low-pass filter</span>
+              <strong>5 Hz</strong>
+            </label>
           </div>
 
           <div class="motec-chart-card imu-g-card">
@@ -539,9 +544,9 @@
   </div>
 
   <!-- Custom JS -->
-  <script src="filters.js?v=20260805-1"></script>
+  <script src="filters.js?v=20260808-2"></script>
   <script src="steering.js?v=20260802-4"></script>
   <script src="realtime.js?v=20260802-4"></script>
-  <script src="app.js?v=20260808-5"></script>
+  <script src="app.js?v=20260808-6"></script>
 </body>
 </html>
