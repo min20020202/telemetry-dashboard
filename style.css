@@ -1808,11 +1808,58 @@ body {
   min-height: 0;
 }
 
-.imu-chart-label > span:last-child {
+.imu-chart-label {
+  min-height: 32px;
+  gap: 12px;
+}
+
+.imu-label-main {
   display: flex;
-  gap: 9px;
+  align-items: center;
+  min-width: 0;
+  gap: 14px;
+}
+
+.imu-chart-label .signal-title {
+  flex: none;
+  white-space: nowrap;
+}
+
+.imu-chart-label .signal-title em {
+  color: var(--text-secondary);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.imu-axis-legend {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
+}
+
+.imu-axis-legend b {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: rgba(128, 128, 128, 0.06);
+  white-space: nowrap;
+}
+
+.imu-axis-legend i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.imu-axis-legend small {
+  font: inherit;
+  opacity: 0.72;
 }
 
 .imu-x { color: #f97316; }
@@ -2186,4 +2233,10 @@ body {
   font-weight: 700;
   white-space: nowrap;
   cursor: help;
+}
+
+.imu-chart-label .filter-badge {
+  flex: none;
+  padding: 4px 9px;
+  white-space: nowrap;
 }

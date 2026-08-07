@@ -840,17 +840,26 @@ function refreshFilterBadges() {
     if (!bar) return;
 
     let badge = bar.querySelector(`.filter-badge[data-for="${canvasId}"]`);
-    const texts = keys.map(k => {
+    let texts = keys.map(k => {
       const t = filterBadgeText(k);
       return t ? `${CHANNELS[k].label.split(' ')[0]}: ${t}` : null;
     }).filter(Boolean);
+
+    // The checkbox applies one shared filter to all three axes. Avoid showing
+    // the same LPF status three times on each IMU chart.
+    if (canvasId === 'chart-imu-accel' || canvasId === 'chart-imu-gyro') {
+      const unique = [...new Set(keys.map(k => filterBadgeText(k)).filter(Boolean))];
+      texts = unique.length === 1 ? [unique[0].replace(/(\d)Hz\b/, '$1 Hz')] : texts;
+    }
 
     if (!texts.length) { if (badge) badge.remove(); return; }
     if (!badge) {
       badge = document.createElement('span');
       badge.className = 'filter-badge';
       badge.dataset.for = canvasId;
-      badge.title = '이 그래프에 노이즈 필터가 적용되어 있습니다 (우클릭으로 변경)';
+      badge.title = (canvasId === 'chart-imu-accel' || canvasId === 'chart-imu-gyro')
+        ? 'IMU 5 Hz 저역통과 필터가 적용되어 있습니다'
+        : '이 그래프에 노이즈 필터가 적용되어 있습니다 (우클릭으로 변경)';
       bar.appendChild(badge);
     }
     badge.textContent = '⚡ ' + texts.join(' | ');
