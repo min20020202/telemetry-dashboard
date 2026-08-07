@@ -20,6 +20,7 @@ let chartIntakeEcu = null;
 // Global state variables for Page 3 IMU charts
 let chartImuAccel = null;
 let chartImuGyro = null;
+let gpsImuCursorDragging = false;
 
 // Zoom, Slicing & Scroll configurations
 let globalData = [];
@@ -1705,6 +1706,50 @@ function syncHover(activeChart, chartEvent) {
   });
 }
 
+// On the GPS + IMU page, hovering must not move the synchronized playback
+// cursor. Only an intentional press-and-drag gesture scrubs the exact time.
+function bindGpsImuDragCursor(chart) {
+  if (!chart || !chart.canvas) return;
+  const canvas = chart.canvas;
+  if (canvas._gpsImuDragHandlers) {
+    const old = canvas._gpsImuDragHandlers;
+    canvas.removeEventListener('pointerdown', old.down);
+    canvas.removeEventListener('pointermove', old.move);
+    canvas.removeEventListener('pointerup', old.up);
+    canvas.removeEventListener('pointercancel', old.up);
+  }
+
+  const scrub = event => {
+    const activeChart = canvas.id === 'chart-imu-accel' ? chartImuAccel : chartImuGyro;
+    if (!activeChart || !tabGps || !tabGps.classList.contains('active')) return;
+    const position = Chart.helpers.getRelativePosition(event, activeChart);
+    const targetTime = activeChart.scales.x.getValueForPixel(position.x);
+    if (Number.isFinite(targetTime)) updateGpsCursorAtTime(targetTime);
+  };
+  const down = event => {
+    if (!tabGps || !tabGps.classList.contains('active')) return;
+    setGpsPlayback(false);
+    gpsImuCursorDragging = true;
+    canvas.classList.add('cursor-dragging');
+    canvas.setPointerCapture(event.pointerId);
+    scrub(event);
+  };
+  const move = event => {
+    if (gpsImuCursorDragging && canvas.hasPointerCapture(event.pointerId)) scrub(event);
+  };
+  const up = event => {
+    if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+    gpsImuCursorDragging = false;
+    canvas.classList.remove('cursor-dragging');
+  };
+
+  canvas.addEventListener('pointerdown', down);
+  canvas.addEventListener('pointermove', move);
+  canvas.addEventListener('pointerup', up);
+  canvas.addEventListener('pointercancel', up);
+  canvas._gpsImuDragHandlers = { down, move, up };
+}
+
 // 최초 1회만 데이터셋을 세팅하여 생성하는 팩토리
 function renderMotecCharts(data) {
   // Canvas is already in use 에러 방지를 위해 기존 차트 객체들을 파괴(destroy)하고 초기화
@@ -1785,6 +1830,10 @@ function renderMotecCharts(data) {
       }
     },
     onHover: (e, elements) => {
+      if (tabGps && tabGps.classList.contains('active') &&
+          (e.chart.canvas.id === 'chart-imu-accel' || e.chart.canvas.id === 'chart-imu-gyro')) {
+        return;
+      }
       if (elements && elements.length > 0) {
         const allCharts = {
           chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
@@ -2054,6 +2103,8 @@ function renderMotecCharts(data) {
       options: getCommonOptions(-100, 100, { stepSize: 50 })
     });
   }
+  bindGpsImuDragCursor(chartImuAccel);
+  bindGpsImuDragCursor(chartImuGyro);
 
   // ==================== PAGE 4 TEMPERATURE CHARTS ====================
   const temperatureOptions = getCommonOptions(0, 130, { stepSize: 10 });
@@ -2254,10 +2305,15 @@ window.addEventListener('keydown', (e) => {
     switchTab('diag');
   }
 
-  // Space: 줌 리셋 (전체 보기)
+  // GPS + IMU page: Space toggles playback. Other pages retain the existing
+  // full-view reset shortcut.
   else if (key === ' ' || key === 'Spacebar') {
     e.preventDefault();
-    applyZoomRange(0, totalDurationSec);
+    if (tabGps && tabGps.classList.contains('active')) {
+      if (!e.repeat) setGpsPlayback(!gpsPlaybackActive);
+    } else {
+      applyZoomRange(0, totalDurationSec);
+    }
   }
 
   // Left/Right Arrow: 커서 미세 이동 (지속 입력 시 가속도 적용 및 뷰포트 자동 스크롤)
