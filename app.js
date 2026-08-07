@@ -293,9 +293,10 @@ function initGpsMap() {
     maxNativeZoom: 20
   });
 
-  // 위성 지도 레이어 (Esri World Imagery — 별도 API 키 불필요, 무료)
-  gpsSatelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles &copy; Esri — Esri, Maxar, Earthstar Geographics, GIS User Community',
+  // 국내 위성 지도 레이어 (국토교통부 공간정보 오픈플랫폼 VWorld).
+  // 인증키는 운영 Vercel 도메인으로 제한되어 있어 다른 사이트에서는 사용할 수 없습니다.
+  gpsSatelliteLayer = L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/FA347C96-2846-3D64-8855-29ED001264B6/Satellite/{z}/{y}/{x}.jpeg', {
+    attribution: '영상지도 &copy; 국토교통부 VWorld',
     maxZoom: GPS_MAP_MAX_ZOOM,
     maxNativeZoom: 19
   });
