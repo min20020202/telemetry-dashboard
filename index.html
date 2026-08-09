@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260810-2">
+  <link rel="stylesheet" href="style.css?v=20260810-3">
 </head>
 <body>
 
@@ -301,22 +301,24 @@
               </label>
               <span id="gps-lap-toolbar-status">지도에서 라인 양 끝을 차례로 선택하십시오.</span>
             </div>
-            <div id="gps-map"></div>
+            <div class="gps-map-stage">
+              <div id="gps-map"></div>
 
-            <!-- 지도 우측 상단: 현재 GPS 커서 지점의 조향각 위젯 -->
-            <div class="gps-steering-widget">
-              <div class="gps-steering-label">Steering</div>
-              <div class="gps-steering-wheel">
-                <svg id="gps-steering-wheel-graphic" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="40" stroke="var(--text-primary)" stroke-width="8" fill="none" opacity="0.8" />
-                  <line x1="50" y1="50" x2="50" y2="90" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
-                  <line x1="50" y1="50" x2="10" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
-                  <line x1="50" y1="50" x2="90" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
-                  <circle cx="50" cy="50" r="10" fill="var(--accent-magenta)" />
-                  <rect x="47" y="6" width="6" height="8" fill="var(--accent-orange)" rx="1" />
-                </svg>
+              <!-- 지도 우측 상단: 현재 GPS 커서 지점의 조향각 위젯 -->
+              <div class="gps-steering-widget">
+                <div class="gps-steering-label">Steering</div>
+                <div class="gps-steering-wheel">
+                  <svg id="gps-steering-wheel-graphic" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="40" stroke="var(--text-primary)" stroke-width="8" fill="none" opacity="0.8" />
+                    <line x1="50" y1="50" x2="50" y2="90" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
+                    <line x1="50" y1="50" x2="10" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
+                    <line x1="50" y1="50" x2="90" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round" />
+                    <circle cx="50" cy="50" r="10" fill="var(--accent-magenta)" />
+                    <rect x="47" y="6" width="6" height="8" fill="var(--accent-orange)" rx="1" />
+                  </svg>
+                </div>
+                <div class="gps-steering-value"><span id="gps-cursor-steering">--.-</span><span class="gps-steering-unit">°</span></div>
               </div>
-              <div class="gps-steering-value"><span id="gps-cursor-steering">--.-</span><span class="gps-steering-unit">°</span></div>
             </div>
           </div>
 

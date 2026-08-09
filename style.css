@@ -1831,10 +1831,16 @@ body {
   min-height: 320px;
 }
 
-#gps-map {
+.gps-map-stage {
   flex: 1;
+  position: relative;
   width: 100%;
   min-height: 0;
+}
+
+#gps-map {
+  width: 100%;
+  height: 100%;
   background: #1e293b;
   border-radius: 4px;
   z-index: 1;
@@ -2425,7 +2431,7 @@ body {
 /* ==================== GPS 지도 우측 상단 조향각 위젯 ==================== */
 .gps-steering-widget {
   position: absolute;
-  top: 46px;
+  top: 14px;
   right: 14px;
   z-index: 500;
   display: flex;
