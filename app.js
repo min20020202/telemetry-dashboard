@@ -1672,6 +1672,10 @@ function applyZoomRange(start, end) {
     scrollBar.disabled = maxScroll <= 0.01;
   }
 
+  // 확대된 IMU 구간은 필터 적용본의 원본 해상도로 다시 구성합니다. 그래야
+  // 100 Hz 필터 커서와 화면의 필터 곡선이 같은 좌표를 가리킵니다.
+  refreshVisibleImuSeries(cleanStart, cleanEnd, false);
+
   // 11개 Chart.js 인스턴스의 X축 범위만 갱신 (CPU 오버헤드 99% 해제!)
   const targetCharts = [
     chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
@@ -1726,6 +1730,51 @@ function downsampleIndices(len, limit) {
   return idx;
 }
 
+// Rebuild only the visible IMU series from the full-resolution filtered
+// channels. A single 4,500-point sample of an entire long run can omit a peak;
+// after zooming that made the exact filtered cursor appear away from the line.
+function refreshVisibleImuSeries(startTime, endTime, updateNow = true) {
+  if (!globalData.length || typeof channelSeries !== 'function') return;
+
+  let lo = 0;
+  let hi = globalData.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (globalData[mid].time_sec < startTime) lo = mid + 1;
+    else hi = mid;
+  }
+  const first = Math.max(0, lo - 1);
+
+  lo = first;
+  hi = globalData.length - 1;
+  while (lo < hi) {
+    const mid = ((lo + hi + 1) >> 1);
+    if (globalData[mid].time_sec > endTime) hi = mid - 1;
+    else lo = mid;
+  }
+  const last = Math.min(globalData.length - 1, lo + 1);
+  const count = Math.max(1, last - first + 1);
+  const step = Math.max(1, Math.ceil(count / 4500));
+  const indices = [];
+  for (let i = first; i <= last; i += step) indices.push(i);
+  if (indices[indices.length - 1] !== last) indices.push(last);
+  const times = indices.map(index => globalData[index].time_sec);
+
+  const charts = [
+    [chartImuAccel, ['imu_ax', 'imu_ay']],
+    [chartImuGyro, ['imu_gx', 'imu_gy', 'imu_gz']]
+  ];
+  charts.forEach(([chart, keys]) => {
+    if (!chart) return;
+    keys.forEach((key, datasetIndex) => {
+      if (chart.data.datasets[datasetIndex]) {
+        chart.data.datasets[datasetIndex].data = channelSeries(key, indices, times);
+      }
+    });
+    if (updateNow) chart.update('none');
+  });
+}
+
 // 필터 설정이 바뀌었을 때 모든 차트의 데이터셋을 교체하고 즉시 다시 그립니다.
 function refreshChartsAfterFilter() {
   if (!globalData.length || !sampleIndices.length) return;
@@ -1743,9 +1792,7 @@ function refreshChartsAfterFilter() {
     [chartRL, 'chart-sus-rl'],
     [chartRR, 'chart-sus-rr'],
     [chartCoolantOil, 'chart-coolant-oil'],
-    [chartIntakeEcu, 'chart-intake-ecu'],
-    [chartImuAccel, 'chart-imu-accel'],
-    [chartImuGyro, 'chart-imu-gyro']
+    [chartIntakeEcu, 'chart-intake-ecu']
   ];
 
   pairs.forEach(([chart, canvasId]) => {
@@ -1759,6 +1806,7 @@ function refreshChartsAfterFilter() {
     });
     chart.update('none');
   });
+  refreshVisibleImuSeries(currentStartSec, currentEndSec);
 
   if (typeof refreshFilterBadges === 'function') refreshFilterBadges();
 
