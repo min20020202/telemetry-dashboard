@@ -1910,6 +1910,8 @@ body {
   max-height: 150px;
   margin-top: 8px;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
 }
 
 .gps-lap-empty {
@@ -2074,6 +2076,9 @@ body {
   background: transparent;
   padding: 0 4px 0 0;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  touch-action: pan-y;
 }
 
 .gps-playback-card {

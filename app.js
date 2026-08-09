@@ -1064,7 +1064,10 @@ window.addEventListener('drop', (e) => {
 // ==================== [초고속 60fps 휠/핀치 줌 가로채기 및 쓰로틀링 연동] ====================
 let zoomPending = false;
 document.addEventListener('wheel', (e) => {
-  if (!e.target.closest('.motec-chart-card')) return;
+  // 시간축 확대/축소는 실제 그래프가 그려진 canvas 위에서만 동작합니다.
+  // 카드, 지도, 수치, 랩 목록의 세로 스크롤은 가로채지 않습니다.
+  const chartCanvas = e.target.closest('canvas');
+  if (!chartCanvas || !chartCanvas.closest('.canvas-holder, .canvas-holder-sub')) return;
   if (globalData.length === 0 || totalDurationSec <= 0) return;
 
   // On chart pages the timeline slider stores the viewport start, not the
