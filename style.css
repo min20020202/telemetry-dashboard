@@ -1796,6 +1796,161 @@ body {
   z-index: 1;
 }
 
+.gps-lap-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(128, 128, 128, 0.035);
+  font: 700 10px var(--font-mono);
+}
+
+.gps-lap-toolbar button {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.08);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.gps-lap-toolbar button:hover:not(:disabled),
+.gps-lap-toolbar button.active {
+  border-color: var(--accent-orange);
+  color: var(--accent-orange);
+  background: rgba(249, 115, 22, 0.12);
+}
+
+.gps-lap-toolbar button:disabled { opacity: 0.38; cursor: default; }
+
+.gps-lap-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.gps-lap-toolbar input {
+  width: 48px;
+  height: 26px;
+  padding: 0 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: var(--panel-bg);
+  color: var(--text-primary);
+  font: 700 10px var(--font-mono);
+  text-align: right;
+}
+
+#gps-lap-toolbar-status {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#gps-lap-toolbar-status.ok { color: #10b981; }
+#gps-lap-toolbar-status.warn { color: var(--accent-orange); }
+
+.gps-lap-card {
+  flex: none;
+  height: auto;
+  max-height: 285px;
+  padding: 11px;
+}
+
+.gps-lap-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gps-lap-card-head small {
+  display: block;
+  max-width: 170px;
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font: 600 9px/1.35 var(--font-mono);
+}
+
+#gps-lap-count {
+  color: var(--accent-orange);
+  font: 800 10px var(--font-mono);
+  white-space: nowrap;
+}
+
+.gps-lap-best {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 9px;
+  padding: 8px 9px;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  border-radius: 7px;
+  background: rgba(16, 185, 129, 0.08);
+  color: #10b981;
+  font: 800 9px var(--font-mono);
+}
+
+.gps-lap-best strong {
+  color: #10b981;
+  font: 800 20px var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.gps-lap-list {
+  max-height: 150px;
+  margin-top: 8px;
+  overflow-y: auto;
+}
+
+.gps-lap-empty {
+  padding: 8px 4px;
+  color: var(--text-secondary);
+  font: 600 9px/1.5 var(--font-mono);
+}
+
+.gps-lap-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 5px;
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-primary);
+  font: 700 10px var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+
+.gps-lap-row:hover { background: rgba(249, 115, 22, 0.08); }
+.gps-lap-row.best { color: #10b981; }
+.gps-lap-row .lap-time { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+.gps-lap-row .lap-delta { min-width: 48px; color: var(--text-secondary); text-align: right; }
+.gps-lap-row.best .lap-delta { color: #10b981; }
+
+.gps-finish-line-icon {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #eab308;
+  box-shadow: 0 0 8px rgba(234, 179, 8, 0.85);
+}
+
+.leaflet-container.gps-lap-selecting { cursor: crosshair; }
+
 .gps-imu-chart-grid {
   flex: 1.55;
   min-height: 210px;
@@ -2246,6 +2401,8 @@ body {
   #page-gps.active { overflow-y: auto; }
   .gps-imu-chart-grid { grid-template-columns: 1fr; min-height: 420px; }
   .gps-metrics-column { min-width: 220px; overflow: visible; }
+  .gps-lap-toolbar { flex-wrap: wrap; }
+  #gps-lap-toolbar-status { width: 100%; margin-left: 0; }
 }
 
 /* 차트 라벨바에 표시되는 활성 필터 배지 */

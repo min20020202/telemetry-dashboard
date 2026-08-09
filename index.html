@@ -288,6 +288,15 @@
               <span class="signal-title color-orange">GPS Track Map</span>
               <span class="signal-val" id="cursor-gps-coords">--.------, ---.------</span>
             </div>
+            <div class="gps-lap-toolbar">
+              <button id="gps-lap-set-line" type="button">🏁 피니시 라인 설정</button>
+              <button id="gps-lap-clear" type="button" disabled>초기화</button>
+              <label>최소 랩
+                <input id="gps-lap-min-time" type="number" min="5" max="600" step="1" value="20">
+                <span>초</span>
+              </label>
+              <span id="gps-lap-toolbar-status">지도에서 라인 양 끝을 차례로 선택하십시오.</span>
+            </div>
             <div id="gps-map"></div>
 
             <!-- 지도 우측 상단: 현재 GPS 커서 지점의 조향각 위젯 -->
@@ -356,6 +365,23 @@
                 <option value="5" selected>5 Hz</option>
                 <option value="20">20 Hz</option>
               </select>
+            </div>
+          </div>
+
+          <div class="motec-chart-card gps-lap-card">
+            <div class="gps-lap-card-head">
+              <div>
+                <div class="gps-metric-label">GPS Lap Analysis</div>
+                <small id="gps-lap-fix-summary">피니시 라인을 설정하지 않았습니다.</small>
+              </div>
+              <strong id="gps-lap-count">0 LAPS</strong>
+            </div>
+            <div class="gps-lap-best">
+              <span>BEST LAP</span>
+              <strong id="gps-lap-best-time">--:--.---</strong>
+            </div>
+            <div id="gps-lap-list" class="gps-lap-list">
+              <div class="gps-lap-empty">지도에서 피니시 라인의 양 끝을 클릭하면 자동으로 랩을 계산합니다.</div>
             </div>
           </div>
 
@@ -562,6 +588,6 @@
   <script src="filters.js?v=20260809-1"></script>
   <script src="steering.js?v=20260802-4"></script>
   <script src="realtime.js?v=20260802-4"></script>
-  <script src="app.js?v=20260809-4"></script>
+  <script src="app.js?v=20260810-1"></script>
 </body>
 </html>

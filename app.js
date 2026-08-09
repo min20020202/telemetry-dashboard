@@ -128,6 +128,14 @@ const gpsPlayToggle = document.getElementById('gps-play-toggle');
 const gpsPlayRate = document.getElementById('gps-play-rate');
 const gpsPlayTime = document.getElementById('gps-play-time');
 const gpsImuLpf = document.getElementById('gps-imu-lpf');
+const gpsLapSetLine = document.getElementById('gps-lap-set-line');
+const gpsLapClear = document.getElementById('gps-lap-clear');
+const gpsLapMinTime = document.getElementById('gps-lap-min-time');
+const gpsLapToolbarStatus = document.getElementById('gps-lap-toolbar-status');
+const gpsLapFixSummary = document.getElementById('gps-lap-fix-summary');
+const gpsLapCount = document.getElementById('gps-lap-count');
+const gpsLapBestTime = document.getElementById('gps-lap-best-time');
+const gpsLapList = document.getElementById('gps-lap-list');
 const gpsImuLpfFrequency = document.getElementById('gps-imu-lpf-frequency');
 
 // Theme Switcher DOM
@@ -237,6 +245,13 @@ let gpsCursorMarker = null;
 let gpsGraphicLayer = null;
 let gpsSatelliteLayer = null;
 let currentGpsLayerMode = 'graphic'; // 'graphic' | 'satellite'
+let gpsFinishLine = null;
+let gpsFinishEndpointLayer = null;
+let gpsLapCrossingLayer = null;
+let gpsFinishPoints = [];
+let gpsLapPoints = [];
+let gpsLapSelectionActive = false;
+let gpsLapResults = [];
 
 // GPS + IMU synchronized playback state.
 let gpsPlaybackActive = false;
@@ -268,6 +283,270 @@ function convertNmeaToDecimal(val, isLongitude = false) {
   
   if (isNaN(degrees) || isNaN(minutes)) return null;
   return degrees + (minutes / 60.0);
+}
+
+function formatLapTime(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '--:--.---';
+  const totalMs = Math.round(seconds * 1000);
+  const minutes = Math.floor(totalMs / 60000);
+  const secs = Math.floor((totalMs % 60000) / 1000);
+  const millis = totalMs % 1000;
+  return `${minutes}:${String(secs).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
+}
+
+function setGpsLapStatus(text, className = '') {
+  if (!gpsLapToolbarStatus) return;
+  gpsLapToolbarStatus.textContent = text;
+  gpsLapToolbarStatus.className = className;
+}
+
+function latLonToLocalMeters(point, origin) {
+  const rad = Math.PI / 180;
+  return {
+    x: (point.lon - origin.lon) * 111320 * Math.cos(origin.lat * rad),
+    y: (point.lat - origin.lat) * 110540
+  };
+}
+
+function cross2(a, b) {
+  return a.x * b.y - a.y * b.x;
+}
+
+function distanceMeters(a, b) {
+  const origin = { lat: (a.lat + b.lat) * 0.5, lon: (a.lon + b.lon) * 0.5 };
+  const pa = latLonToLocalMeters(a, origin);
+  const pb = latLonToLocalMeters(b, origin);
+  return Math.hypot(pb.x - pa.x, pb.y - pa.y);
+}
+
+function buildGpsLapPoints(data) {
+  const points = [];
+  let lastFixCounter = null;
+  let lastFallbackKey = null;
+
+  data.forEach(row => {
+    const lat = convertNmeaToDecimal(row.gps_lat, false);
+    const lon = convertNmeaToDecimal(row.gps_lon, true);
+    const time = Number(row.time_sec);
+    const quality = Number.parseInt(row.gps_qual, 10);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(time) || quality <= 0) return;
+
+    const fixCounter = Number.parseInt(row.gps_fix_update_count, 10);
+    if (Number.isFinite(fixCounter) && fixCounter > 0) {
+      if (fixCounter === lastFixCounter) return;
+      lastFixCounter = fixCounter;
+    } else {
+      const fallbackKey = `${row.gps_time || ''}|${lat.toFixed(8)}|${lon.toFixed(8)}`;
+      if (fallbackKey === lastFallbackKey) return;
+      lastFallbackKey = fallbackKey;
+    }
+
+    points.push({
+      lat,
+      lon,
+      time,
+      speed: Number(row.gps_speed_kmh) || 0,
+      quality,
+      sats: Number.parseInt(row.gps_sat, 10) || 0
+    });
+  });
+
+  return points;
+}
+
+function drawGpsFinishLine() {
+  if (!gpsMap) return;
+  if (gpsFinishLine) gpsMap.removeLayer(gpsFinishLine);
+  if (gpsFinishEndpointLayer) gpsFinishEndpointLayer.clearLayers();
+  if (gpsFinishPoints.length !== 2) return;
+
+  const latLngs = gpsFinishPoints.map(point => [point.lat, point.lon]);
+  gpsFinishLine = L.polyline(latLngs, {
+    color: '#eab308',
+    weight: 5,
+    opacity: 0.95,
+    dashArray: '8 6',
+    interactive: false
+  }).addTo(gpsMap);
+
+  gpsFinishPoints.forEach(point => {
+    L.marker([point.lat, point.lon], {
+      interactive: false,
+      icon: L.divIcon({ className: '', html: '<div class="gps-finish-line-icon"></div>', iconSize: [12, 12], iconAnchor: [6, 6] })
+    }).addTo(gpsFinishEndpointLayer);
+  });
+}
+
+function renderGpsLapResults(crossings, laps) {
+  gpsLapResults = laps;
+  if (gpsLapCount) gpsLapCount.textContent = `${laps.length} LAPS`;
+  const best = laps.length ? Math.min(...laps.map(lap => lap.duration)) : NaN;
+  if (gpsLapBestTime) gpsLapBestTime.textContent = formatLapTime(best);
+  if (gpsLapFixSummary) {
+    gpsLapFixSummary.textContent = `${gpsLapPoints.length.toLocaleString()} GPS fixes · ${crossings.length}회 정방향 통과`;
+  }
+
+  if (gpsLapCrossingLayer) {
+    gpsLapCrossingLayer.clearLayers();
+    crossings.forEach((crossing, index) => {
+      L.circleMarker([crossing.lat, crossing.lon], {
+        radius: 4,
+        color: '#fff',
+        weight: 1,
+        fillColor: index === 0 ? '#eab308' : '#10b981',
+        fillOpacity: 1,
+        interactive: false
+      }).addTo(gpsLapCrossingLayer);
+    });
+  }
+
+  if (!gpsLapList) return;
+  if (!laps.length) {
+    gpsLapList.innerHTML = '<div class="gps-lap-empty">라인 통과가 2회 이상 검출되지 않았습니다. 라인이 트랙 전체 폭을 가로지르는지 확인하십시오.</div>';
+    return;
+  }
+
+  gpsLapList.innerHTML = laps.map(lap => {
+    const isBest = Math.abs(lap.duration - best) < 0.0005;
+    const delta = lap.duration - best;
+    return `<button type="button" class="gps-lap-row${isBest ? ' best' : ''}" data-lap-end="${lap.endTime}">
+      <span>LAP ${lap.number}</span>
+      <span class="lap-time">${formatLapTime(lap.duration)}</span>
+      <span class="lap-delta">${isBest ? 'BEST' : `+${delta.toFixed(3)}`}</span>
+    </button>`;
+  }).join('');
+}
+
+function calculateGpsLaps() {
+  if (gpsFinishPoints.length !== 2) return;
+  if (gpsLapPoints.length < 2) {
+    renderGpsLapResults([], []);
+    setGpsLapStatus('유효한 GPS fix가 부족합니다.', 'warn');
+    return;
+  }
+
+  const origin = {
+    lat: (gpsFinishPoints[0].lat + gpsFinishPoints[1].lat) * 0.5,
+    lon: (gpsFinishPoints[0].lon + gpsFinishPoints[1].lon) * 0.5
+  };
+  const a = latLonToLocalMeters(gpsFinishPoints[0], origin);
+  const b = latLonToLocalMeters(gpsFinishPoints[1], origin);
+  const line = { x: b.x - a.x, y: b.y - a.y };
+  const lineLengthSq = line.x * line.x + line.y * line.y;
+  if (lineLengthSq < 4) {
+    setGpsLapStatus('피니시 라인은 2m 이상으로 지정하십시오.', 'warn');
+    return;
+  }
+
+  const candidates = [];
+  for (let i = 1; i < gpsLapPoints.length; i++) {
+    const prev = gpsLapPoints[i - 1];
+    const curr = gpsLapPoints[i];
+    const dt = curr.time - prev.time;
+    if (!(dt > 0 && dt <= 2.0)) continue;
+    const segmentDistance = distanceMeters(prev, curr);
+    if (segmentDistance / dt > 120) continue;
+
+    const p = latLonToLocalMeters(prev, origin);
+    const q = latLonToLocalMeters(curr, origin);
+    const pRel = { x: p.x - a.x, y: p.y - a.y };
+    const qRel = { x: q.x - a.x, y: q.y - a.y };
+    const sidePrev = cross2(line, pRel);
+    const sideCurr = cross2(line, qRel);
+    if (sidePrev === 0 || sideCurr === 0 || sidePrev * sideCurr >= 0) continue;
+
+    const fraction = sidePrev / (sidePrev - sideCurr);
+    if (!(fraction >= 0 && fraction <= 1)) continue;
+    const intersection = {
+      x: p.x + (q.x - p.x) * fraction,
+      y: p.y + (q.y - p.y) * fraction
+    };
+    const u = ((intersection.x - a.x) * line.x + (intersection.y - a.y) * line.y) / lineLengthSq;
+    if (u < 0 || u > 1) continue;
+
+    const speed = prev.speed + (curr.speed - prev.speed) * fraction;
+    if (speed < 10) continue;
+    candidates.push({
+      time: prev.time + dt * fraction,
+      lat: prev.lat + (curr.lat - prev.lat) * fraction,
+      lon: prev.lon + (curr.lon - prev.lon) * fraction,
+      direction: sideCurr > sidePrev ? 1 : -1,
+      speed
+    });
+  }
+
+  if (!candidates.length) {
+    renderGpsLapResults([], []);
+    setGpsLapStatus('선 통과를 찾지 못했습니다. 라인을 트랙 폭 전체에 걸쳐 다시 설정하십시오.', 'warn');
+    return;
+  }
+
+  // 첫 통과 방향을 정방향으로 삼고 반대 방향 통과와 근접 중복 검출을 제거합니다.
+  const forwardDirection = candidates[0].direction;
+  const minLapSeconds = Math.max(5, Number(gpsLapMinTime?.value) || 20);
+  const crossings = [];
+  candidates.forEach(candidate => {
+    if (candidate.direction !== forwardDirection) return;
+    const previous = crossings[crossings.length - 1];
+    if (previous && candidate.time - previous.time < minLapSeconds) return;
+    crossings.push(candidate);
+  });
+
+  const laps = [];
+  for (let i = 1; i < crossings.length; i++) {
+    const duration = crossings[i].time - crossings[i - 1].time;
+    if (duration < minLapSeconds) continue;
+    laps.push({ number: laps.length + 1, duration, startTime: crossings[i - 1].time, endTime: crossings[i].time });
+  }
+
+  renderGpsLapResults(crossings, laps);
+  setGpsLapStatus(laps.length ? `${laps.length}개 랩 계산 완료 · 통과 시각 선형 보간 적용` : '첫 통과만 검출되어 완성된 랩이 없습니다.', laps.length ? 'ok' : 'warn');
+}
+
+function clearGpsLapAnalysis() {
+  gpsLapSelectionActive = false;
+  gpsFinishPoints = [];
+  gpsLapResults = [];
+  if (gpsFinishLine && gpsMap) gpsMap.removeLayer(gpsFinishLine);
+  gpsFinishLine = null;
+  if (gpsFinishEndpointLayer) gpsFinishEndpointLayer.clearLayers();
+  if (gpsLapCrossingLayer) gpsLapCrossingLayer.clearLayers();
+  if (gpsLapSetLine) gpsLapSetLine.classList.remove('active');
+  if (gpsLapClear) gpsLapClear.disabled = true;
+  if (gpsMap) gpsMap.getContainer().classList.remove('gps-lap-selecting');
+  if (gpsLapCount) gpsLapCount.textContent = '0 LAPS';
+  if (gpsLapBestTime) gpsLapBestTime.textContent = '--:--.---';
+  if (gpsLapFixSummary) gpsLapFixSummary.textContent = '피니시 라인을 설정하지 않았습니다.';
+  if (gpsLapList) gpsLapList.innerHTML = '<div class="gps-lap-empty">지도에서 피니시 라인의 양 끝을 클릭하면 자동으로 랩을 계산합니다.</div>';
+  setGpsLapStatus('지도에서 라인 양 끝을 차례로 선택하십시오.');
+}
+
+function beginGpsFinishLineSelection() {
+  if (!gpsMap || gpsLapPoints.length < 2) {
+    setGpsLapStatus('먼저 GPS 데이터가 포함된 CSV를 불러오십시오.', 'warn');
+    return;
+  }
+  clearGpsLapAnalysis();
+  gpsLapSelectionActive = true;
+  gpsLapSetLine?.classList.add('active');
+  gpsMap.getContainer().classList.add('gps-lap-selecting');
+  setGpsLapStatus('피니시 라인의 첫 번째 끝점을 클릭하십시오.', 'warn');
+}
+
+function handleGpsLapMapClick(event) {
+  if (!gpsLapSelectionActive) return;
+  gpsFinishPoints.push({ lat: event.latlng.lat, lon: event.latlng.lng });
+  if (gpsFinishPoints.length === 1) {
+    setGpsLapStatus('이제 피니시 라인의 반대쪽 끝점을 클릭하십시오.', 'warn');
+    return;
+  }
+
+  gpsLapSelectionActive = false;
+  gpsLapSetLine?.classList.remove('active');
+  gpsMap.getContainer().classList.remove('gps-lap-selecting');
+  if (gpsLapClear) gpsLapClear.disabled = false;
+  drawGpsFinishLine();
+  calculateGpsLaps();
 }
 
 // Leaflet Map Initialization
@@ -350,7 +629,24 @@ function initGpsMap() {
     opacity: 0.8,
     interactive: true
   }).addTo(gpsMap);
+  gpsFinishEndpointLayer = L.layerGroup().addTo(gpsMap);
+  gpsLapCrossingLayer = L.layerGroup().addTo(gpsMap);
+  gpsMap.on('click', handleGpsLapMapClick);
 }
+
+gpsLapSetLine?.addEventListener('click', beginGpsFinishLineSelection);
+gpsLapClear?.addEventListener('click', clearGpsLapAnalysis);
+gpsLapMinTime?.addEventListener('change', () => {
+  const clamped = Math.max(5, Math.min(600, Number(gpsLapMinTime.value) || 20));
+  gpsLapMinTime.value = String(clamped);
+  if (gpsFinishPoints.length === 2) calculateGpsLaps();
+});
+gpsLapList?.addEventListener('click', event => {
+  const row = event.target.closest('[data-lap-end]');
+  if (!row) return;
+  const targetTime = Number(row.dataset.lapEnd);
+  if (Number.isFinite(targetTime)) updateGpsCursorAtTime(targetTime);
+});
 
 // Theme Toggle Event Listener
 btnThemeToggle.addEventListener('click', () => {
@@ -1629,6 +1925,11 @@ function initDataAndDashboard() {
         gpsMap.fitBounds(gpsRouteLine.getBounds(), { padding: [20, 20] });
       } else if (gpsRouteLine) {
         gpsRouteLine.setLatLngs([]);
+      }
+      gpsLapPoints = buildGpsLapPoints(globalData);
+      clearGpsLapAnalysis();
+      if (gpsLapFixSummary && gpsLapPoints.length) {
+        gpsLapFixSummary.textContent = `${gpsLapPoints.length.toLocaleString()}개 유효 GPS fix 준비됨`;
       }
     } catch (err) {
       console.error("GPS 지도 설정 실패:", err);
