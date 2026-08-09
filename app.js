@@ -128,6 +128,7 @@ const gpsPlayToggle = document.getElementById('gps-play-toggle');
 const gpsPlayRate = document.getElementById('gps-play-rate');
 const gpsPlayTime = document.getElementById('gps-play-time');
 const gpsImuLpf = document.getElementById('gps-imu-lpf');
+const gpsImuLpfFrequency = document.getElementById('gps-imu-lpf-frequency');
 
 // Theme Switcher DOM
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
@@ -1078,19 +1079,27 @@ function setGpsPlayback(shouldPlay) {
 if (gpsPlayToggle) {
   gpsPlayToggle.addEventListener('click', () => setGpsPlayback(!gpsPlaybackActive));
 }
+function applyGpsImuLowPassFilter() {
+  const keys = ['imu_ax', 'imu_ay', 'imu_gx', 'imu_gy', 'imu_gz'];
+  if (!gpsImuLpf || typeof getFilterState !== 'function' ||
+      typeof recomputeChannel !== 'function') return;
+  const cutoffHz = Number(gpsImuLpfFrequency ? gpsImuLpfFrequency.value : 5) || 5;
+  keys.forEach(key => {
+    const state = getFilterState(key);
+    state.type = gpsImuLpf.checked ? 'butter' : 'none';
+    state.params = gpsImuLpf.checked ? { fc: cutoffHz, order: 2 } : {};
+    recomputeChannel(key);
+  });
+  refreshChartsAfterFilter();
+  updateGpsCursorAtTime(Number(scrollBar.value) || 0);
+}
+
 if (gpsImuLpf) {
-  gpsImuLpf.addEventListener('change', () => {
-    const keys = ['imu_ax', 'imu_ay', 'imu_gx', 'imu_gy', 'imu_gz'];
-    if (typeof getFilterState === 'function' && typeof recomputeChannel === 'function') {
-      keys.forEach(key => {
-        const state = getFilterState(key);
-        state.type = gpsImuLpf.checked ? 'butter' : 'none';
-        state.params = gpsImuLpf.checked ? { fc: 5, order: 2 } : {};
-        recomputeChannel(key);
-      });
-      refreshChartsAfterFilter();
-      updateGpsCursorAtTime(Number(scrollBar.value) || 0);
-    }
+  gpsImuLpf.addEventListener('change', applyGpsImuLowPassFilter);
+}
+if (gpsImuLpfFrequency) {
+  gpsImuLpfFrequency.addEventListener('change', () => {
+    if (gpsImuLpf && gpsImuLpf.checked) applyGpsImuLowPassFilter();
   });
 }
 

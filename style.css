@@ -1945,8 +1945,14 @@ body {
   background: rgba(128, 128, 128, 0.06);
   color: var(--text-secondary);
   font: 700 10px var(--font-mono);
-  cursor: pointer;
   user-select: none;
+}
+
+.gps-imu-filter-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
 }
 
 .gps-imu-filter-toggle input {
@@ -1956,9 +1962,16 @@ body {
   accent-color: var(--accent-orange);
 }
 
-.gps-imu-filter-toggle strong {
+.gps-imu-filter-toggle select {
   margin-left: auto;
+  height: 26px;
+  padding: 0 24px 0 8px;
+  border: 1px solid rgba(249, 115, 22, 0.35);
+  border-radius: 5px;
+  background: var(--panel-bg);
   color: var(--accent-orange);
+  font: 800 10px var(--font-mono);
+  cursor: pointer;
 }
 
 .imu-g-card,
