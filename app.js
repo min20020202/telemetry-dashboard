@@ -756,6 +756,16 @@ gpsLapMinTime?.addEventListener('change', () => {
   if (gpsFinishPoints.length === 2) calculateGpsLaps();
 });
 gpsLapList?.addEventListener('click', event => {
+  const summary = event.target.closest('summary');
+  if (summary && gpsLapList.contains(summary)) {
+    const details = summary.closest('.gps-lap-row');
+    requestAnimationFrame(() => {
+      if (!details || !details.open) return;
+      const hiddenBelow = details.getBoundingClientRect().bottom - gpsLapList.getBoundingClientRect().bottom;
+      if (hiddenBelow > 0) gpsLapList.scrollTop += hiddenBelow;
+    });
+  }
+
   const row = event.target.closest('[data-lap-time]');
   if (!row) return;
   const targetTime = Number(row.dataset.lapTime);
