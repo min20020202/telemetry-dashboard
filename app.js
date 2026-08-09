@@ -294,6 +294,26 @@ function formatLapTime(seconds) {
   return `${minutes}:${String(secs).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
 }
 
+function parseGpsClockSeconds(value) {
+  if (value === undefined || value === null) return NaN;
+  const text = String(value).trim();
+  if (!text || text === '00:00:00.00') return NaN;
+  const colon = text.match(/^(\d{1,2}):(\d{2}):(\d{2}(?:\.\d+)?)$/);
+  if (colon) return Number(colon[1]) * 3600 + Number(colon[2]) * 60 + Number(colon[3]);
+  const compact = text.match(/^(\d{2})(\d{2})(\d{2}(?:\.\d+)?)$/);
+  if (compact) return Number(compact[1]) * 3600 + Number(compact[2]) * 60 + Number(compact[3]);
+  return NaN;
+}
+
+function formatGpsClock(seconds) {
+  if (!Number.isFinite(seconds)) return '--:--:--.--';
+  const daySeconds = ((seconds % 86400) + 86400) % 86400;
+  const hours = Math.floor(daySeconds / 3600);
+  const minutes = Math.floor((daySeconds % 3600) / 60);
+  const secs = daySeconds % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${secs.toFixed(2).padStart(5, '0')}`;
+}
+
 function setGpsLapStatus(text, className = '') {
   if (!gpsLapToolbarStatus) return;
   gpsLapToolbarStatus.textContent = text;
@@ -323,6 +343,8 @@ function buildGpsLapPoints(data) {
   const points = [];
   let lastFixCounter = null;
   let lastFallbackKey = null;
+  let previousGpsClock = null;
+  let gpsDayOffset = 0;
 
   data.forEach(row => {
     const lat = convertNmeaToDecimal(row.gps_lat, false);
@@ -341,10 +363,17 @@ function buildGpsLapPoints(data) {
       lastFallbackKey = fallbackKey;
     }
 
+    const rawGpsClock = parseGpsClockSeconds(row.gps_time);
+    if (Number.isFinite(rawGpsClock) && previousGpsClock !== null && rawGpsClock < previousGpsClock - 43200) {
+      gpsDayOffset += 86400;
+    }
+    if (Number.isFinite(rawGpsClock)) previousGpsClock = rawGpsClock;
+
     points.push({
       lat,
       lon,
       time,
+      gpsTime: Number.isFinite(rawGpsClock) ? rawGpsClock + gpsDayOffset : NaN,
       speed: Number(row.gps_speed_kmh) || 0,
       quality,
       sats: Number.parseInt(row.gps_sat, 10) || 0
@@ -383,7 +412,8 @@ function renderGpsLapResults(crossings, laps) {
   const best = laps.length ? Math.min(...laps.map(lap => lap.duration)) : NaN;
   if (gpsLapBestTime) gpsLapBestTime.textContent = formatLapTime(best);
   if (gpsLapFixSummary) {
-    gpsLapFixSummary.textContent = `${gpsLapPoints.length.toLocaleString()} GPS fixes · ${crossings.length}회 정방향 통과`;
+    const timeBasis = laps.length && laps.every(lap => lap.timeBasis === 'gps') ? 'GPS 시각 기준' : '로거 경과시간 기준';
+    gpsLapFixSummary.textContent = `${gpsLapPoints.length.toLocaleString()} GPS fixes · ${crossings.length}회 통과 · ${timeBasis}`;
   }
 
   if (gpsLapCrossingLayer) {
@@ -409,12 +439,27 @@ function renderGpsLapResults(crossings, laps) {
   gpsLapList.innerHTML = laps.map(lap => {
     const isBest = Math.abs(lap.duration - best) < 0.0005;
     const delta = lap.duration - best;
-    return `<button type="button" class="gps-lap-row${isBest ? ' best' : ''}" data-lap-end="${lap.endTime}">
-      <span>LAP ${lap.number}</span>
-      <span class="lap-time">${formatLapTime(lap.duration)}</span>
-      <span class="lap-delta">${isBest ? 'BEST' : `+${delta.toFixed(3)}`}</span>
-    </button>`;
+    return `<details class="gps-lap-row${isBest ? ' best' : ''}">
+      <summary>
+        <span>LAP ${lap.number}</span>
+        <span class="lap-time">${formatLapTime(lap.duration)}</span>
+        <span class="lap-delta">${isBest ? 'BEST' : `+${delta.toFixed(3)}`}</span>
+      </summary>
+      <div class="gps-lap-detail">
+        <span>CSV 구간 <strong>${lap.startTime.toFixed(2)}s → ${lap.endTime.toFixed(2)}s</strong></span>
+        <span>GPS 시각 <strong>${formatGpsClock(lap.startGpsTime)} → ${formatGpsClock(lap.endGpsTime)}</strong></span>
+        <button type="button" data-lap-end="${lap.endTime}">종료 시점으로 이동</button>
+      </div>
+    </details>`;
   }).join('');
+}
+
+function crossingElapsedSeconds(previous, current) {
+  if (Number.isFinite(previous.gpsTime) && Number.isFinite(current.gpsTime)) {
+    const gpsElapsed = current.gpsTime - previous.gpsTime;
+    if (gpsElapsed > 0 && gpsElapsed < 3600) return { duration: gpsElapsed, basis: 'gps' };
+  }
+  return { duration: current.time - previous.time, basis: 'logger' };
 }
 
 function calculateGpsLaps() {
@@ -468,6 +513,9 @@ function calculateGpsLaps() {
     if (speed < 10) continue;
     candidates.push({
       time: prev.time + dt * fraction,
+      gpsTime: Number.isFinite(prev.gpsTime) && Number.isFinite(curr.gpsTime)
+        ? prev.gpsTime + (curr.gpsTime - prev.gpsTime) * fraction
+        : NaN,
       lat: prev.lat + (curr.lat - prev.lat) * fraction,
       lon: prev.lon + (curr.lon - prev.lon) * fraction,
       direction: sideCurr > sidePrev ? 1 : -1,
@@ -488,15 +536,23 @@ function calculateGpsLaps() {
   candidates.forEach(candidate => {
     if (candidate.direction !== forwardDirection) return;
     const previous = crossings[crossings.length - 1];
-    if (previous && candidate.time - previous.time < minLapSeconds) return;
+    if (previous && crossingElapsedSeconds(previous, candidate).duration < minLapSeconds) return;
     crossings.push(candidate);
   });
 
   const laps = [];
   for (let i = 1; i < crossings.length; i++) {
-    const duration = crossings[i].time - crossings[i - 1].time;
-    if (duration < minLapSeconds) continue;
-    laps.push({ number: laps.length + 1, duration, startTime: crossings[i - 1].time, endTime: crossings[i].time });
+    const elapsed = crossingElapsedSeconds(crossings[i - 1], crossings[i]);
+    if (elapsed.duration < minLapSeconds) continue;
+    laps.push({
+      number: laps.length + 1,
+      duration: elapsed.duration,
+      timeBasis: elapsed.basis,
+      startTime: crossings[i - 1].time,
+      endTime: crossings[i].time,
+      startGpsTime: crossings[i - 1].gpsTime,
+      endGpsTime: crossings[i].gpsTime
+    });
   }
 
   renderGpsLapResults(crossings, laps);
