@@ -118,7 +118,6 @@ const gpsCursorQual = document.getElementById('gps-cursor-qual');
 const gpsCursorTime = document.getElementById('gps-cursor-time');
 const imuAccelX = document.getElementById('imu-accel-x');
 const imuAccelY = document.getElementById('imu-accel-y');
-const imuAccelZ = document.getElementById('imu-accel-z');
 const imuRoll = document.getElementById('imu-roll');
 const imuPitch = document.getElementById('imu-pitch');
 const imuYaw = document.getElementById('imu-yaw');
@@ -926,7 +925,7 @@ function getInterpolatedGpsPosition(targetTime, nearbyIndex) {
 // use the exact playback time and the original 100 Hz IMU values.
 function drawExactImuCursor(targetTime, row) {
   const specs = [
-    [chartImuAccel, ['imu_accel_x_g', 'imu_accel_y_g', 'imu_accel_z_g']],
+    [chartImuAccel, ['imu_accel_x_g', 'imu_accel_y_g']],
     [chartImuGyro, ['imu_gyro_x_dps', 'imu_gyro_y_dps', 'imu_gyro_z_dps']]
   ];
 
@@ -982,7 +981,6 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
       const values = {
         imu_accel_x_g: channelValueAt('imu_ax', globalIndex),
         imu_accel_y_g: channelValueAt('imu_ay', globalIndex),
-        imu_accel_z_g: channelValueAt('imu_az', globalIndex),
         imu_gyro_x_dps: channelValueAt('imu_gx', globalIndex),
         imu_gyro_y_dps: channelValueAt('imu_gy', globalIndex),
         imu_gyro_z_dps: channelValueAt('imu_gz', globalIndex)
@@ -1059,7 +1057,7 @@ if (gpsPlayToggle) {
 }
 if (gpsImuLpf) {
   gpsImuLpf.addEventListener('change', () => {
-    const keys = ['imu_ax', 'imu_ay', 'imu_az', 'imu_gx', 'imu_gy', 'imu_gz'];
+    const keys = ['imu_ax', 'imu_ay', 'imu_gx', 'imu_gy', 'imu_gz'];
     if (typeof getFilterState === 'function' && typeof recomputeChannel === 'function') {
       keys.forEach(key => {
         const state = getFilterState(key);
@@ -1072,6 +1070,35 @@ if (gpsImuLpf) {
     }
   });
 }
+
+function getImuChartByCanvasId(canvasId) {
+  if (canvasId === 'chart-imu-accel') return chartImuAccel;
+  if (canvasId === 'chart-imu-gyro') return chartImuGyro;
+  return null;
+}
+
+function applyImuAxisToggleState(canvasId) {
+  const chart = getImuChartByCanvasId(canvasId);
+  if (!chart) return;
+  document.querySelectorAll(`.imu-axis-toggle[data-chart="${canvasId}"]`).forEach(button => {
+    const datasetIndex = Number(button.dataset.dataset);
+    const enabled = button.getAttribute('aria-pressed') !== 'false';
+    if (Number.isInteger(datasetIndex)) chart.setDatasetVisibility(datasetIndex, enabled);
+  });
+  chart.update('none');
+}
+
+document.querySelectorAll('.imu-axis-toggle').forEach(button => {
+  button.addEventListener('click', () => {
+    const enabled = button.getAttribute('aria-pressed') !== 'true';
+    button.setAttribute('aria-pressed', String(enabled));
+    button.classList.toggle('active', enabled);
+    applyImuAxisToggleState(button.dataset.chart);
+    const cursorTime = Number(scrollBar.value);
+    if (Number.isFinite(cursorTime)) updateGpsCursorAtTime(cursorTime);
+  });
+});
+
 if (scrollBar) {
   scrollBar.addEventListener('pointerdown', () => setGpsPlayback(false));
 }
@@ -1254,15 +1281,13 @@ function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverr
   // GPS 페이지 IMU 현황: 지도 커서와 동일한 CSV 행을 사용해 완전히 동기화합니다.
   const ax = Number(row.imu_accel_x_g);
   const ay = Number(row.imu_accel_y_g);
-  const az = Number(row.imu_accel_z_g);
   const roll = Number(row.imu_roll_deg);
   const pitch = Number(row.imu_pitch_deg);
   const yaw = Number(row.imu_yaw_deg);
-  const imuValid = [ax, ay, az].every(Number.isFinite);
+  const imuValid = [ax, ay].every(Number.isFinite);
 
   if (imuAccelX) imuAccelX.textContent = Number.isFinite(ax) ? ax.toFixed(2) : '--.--';
   if (imuAccelY) imuAccelY.textContent = Number.isFinite(ay) ? ay.toFixed(2) : '--.--';
-  if (imuAccelZ) imuAccelZ.textContent = Number.isFinite(az) ? az.toFixed(2) : '--.--';
   if (imuRoll) imuRoll.textContent = Number.isFinite(roll) ? `${roll.toFixed(1)}°` : '--.-°';
   if (imuPitch) imuPitch.textContent = Number.isFinite(pitch) ? `${pitch.toFixed(1)}°` : '--.-°';
   if (imuYaw) imuYaw.textContent = Number.isFinite(yaw) ? `${yaw.toFixed(1)}°` : '--.-°';
@@ -2110,11 +2135,6 @@ function renderMotecCharts(data) {
             data: S('imu_ay', r => r.imu_accel_y_g),
             borderColor: '#2563eb', borderWidth: 1.1, pointRadius: 0, fill: false
           },
-          {
-            label: 'Vertical G (Z)',
-            data: S('imu_az', r => r.imu_accel_z_g),
-            borderColor: '#16a34a', borderWidth: 1.1, pointRadius: 0, fill: false
-          }
         ]
       },
       options: getCommonOptions(-2.5, 2.5, { stepSize: 1 })
@@ -2147,6 +2167,8 @@ function renderMotecCharts(data) {
       options: getCommonOptions(-100, 100, { stepSize: 50 })
     });
   }
+  applyImuAxisToggleState('chart-imu-accel');
+  applyImuAxisToggleState('chart-imu-gyro');
   bindGpsImuDragCursor(chartImuAccel);
   bindGpsImuDragCursor(chartImuGyro);
 

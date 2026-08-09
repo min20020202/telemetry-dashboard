@@ -429,7 +429,6 @@ const CHANNELS = {
   },
   imu_ax: { label: 'IMU Accel X', unit: 'g', from: r => r.imu_accel_x_g || 0, dropoutDef: { on: false }, recommend: { type: 'butter', params: { fc: 5, order: 2 } } },
   imu_ay: { label: 'IMU Accel Y', unit: 'g', from: r => r.imu_accel_y_g || 0, dropoutDef: { on: false }, recommend: { type: 'butter', params: { fc: 5, order: 2 } } },
-  imu_az: { label: 'IMU Accel Z', unit: 'g', from: r => r.imu_accel_z_g || 0, dropoutDef: { on: false }, recommend: { type: 'butter', params: { fc: 5, order: 2 } } },
   imu_gx: { label: 'IMU Gyro X', unit: '°/s', from: r => r.imu_gyro_x_dps || 0, dropoutDef: { on: false }, recommend: { type: 'butter', params: { fc: 5, order: 2 } } },
   imu_gy: { label: 'IMU Gyro Y', unit: '°/s', from: r => r.imu_gyro_y_dps || 0, dropoutDef: { on: false }, recommend: { type: 'butter', params: { fc: 5, order: 2 } } },
   imu_gz: { label: 'IMU Gyro Z', unit: '°/s', from: r => r.imu_gyro_z_dps || 0, dropoutDef: { on: false }, recommend: { type: 'butter', params: { fc: 5, order: 2 } } }
@@ -450,7 +449,7 @@ const CHART_CHANNELS = {
   'chart-sus-rr': ['sus_rr'],
   'chart-coolant-oil': ['water', 'oil', 'fl_speed'],
   'chart-intake-ecu': ['iat', 'ecu'],
-  'chart-imu-accel': ['imu_ax', 'imu_ay', 'imu_az'],
+  'chart-imu-accel': ['imu_ax', 'imu_ay'],
   'chart-imu-gyro': ['imu_gx', 'imu_gy', 'imu_gz']
 };
 

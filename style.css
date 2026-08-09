@@ -1839,7 +1839,7 @@ body {
   font-size: 9px;
 }
 
-.imu-axis-legend b {
+.imu-axis-toggle {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1847,17 +1847,32 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 5px;
   background: rgba(128, 128, 128, 0.06);
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
   white-space: nowrap;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s, border-color 0.15s;
 }
 
-.imu-axis-legend i {
+.imu-axis-toggle:hover {
+  border-color: currentColor;
+  background: rgba(128, 128, 128, 0.13);
+}
+
+.imu-axis-toggle:not(.active) {
+  opacity: 0.34;
+  background: transparent;
+}
+
+.imu-axis-toggle i {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: currentColor;
 }
 
-.imu-axis-legend small {
+.imu-axis-toggle small {
   font: inherit;
   opacity: 0.72;
 }

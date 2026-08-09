@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260808-4">
+  <link rel="stylesheet" href="style.css?v=20260809-1">
 </head>
 <body>
 
@@ -313,9 +313,8 @@
                 <div class="imu-label-main">
                   <span class="signal-title">IMU Acceleration <em>[g]</em></span>
                   <span class="imu-axis-legend">
-                    <b class="imu-x"><i></i>전후 <small>X</small></b>
-                    <b class="imu-y"><i></i>좌우 <small>Y</small></b>
-                    <b class="imu-z"><i></i>수직 <small>Z</small></b>
+                    <button type="button" class="imu-axis-toggle imu-x active" data-chart="chart-imu-accel" data-dataset="0" aria-pressed="true"><i></i>전후 <small>X</small></button>
+                    <button type="button" class="imu-axis-toggle imu-y active" data-chart="chart-imu-accel" data-dataset="1" aria-pressed="true"><i></i>좌우 <small>Y</small></button>
                   </span>
                 </div>
               </div>
@@ -326,9 +325,9 @@
                 <div class="imu-label-main">
                   <span class="signal-title">IMU Gyroscope <em>[°/s]</em></span>
                   <span class="imu-axis-legend">
-                    <b class="imu-x"><i></i>Roll <small>X</small></b>
-                    <b class="imu-y"><i></i>Pitch <small>Y</small></b>
-                    <b class="imu-z"><i></i>Yaw <small>Z</small></b>
+                    <button type="button" class="imu-axis-toggle imu-x active" data-chart="chart-imu-gyro" data-dataset="0" aria-pressed="true"><i></i>Roll <small>X</small></button>
+                    <button type="button" class="imu-axis-toggle imu-y active" data-chart="chart-imu-gyro" data-dataset="1" aria-pressed="true"><i></i>Pitch <small>Y</small></button>
+                    <button type="button" class="imu-axis-toggle imu-z active" data-chart="chart-imu-gyro" data-dataset="2" aria-pressed="true"><i></i>Yaw <small>Z</small></button>
                   </span>
                 </div>
               </div>
@@ -368,7 +367,6 @@
             <div class="imu-live-values">
               <span><b class="imu-x">전후 X</b><strong id="imu-accel-x">--.--</strong> g</span>
               <span><b class="imu-y">좌우 Y</b><strong id="imu-accel-y">--.--</strong> g</span>
-              <span><b class="imu-z">수직 Z</b><strong id="imu-accel-z">--.--</strong> g</span>
             </div>
           </div>
 
@@ -556,9 +554,9 @@
   </div>
 
   <!-- Custom JS -->
-  <script src="filters.js?v=20260808-3"></script>
+  <script src="filters.js?v=20260809-1"></script>
   <script src="steering.js?v=20260802-4"></script>
   <script src="realtime.js?v=20260802-4"></script>
-  <script src="app.js?v=20260808-8"></script>
+  <script src="app.js?v=20260809-1"></script>
 </body>
 </html>
