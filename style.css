@@ -553,6 +553,7 @@ body {
   width: 22px;
   height: 22px;
   margin-left: 8px;
+  margin-right: auto;
   padding: 0;
   border: 1px solid var(--border-color);
   border-radius: 50%;
