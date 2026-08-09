@@ -1969,13 +1969,16 @@ body {
 }
 
 .gps-finish-line-icon {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   border: 2px solid #fff;
   border-radius: 50%;
   background: #eab308;
   box-shadow: 0 0 8px rgba(234, 179, 8, 0.85);
 }
+
+.gps-finish-marker { cursor: grab; }
+.gps-finish-marker:active { cursor: grabbing; }
 
 .leaflet-container.gps-lap-selecting { cursor: crosshair; }
 

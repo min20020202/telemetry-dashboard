@@ -249,6 +249,8 @@ let gpsFinishLine = null;
 let gpsFinishEndpointLayer = null;
 let gpsLapCrossingLayer = null;
 let gpsFinishPoints = [];
+let gpsFinishPreviewLine = null;
+let gpsFinishMarkers = [];
 let gpsLapPoints = [];
 let gpsLapSelectionActive = false;
 let gpsLapResults = [];
@@ -387,6 +389,7 @@ function drawGpsFinishLine() {
   if (!gpsMap) return;
   if (gpsFinishLine) gpsMap.removeLayer(gpsFinishLine);
   if (gpsFinishEndpointLayer) gpsFinishEndpointLayer.clearLayers();
+  gpsFinishMarkers = [];
   if (gpsFinishPoints.length !== 2) return;
 
   const latLngs = gpsFinishPoints.map(point => [point.lat, point.lon]);
@@ -399,11 +402,56 @@ function drawGpsFinishLine() {
   }).addTo(gpsMap);
 
   gpsFinishPoints.forEach(point => {
-    L.marker([point.lat, point.lon], {
-      interactive: false,
-      icon: L.divIcon({ className: '', html: '<div class="gps-finish-line-icon"></div>', iconSize: [12, 12], iconAnchor: [6, 6] })
+    const pointIndex = gpsFinishMarkers.length;
+    const marker = L.marker([point.lat, point.lon], {
+      draggable: true,
+      autoPan: true,
+      title: '드래그해서 피니시 라인 끝점 이동',
+      icon: L.divIcon({ className: 'gps-finish-marker', html: '<div class="gps-finish-line-icon"></div>', iconSize: [18, 18], iconAnchor: [9, 9] })
     }).addTo(gpsFinishEndpointLayer);
+
+    marker.on('dragstart', () => {
+      if (gpsLapCrossingLayer) gpsLapCrossingLayer.clearLayers();
+      setGpsLapStatus('끝점을 이동하는 중입니다. 놓으면 랩을 다시 계산합니다.', 'warn');
+    });
+    marker.on('drag', event => {
+      const latLng = event.target.getLatLng();
+      gpsFinishPoints[pointIndex] = { lat: latLng.lat, lon: latLng.lng };
+      if (gpsFinishLine) {
+        gpsFinishLine.setLatLngs(gpsFinishPoints.map(item => [item.lat, item.lon]));
+      }
+    });
+    marker.on('dragend', event => {
+      const latLng = event.target.getLatLng();
+      gpsFinishPoints[pointIndex] = { lat: latLng.lat, lon: latLng.lng };
+      calculateGpsLaps();
+    });
+    gpsFinishMarkers.push(marker);
   });
+}
+
+function drawGpsFinishFirstPoint() {
+  if (!gpsMap || gpsFinishPoints.length !== 1) return;
+  if (gpsFinishEndpointLayer) gpsFinishEndpointLayer.clearLayers();
+  const first = gpsFinishPoints[0];
+  L.marker([first.lat, first.lon], {
+    interactive: false,
+    icon: L.divIcon({ className: 'gps-finish-marker', html: '<div class="gps-finish-line-icon"></div>', iconSize: [18, 18], iconAnchor: [9, 9] })
+  }).addTo(gpsFinishEndpointLayer);
+  if (gpsFinishPreviewLine) gpsMap.removeLayer(gpsFinishPreviewLine);
+  gpsFinishPreviewLine = L.polyline([[first.lat, first.lon], [first.lat, first.lon]], {
+    color: '#eab308',
+    weight: 4,
+    opacity: 0.8,
+    dashArray: '7 6',
+    interactive: false
+  }).addTo(gpsMap);
+}
+
+function updateGpsFinishPreview(event) {
+  if (!gpsLapSelectionActive || gpsFinishPoints.length !== 1 || !gpsFinishPreviewLine) return;
+  const first = gpsFinishPoints[0];
+  gpsFinishPreviewLine.setLatLngs([[first.lat, first.lon], [event.latlng.lat, event.latlng.lng]]);
 }
 
 function renderGpsLapResults(crossings, laps) {
@@ -565,6 +613,9 @@ function clearGpsLapAnalysis() {
   gpsLapResults = [];
   if (gpsFinishLine && gpsMap) gpsMap.removeLayer(gpsFinishLine);
   gpsFinishLine = null;
+  if (gpsFinishPreviewLine && gpsMap) gpsMap.removeLayer(gpsFinishPreviewLine);
+  gpsFinishPreviewLine = null;
+  gpsFinishMarkers = [];
   if (gpsFinishEndpointLayer) gpsFinishEndpointLayer.clearLayers();
   if (gpsLapCrossingLayer) gpsLapCrossingLayer.clearLayers();
   if (gpsLapSetLine) gpsLapSetLine.classList.remove('active');
@@ -593,6 +644,7 @@ function handleGpsLapMapClick(event) {
   if (!gpsLapSelectionActive) return;
   gpsFinishPoints.push({ lat: event.latlng.lat, lon: event.latlng.lng });
   if (gpsFinishPoints.length === 1) {
+    drawGpsFinishFirstPoint();
     setGpsLapStatus('이제 피니시 라인의 반대쪽 끝점을 클릭하십시오.', 'warn');
     return;
   }
@@ -601,6 +653,8 @@ function handleGpsLapMapClick(event) {
   gpsLapSetLine?.classList.remove('active');
   gpsMap.getContainer().classList.remove('gps-lap-selecting');
   if (gpsLapClear) gpsLapClear.disabled = false;
+  if (gpsFinishPreviewLine) gpsMap.removeLayer(gpsFinishPreviewLine);
+  gpsFinishPreviewLine = null;
   drawGpsFinishLine();
   calculateGpsLaps();
 }
@@ -688,6 +742,7 @@ function initGpsMap() {
   gpsFinishEndpointLayer = L.layerGroup().addTo(gpsMap);
   gpsLapCrossingLayer = L.layerGroup().addTo(gpsMap);
   gpsMap.on('click', handleGpsLapMapClick);
+  gpsMap.on('mousemove', updateGpsFinishPreview);
 }
 
 gpsLapSetLine?.addEventListener('click', beginGpsFinishLineSelection);
