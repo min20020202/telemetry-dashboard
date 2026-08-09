@@ -1648,14 +1648,14 @@ function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverr
     gpsCursorSteering.textContent = (steeringDeg >= 0 ? '+' : '') + steeringDeg.toFixed(1);
   }
 
-  const susText = (key, raw) => {
-    const v = cursorChannelValue(key, raw);
-    return Number.isFinite(v) ? Math.round(v) : '----';
+  const susText = (key, wheel, raw) => {
+    const v = cursorChannelValue(key, getCalibratedSuspension(wheel, raw));
+    return Number.isFinite(v) ? `${v.toFixed(2)} mm` : '----';
   };
-  cursorSusFl.textContent = susText('sus_fl', row.suspension_fl_raw);
-  cursorSusFr.textContent = susText('sus_fr', row.suspension_fr_raw);
-  cursorSusRl.textContent = susText('sus_rl', row.suspension_rl_raw);
-  cursorSusRr.textContent = susText('sus_rr', row.suspension_rr_raw);
+  cursorSusFl.textContent = susText('sus_fl', 'fl', row.suspension_fl_raw);
+  cursorSusFr.textContent = susText('sus_fr', 'fr', row.suspension_fr_raw);
+  cursorSusRl.textContent = susText('sus_rl', 'rl', row.suspension_rl_raw);
+  cursorSusRr.textContent = susText('sus_rr', 'rr', row.suspension_rr_raw);
 
   // Page 4 temperature values
   if (tempCursorCoolant) tempCursorCoolant.textContent = Math.round(cursorChannelValue('water', row.water_c || 0));
@@ -2588,14 +2588,14 @@ function renderMotecCharts(data) {
     type: 'line',
     data: {
       datasets: [{
-        data: S('sus_fl', r => r.suspension_fl_raw),
+        data: S('sus_fl', r => getCalibratedSuspension('fl', r.suspension_fl_raw)),
         borderColor: '#db2777',
         borderWidth: 1.2,
         pointRadius: 0,
         fill: false
       }]
     },
-    options: getCommonOptions(0, 4095, { stepSize: 1000 })
+    options: getCommonOptions(null, null, { stepSize: 10 })
   });
 
   const ctxSusRl = document.getElementById('chart-sus-rl').getContext('2d');
@@ -2603,14 +2603,14 @@ function renderMotecCharts(data) {
     type: 'line',
     data: {
       datasets: [{
-        data: S('sus_rl', r => r.suspension_rl_raw),
+        data: S('sus_rl', r => getCalibratedSuspension('rl', r.suspension_rl_raw)),
         borderColor: '#06b6d4',
         borderWidth: 1.2,
         pointRadius: 0,
         fill: false
       }]
     },
-    options: getCommonOptions(0, 1023, { stepSize: 256 })
+    options: getCommonOptions(null, null, { stepSize: 10 })
   });
 
   // ==================== PAGE 3 GPS + IMU CHARTS ====================
@@ -2763,14 +2763,14 @@ function renderMotecCharts(data) {
     type: 'line',
     data: {
       datasets: [{
-        data: S('sus_fr', r => r.suspension_fr_raw),
+        data: S('sus_fr', r => getCalibratedSuspension('fr', r.suspension_fr_raw)),
         borderColor: '#dc2626',
         borderWidth: 1.2,
         pointRadius: 0,
         fill: false
       }]
     },
-    options: getCommonOptions(0, 4095, { stepSize: 1000 })
+    options: getCommonOptions(null, null, { stepSize: 10 })
   });
 
   const ctxSusRr = document.getElementById('chart-sus-rr').getContext('2d');
@@ -2778,14 +2778,14 @@ function renderMotecCharts(data) {
     type: 'line',
     data: {
       datasets: [{
-        data: S('sus_rr', r => r.suspension_rr_raw),
+        data: S('sus_rr', r => getCalibratedSuspension('rr', r.suspension_rr_raw)),
         borderColor: '#2563eb',
         borderWidth: 1.2,
         pointRadius: 0,
         fill: false
       }]
     },
-    options: getCommonOptions(0, 1023, { stepSize: 256 })
+    options: getCommonOptions(null, null, { stepSize: 10 })
   });
 
   // 테마 상태에 맞는 차트 선 색상(다크모드 전용 파스텔톤 포함) 즉시 동기화
@@ -2807,6 +2807,9 @@ if (typeof initFilterContextMenu === 'function') {
 // 핸들 그래픽 클릭 → 조향 영점 보정 패널 활성화
 if (typeof initSteeringCalibration === 'function') {
   initSteeringCalibration();
+}
+if (typeof initSuspensionCalibration === 'function') {
+  initSuspensionCalibration();
 }
 
 // 5번 탭: 실시간 무선 텔레메트리 초기화

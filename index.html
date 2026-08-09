@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260809-2">
+  <link rel="stylesheet" href="style.css?v=20260810-1">
 </head>
 <body>
 
@@ -231,7 +231,8 @@
               <div id="cursor-line-page2-bot-left" class="motec-cursor-line" style="top: 0; bottom: 0;"></div>
               <div class="motec-chart-card sus-card">
                 <div class="chart-label-bar">
-                  <span class="signal-title color-orange">Suspension FL [ADC6 / PC5]</span>
+                  <span class="signal-title color-orange">Suspension FL [mm · ADC6 / PC5]</span>
+                  <button type="button" class="suspension-cal-btn suspension-cal-trigger" data-wheel="fl" aria-label="FL 서스펜션 오프셋 보정">⚙</button>
                   <span class="signal-val" id="cursor-sus-fl">----</span>
                 </div>
                 <div class="canvas-holder-sub">
@@ -241,7 +242,8 @@
               
               <div class="motec-chart-card sus-card">
                 <div class="chart-label-bar">
-                  <span class="signal-title color-blue">Suspension RL [EMU ADC4]</span>
+                  <span class="signal-title color-blue">Suspension RL [mm · EMU ADC4]</span>
+                  <button type="button" class="suspension-cal-btn suspension-cal-trigger" data-wheel="rl" aria-label="RL 서스펜션 오프셋 보정">⚙</button>
                   <span class="signal-val" id="cursor-sus-rl">----</span>
                 </div>
                 <div class="canvas-holder-sub">
@@ -256,7 +258,8 @@
               <div id="cursor-line-page2-bot-right" class="motec-cursor-line" style="top: 0; bottom: 0;"></div>
               <div class="motec-chart-card sus-card">
                 <div class="chart-label-bar">
-                  <span class="signal-title color-red">Suspension FR [ADC4 / PC3]</span>
+                  <span class="signal-title color-red">Suspension FR [mm · ADC4 / PC3]</span>
+                  <button type="button" class="suspension-cal-btn suspension-cal-trigger" data-wheel="fr" aria-label="FR 서스펜션 오프셋 보정">⚙</button>
                   <span class="signal-val" id="cursor-sus-fr">----</span>
                 </div>
                 <div class="canvas-holder-sub">
@@ -266,7 +269,8 @@
               
               <div class="motec-chart-card sus-card">
                 <div class="chart-label-bar">
-                  <span class="signal-title color-green">Suspension RR [EMU ADC5]</span>
+                  <span class="signal-title color-green">Suspension RR [mm · EMU ADC5]</span>
+                  <button type="button" class="suspension-cal-btn suspension-cal-trigger" data-wheel="rr" aria-label="RR 서스펜션 오프셋 보정">⚙</button>
                   <span class="signal-val" id="cursor-sus-rr">----</span>
                 </div>
                 <div class="canvas-holder-sub">
@@ -585,9 +589,10 @@
   </div>
 
   <!-- Custom JS -->
-  <script src="filters.js?v=20260809-1"></script>
+  <script src="suspension.js?v=20260810-1"></script>
+  <script src="filters.js?v=20260810-1"></script>
   <script src="steering.js?v=20260802-4"></script>
   <script src="realtime.js?v=20260802-4"></script>
-  <script src="app.js?v=20260810-4"></script>
+  <script src="app.js?v=20260810-5"></script>
 </body>
 </html>

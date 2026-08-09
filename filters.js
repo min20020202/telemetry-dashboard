@@ -380,27 +380,27 @@ const CHANNELS = {
     recommend: { dropout: { on: false }, type: 'savgol', params: { win: 11, order: 2 } }
   },
   sus_fl: {
-    label: 'Suspension FL', unit: 'ADC', clamp: [0, 4095],
-    from: r => r.suspension_fl_raw,
-    dropoutDef: { on: false, lo: 1, hi: 4094, gap: 20 },
+    label: 'Suspension FL', unit: 'mm',
+    from: r => getCalibratedSuspension('fl', r.suspension_fl_raw),
+    dropoutDef: { on: false, lo: null, hi: null, gap: 20 },
     recommend: { dropout: { on: false }, type: 'butter', params: { fc: 5, order: 2 } }
   },
   sus_fr: {
-    label: 'Suspension FR', unit: 'ADC', clamp: [0, 4095],
-    from: r => r.suspension_fr_raw,
-    dropoutDef: { on: false, lo: 1, hi: 4094, gap: 20 },
+    label: 'Suspension FR', unit: 'mm',
+    from: r => getCalibratedSuspension('fr', r.suspension_fr_raw),
+    dropoutDef: { on: false, lo: null, hi: null, gap: 20 },
     recommend: { dropout: { on: false }, type: 'butter', params: { fc: 5, order: 2 } }
   },
   sus_rl: {
-    label: 'Suspension RL', unit: 'ADC', clamp: [0, 1023],
-    from: r => r.suspension_rl_raw,
-    dropoutDef: { on: false, lo: 1, hi: 1022, gap: 20 },
+    label: 'Suspension RL', unit: 'mm',
+    from: r => getCalibratedSuspension('rl', r.suspension_rl_raw),
+    dropoutDef: { on: false, lo: null, hi: null, gap: 20 },
     recommend: { dropout: { on: false }, type: 'butter', params: { fc: 5, order: 2 } }
   },
   sus_rr: {
-    label: 'Suspension RR', unit: 'ADC', clamp: [0, 1023],
-    from: r => r.suspension_rr_raw,
-    dropoutDef: { on: false, lo: 1, hi: 1022, gap: 20 },
+    label: 'Suspension RR', unit: 'mm',
+    from: r => getCalibratedSuspension('rr', r.suspension_rr_raw),
+    dropoutDef: { on: false, lo: null, hi: null, gap: 20 },
     recommend: { dropout: { on: false }, type: 'butter', params: { fc: 5, order: 2 } }
   },
   water: {

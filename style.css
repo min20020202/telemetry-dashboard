@@ -548,6 +548,49 @@ body {
   color: var(--text-primary);
 }
 
+.suspension-cal-btn {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin-left: 8px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  background: var(--panel-bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 20px;
+}
+
+.suspension-cal-btn:hover,
+.suspension-cal-btn.cal-custom {
+  color: var(--accent-orange);
+  border-color: var(--accent-orange);
+}
+
+.suspension-menu { width: 430px; }
+.suspension-cal-grid { display: grid; gap: 8px; }
+.suspension-cal-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 5px 10px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+}
+.suspension-cal-row.is-focus { border-color: var(--accent-orange); }
+.suspension-scale { color: var(--text-secondary); font-family: var(--font-mono); font-size: 10px; }
+.suspension-cal-row label { display: flex; align-items: center; gap: 5px; font-size: 10px; }
+.suspension-offset-input { width: 72px; }
+.suspension-live {
+  grid-column: 2 / 4;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
 .val-sep {
   margin-right: 16px;
 }
