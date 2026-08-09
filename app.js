@@ -759,7 +759,11 @@ gpsLapList?.addEventListener('click', event => {
   const row = event.target.closest('[data-lap-time]');
   if (!row) return;
   const targetTime = Number(row.dataset.lapTime);
-  if (Number.isFinite(targetTime)) updateGpsCursorAtTime(targetTime);
+  if (Number.isFinite(targetTime)) {
+    setGpsPlayback(false);
+    gpsPlaybackCursorSec = targetTime;
+    updateGpsCursorAtTime(targetTime);
+  }
 });
 
 // Theme Toggle Event Listener
