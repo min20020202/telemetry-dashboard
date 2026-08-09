@@ -962,6 +962,42 @@ function drawExactImuCursor(targetTime, row) {
   });
 }
 
+// Read playback cursor values from the same full-resolution filtered arrays
+// used to build the IMU chart. Interpolate between adjacent 100 Hz samples so
+// a 60 fps cursor follows the filtered curve instead of snapping to a raw row.
+function getFilteredImuRowAtTime(row, targetTime, nearbyIndex) {
+  if (!gpsImuLpf || !gpsImuLpf.checked || nearbyIndex < 0 ||
+      typeof channelValueAt !== 'function') return row;
+
+  let lowerIndex = nearbyIndex;
+  while (lowerIndex > 0 && globalData[lowerIndex].time_sec > targetTime) lowerIndex--;
+  const upperIndex = Math.min(globalData.length - 1, lowerIndex + 1);
+  const lowerTime = globalData[lowerIndex].time_sec;
+  const upperTime = globalData[upperIndex].time_sec;
+  const ratio = upperTime > lowerTime
+    ? Math.max(0, Math.min(1, (targetTime - lowerTime) / (upperTime - lowerTime)))
+    : 0;
+
+  const displayRow = Object.create(row);
+  const channels = {
+    imu_accel_x_g: 'imu_ax',
+    imu_accel_y_g: 'imu_ay',
+    imu_gyro_x_dps: 'imu_gx',
+    imu_gyro_y_dps: 'imu_gy',
+    imu_gyro_z_dps: 'imu_gz'
+  };
+  Object.entries(channels).forEach(([rowKey, channelKey]) => {
+    const lower = channelValueAt(channelKey, lowerIndex);
+    const upper = channelValueAt(channelKey, upperIndex);
+    if (Number.isFinite(lower) && Number.isFinite(upper)) {
+      displayRow[rowKey] = lower + (upper - lower) * ratio;
+    } else if (Number.isFinite(lower)) {
+      displayRow[rowKey] = lower;
+    }
+  });
+  return displayRow;
+}
+
 function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
   if (!activeSampledData.length || !Number.isFinite(targetTime)) return;
   const minTime = Number(scrollBar.min) || 0;
@@ -975,20 +1011,7 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
   scrollBar.value = clampedTime.toFixed(2);
   if (gpsPlayTime) gpsPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
   if (row) {
-    let displayRow = row;
-    if (globalIndex >= 0 && gpsImuLpf && gpsImuLpf.checked && typeof channelValueAt === 'function') {
-      displayRow = Object.create(row);
-      const values = {
-        imu_accel_x_g: channelValueAt('imu_ax', globalIndex),
-        imu_accel_y_g: channelValueAt('imu_ay', globalIndex),
-        imu_gyro_x_dps: channelValueAt('imu_gx', globalIndex),
-        imu_gyro_y_dps: channelValueAt('imu_gy', globalIndex),
-        imu_gyro_z_dps: channelValueAt('imu_gz', globalIndex)
-      };
-      Object.entries(values).forEach(([key, value]) => {
-        if (Number.isFinite(value)) displayRow[key] = value;
-      });
-    }
+    const displayRow = getFilteredImuRowAtTime(row, clampedTime, globalIndex);
     const gpsPosition = getInterpolatedGpsPosition(clampedTime, globalIndex);
     updateNumericDisplays(displayRow, gpsPosition, clampedTime);
     drawExactImuCursor(clampedTime, displayRow);
