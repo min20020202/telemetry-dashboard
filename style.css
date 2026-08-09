@@ -2009,8 +2009,12 @@ body {
 
 .gps-lap-detail span { display: flex; justify-content: space-between; gap: 7px; }
 .gps-lap-detail strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.gps-lap-jump-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
 .gps-lap-detail button {
-  align-self: flex-end;
   padding: 4px 7px;
   border: 1px solid var(--border-color);
   border-radius: 5px;

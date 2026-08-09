@@ -496,7 +496,10 @@ function renderGpsLapResults(crossings, laps) {
       <div class="gps-lap-detail">
         <span>CSV 구간 <strong>${lap.startTime.toFixed(2)}s → ${lap.endTime.toFixed(2)}s</strong></span>
         <span>GPS 시각 <strong>${formatGpsClock(lap.startGpsTime)} → ${formatGpsClock(lap.endGpsTime)}</strong></span>
-        <button type="button" data-lap-end="${lap.endTime}">종료 시점으로 이동</button>
+        <div class="gps-lap-jump-buttons">
+          <button type="button" data-lap-time="${lap.startTime}">시작 지점으로 이동</button>
+          <button type="button" data-lap-time="${lap.endTime}">종료 지점으로 이동</button>
+        </div>
       </div>
     </details>`;
   }).join('');
@@ -753,9 +756,9 @@ gpsLapMinTime?.addEventListener('change', () => {
   if (gpsFinishPoints.length === 2) calculateGpsLaps();
 });
 gpsLapList?.addEventListener('click', event => {
-  const row = event.target.closest('[data-lap-end]');
+  const row = event.target.closest('[data-lap-time]');
   if (!row) return;
-  const targetTime = Number(row.dataset.lapEnd);
+  const targetTime = Number(row.dataset.lapTime);
   if (Number.isFinite(targetTime)) updateGpsCursorAtTime(targetTime);
 });
 
