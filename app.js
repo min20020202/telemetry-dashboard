@@ -734,26 +734,6 @@ function ensureGpsDetailCursorOverlay(chart) {
   section.appendChild(overlay);
 }
 
-function interpolatedGpsDetailPoint(data, time) {
-  if (!data?.length) return null;
-  let lo = 0, hi = data.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (Number(data[mid].x) < time) lo = mid + 1;
-    else hi = mid;
-  }
-  const upper = data[lo];
-  const lower = data[Math.max(0, lo - 1)];
-  const lowerX = Number(lower?.x);
-  const upperX = Number(upper?.x);
-  const lowerY = Number(lower?.y);
-  const upperY = Number(upper?.y);
-  if (!Number.isFinite(lowerX) || !Number.isFinite(lowerY)) return upper;
-  if (!Number.isFinite(upperX) || !Number.isFinite(upperY) || upperX <= lowerX) return lower;
-  const ratio = Math.max(0, Math.min(1, (time - lowerX) / (upperX - lowerX)));
-  return { x: time, y: lowerY + (upperY - lowerY) * ratio };
-}
-
 function updateGpsDetailCursorOverlay(chart, targetTime) {
   const section = chart.canvas.closest('section');
   const overlay = section?.querySelector('.gps-detail-cursor-overlay');
@@ -777,20 +757,20 @@ function updateGpsDetailCursorOverlay(chart, targetTime) {
   while (dots.children.length < datasets.length) dots.appendChild(document.createElement('i'));
   while (dots.children.length > datasets.length) dots.lastElementChild.remove();
   datasets.forEach((dataset, datasetIndex) => {
-    const point = interpolatedGpsDetailPoint(dataset.data, targetTime);
-    const value = Number(point?.y);
-    const yScale = chart.scales[dataset.yAxisID || 'y'];
     const dot = dots.children[datasetIndex];
-    if (!Number.isFinite(value) || !yScale) {
+    const lineElement = chart.getDatasetMeta(datasetIndex)?.dataset;
+    const interpolated = lineElement?.interpolate({ x: xScale.getPixelForValue(targetTime) }, 'x');
+    const point = Array.isArray(interpolated) ? interpolated[0] : interpolated;
+    if (!Number.isFinite(point?.x) || !Number.isFinite(point?.y)) {
       dot.style.display = 'none';
       return;
     }
-    const y = canvasTop + yScale.getPixelForValue(value);
+    const y = canvasTop + point.y;
     if (y < canvasTop + area.top || y > canvasTop + area.bottom) {
       dot.style.display = 'none';
       return;
     }
-    const dotX = canvasLeft + xScale.getPixelForValue(Number(point.x));
+    const dotX = canvasLeft + point.x;
     dot.style.display = 'block';
     dot.style.transform = `translate3d(${dotX - 4}px, ${y - 4}px, 0)`;
     dot.style.background = dataset.borderColor || '#2563eb';
