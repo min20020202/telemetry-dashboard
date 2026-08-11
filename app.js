@@ -501,9 +501,11 @@ function updateGpsCursorLapColor(targetTime) {
 
 function renderFullscreenLapTimes(laps, best) {
   if (!gpsFullscreenLapTimes) return;
+  const bestIndex = laps.findIndex(lap => Math.abs(lap.duration - best) < 0.0005);
+  const bestLabel = bestIndex >= 0 ? `BEST · LAP ${laps[bestIndex].number} · ${formatLapTime(best)}` : `BEST ${formatLapTime(best)}`;
   gpsFullscreenLapTimes.hidden = !laps.length;
   gpsFullscreenLapTimes.innerHTML = laps.length ? `
-    <div class="gps-fs-lap-head"><span>Lap Times</span><strong>BEST ${formatLapTime(best)}</strong></div>
+    <div class="gps-fs-lap-head"><span>Lap Times</span><strong>${bestLabel}</strong></div>
     <div class="gps-fs-lap-live" data-lap-live>완성된 랩 구간 밖</div>
     <div class="gps-fs-lap-list">${laps.map((lap, index) => `
       <div data-lap-time-row="${index}" style="--lap-color:${GPS_LAP_COLORS[index % GPS_LAP_COLORS.length]}">
