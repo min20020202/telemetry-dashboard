@@ -420,8 +420,14 @@ function closeGoProVideo() {
   gpsGoProObjectUrl = '';
   gpsGoProMatched = false;
   gpsGoProTelemetryStartSec = NaN;
+  const stage = gpsGoProPanel?.closest('.gps-map-stage');
+  stage?.classList.remove('gps-video-loaded');
   if (gpsGoProPanel) gpsGoProPanel.hidden = true;
   if (gpsGoProFile) gpsGoProFile.value = '';
+  setTimeout(() => {
+    gpsMap?.invalidateSize();
+    refitGpsMapToCurrentLapView();
+  }, 80);
 }
 
 // NMEA coordinate converter helper
@@ -2367,9 +2373,14 @@ gpsGoProFile?.addEventListener('change', async event => {
     }
     gpsGoProTelemetryStartSec = match.telemetryStart;
     gpsGoProMatched = true;
+    gpsGoProPanel.closest('.gps-map-stage')?.classList.add('gps-video-loaded');
     gpsGoProStatus.textContent = `영상 시작 ${formatGpsClock(match.videoStartClock)} KST · CSV와 ${formatKoreanDuration(match.overlap)} 겹침 · 자동 동기화 완료`;
     gpsGoProStatus.className = 'success';
     syncGoProVideo(Number(scrollBar.value) || 0, true);
+    setTimeout(() => {
+      gpsMap?.invalidateSize();
+      refitGpsMapToCurrentLapView();
+    }, 100);
   } catch (error) {
     gpsGoProMatched = false;
     gpsGoProStatus.textContent = error.message || 'MP4 시간 정보를 읽지 못했습니다.';

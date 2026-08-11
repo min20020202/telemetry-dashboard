@@ -2283,6 +2283,73 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   object-fit: contain;
 }
 
+/* GoPro-first fullscreen layout: video fills the driving view and the fixed
+   test-track map remains available as a compact picture-in-picture. */
+.gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded,
+.gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: #000;
+}
+.gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded > .gps-gopro-panel,
+.gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded > .gps-gopro-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 600;
+  display: flex;
+  flex-direction: column;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded > .gps-gopro-panel video,
+.gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded > .gps-gopro-panel video {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  aspect-ratio: auto;
+  object-fit: contain;
+}
+.gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded > #gps-map,
+.gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded > #gps-map {
+  position: absolute !important;
+  left: 14px;
+  bottom: 14px;
+  z-index: 900;
+  width: min(31vw, 520px) !important;
+  height: min(38vh, 410px) !important;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.48);
+  overflow: hidden;
+}
+.gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded.gps-detail-open,
+.gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded.gps-detail-open {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--gps-detail-width);
+  gap: 8px;
+  background: #000;
+}
+.gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded.gps-detail-open > .gps-gopro-panel,
+.gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded.gps-detail-open > .gps-gopro-panel {
+  right: calc(var(--gps-detail-width) + 8px);
+}
+.gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded.gps-detail-open > #gps-map,
+.gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded.gps-detail-open > #gps-map {
+  right: auto;
+}
+.gps-map-stage.gps-video-loaded .gps-fullscreen-detail { position: relative; z-index: 950; }
+.gps-map-stage.gps-video-loaded .gps-fullscreen-detail-toggle,
+.gps-map-stage.gps-video-loaded .gps-fullscreen-speed,
+.gps-map-stage.gps-video-loaded .gps-steering-widget,
+.gps-map-stage.gps-video-loaded .gps-fullscreen-lap-times { z-index: 1000; }
+
 .gps-lap-toolbar {
   display: flex;
   align-items: center;
