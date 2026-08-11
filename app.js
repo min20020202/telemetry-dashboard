@@ -282,6 +282,7 @@ let gpsCompareMarkers = [];
 let gpsDetailCharts = [];
 let gpsDetailSourceData = null;
 const GPS_LAP_COLORS = ['#00e5ff', '#ff3d9a', '#76ff03', '#ffca28', '#7c4dff', '#ff6d00', '#00e676', '#40c4ff'];
+const CSV_GPS_UTC_OFFSET_SEC = 9 * 3600; // Logger gps_time is stored as Korea Standard Time (UTC+9).
 
 // GPS + IMU synchronized playback state.
 let gpsPlaybackActive = false;
@@ -364,15 +365,17 @@ function getCsvGpsClockRange() {
 function matchGoProToCsv(creationDate, duration) {
   const range = getCsvGpsClockRange();
   if (!range || !Number.isFinite(duration)) return null;
-  const rawStart = creationDate.getUTCHours() * 3600 + creationDate.getUTCMinutes() * 60 + creationDate.getUTCSeconds() + creationDate.getUTCMilliseconds() / 1000;
+  const rawStartUtc = creationDate.getUTCHours() * 3600 + creationDate.getUTCMinutes() * 60 + creationDate.getUTCSeconds() + creationDate.getUTCMilliseconds() / 1000;
+  const rawStart = rawStartUtc + CSV_GPS_UTC_OFFSET_SEC;
   let best = null;
   for (let day = -1; day <= 1; day += 1) {
     const videoStart = rawStart + day * 86400;
     const overlap = Math.min(range.last.clock, videoStart + duration) - Math.max(range.first.clock, videoStart);
     if (!best || overlap > best.overlap) best = { videoStart, overlap, range };
   }
-  if (!best || best.overlap <= 0) return null;
+  if (!best || best.overlap <= 0) return best ? { ...best, matched: false } : null;
   return {
+    matched: true,
     telemetryStart: best.range.first.telemetry + (best.videoStart - best.range.first.clock),
     overlap: best.overlap,
     videoStartClock: best.videoStart
@@ -2310,19 +2313,26 @@ gpsGoProFile?.addEventListener('change', async event => {
       gpsGoProVideo.onloadedmetadata = resolve;
       gpsGoProVideo.onerror = () => reject(new Error('브라우저에서 이 MP4를 재생할 수 없습니다.'));
     });
-    const match = matchGoProToCsv(creationDate, gpsGoProVideo.duration);
-    if (!match) {
+    const videoDuration = gpsGoProVideo.duration;
+    const match = matchGoProToCsv(creationDate, videoDuration);
+    if (!match?.matched) {
       gpsGoProMatched = false;
       gpsGoProVideo.removeAttribute('src');
       URL.revokeObjectURL(gpsGoProObjectUrl);
       gpsGoProObjectUrl = '';
-      gpsGoProStatus.textContent = 'CSV와 영상의 시간이 겹치지 않습니다. 잘못된 파일 매칭이라 연결할 수 없습니다.';
+      const videoRange = match
+        ? `${formatGpsClock(match.videoStart)}~${formatGpsClock(match.videoStart + videoDuration)} KST`
+        : '시간 확인 불가';
+      const csvRange = match?.range
+        ? `${formatGpsClock(match.range.first.clock)}~${formatGpsClock(match.range.last.clock)} KST`
+        : '시간 확인 불가';
+      gpsGoProStatus.textContent = `시간이 겹치지 않아 연결할 수 없습니다. 영상 ${videoRange} · CSV ${csvRange}`;
       gpsGoProStatus.className = 'error';
       return;
     }
     gpsGoProTelemetryStartSec = match.telemetryStart;
     gpsGoProMatched = true;
-    gpsGoProStatus.textContent = `${file.name} · ${formatGpsClock(match.videoStartClock)}부터 ${formatLapTime(match.overlap)} 구간 자동 매칭`;
+    gpsGoProStatus.textContent = `${file.name} · ${formatGpsClock(match.videoStartClock)} KST부터 ${formatLapTime(match.overlap)} 구간 자동 매칭`;
     gpsGoProStatus.className = 'success';
     syncGoProVideo(Number(scrollBar.value) || 0, true);
   } catch (error) {
