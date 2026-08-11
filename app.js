@@ -467,7 +467,7 @@ function updateGpsCursorScale() {
   const marker = gpsCursorMarker.getElement()?.querySelector('.gps-position-cursor');
   if (!marker) return;
   const zoom = gpsMap.getZoom();
-  const scale = Math.max(0.48, Math.min(1.55, 0.48 + (zoom - 7) * 0.071));
+  const scale = Math.max(0.72, Math.min(1.18, 0.72 + (zoom - 7) * 0.031));
   marker.style.setProperty('--gps-cursor-scale', scale.toFixed(3));
 }
 
@@ -1797,9 +1797,9 @@ function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverr
         if (!gpsCursorMarker) {
           const pulseIcon = L.divIcon({
             className: 'custom-div-icon',
-            html: '<div class="gps-position-cursor"><span></span><i></i></div>',
-            iconSize: [24, 24],
-            iconAnchor: [12, 12]
+            html: '<div class="gps-position-cursor"></div>',
+            iconSize: [12, 12],
+            iconAnchor: [6, 6]
           });
           gpsCursorMarker = L.marker([lat, lon], { icon: pulseIcon, zIndexOffset: 10000 }).addTo(gpsMap);
         } else {
