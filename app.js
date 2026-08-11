@@ -391,17 +391,16 @@ function syncGoProVideo(targetTime, force = false) {
   }
   const rate = Number(gpsPlayRate?.value) || 1;
   const drift = gpsGoProVideo.currentTime - videoTime;
-  if (force || !gpsPlaybackActive || Math.abs(drift) > 0.75) {
+  if (force || !gpsPlaybackActive || Math.abs(drift) > 1.0) {
     // Seeking every animation frame makes a 60 fps GoPro clip look like a
     // slideshow. Seek only on scrubs/large errors and let the video decoder
     // render every source frame during normal playback.
     gpsGoProVideo.currentTime = videoTime;
-    gpsGoProVideo.playbackRate = rate;
-  } else {
-    // Correct small clock drift smoothly without dropping into repeated seeks.
-    const correction = Math.max(0.97, Math.min(1.03, 1 - drift * 0.12));
-    gpsGoProVideo.playbackRate = rate * correction;
   }
+  // GPS playback and video both use the browser's monotonic clock. Keeping the
+  // exact same rate prevents a small decoder reporting delay from accumulating
+  // into an artificial speed-up that makes the video finish early.
+  gpsGoProVideo.playbackRate = rate;
   if (gpsPlaybackActive && gpsGoProVideo.paused) gpsGoProVideo.play().catch(() => {});
   if (!gpsPlaybackActive && !gpsGoProVideo.paused) gpsGoProVideo.pause();
 }
