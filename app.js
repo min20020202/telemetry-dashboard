@@ -471,6 +471,14 @@ function updateGpsCursorScale() {
   marker.style.setProperty('--gps-cursor-scale', scale.toFixed(3));
 }
 
+function updateGpsCursorLapColor(targetTime) {
+  const marker = gpsCursorMarker?.getElement()?.querySelector('.gps-position-cursor');
+  if (!marker) return;
+  const lapIndex = gpsLapResults.findIndex(lap => targetTime >= lap.startTime && targetTime <= lap.endTime);
+  const color = lapIndex >= 0 ? GPS_LAP_COLORS[lapIndex % GPS_LAP_COLORS.length] : '#00bfe8';
+  marker.style.setProperty('--gps-cursor-color', color);
+}
+
 function drawGpsLapRoutes(laps) {
   if (gpsLapRouteLayer) gpsLapRouteLayer.clearLayers();
   if (gpsRouteLine) gpsRouteLine.setStyle({ opacity: laps.length ? 0.22 : 0.8, weight: laps.length ? 3 : 5 });
@@ -523,6 +531,7 @@ function renderGpsLapResults(crossings, laps) {
     });
   }
   drawGpsLapRoutes(laps);
+  updateGpsCursorLapColor(Number(scrollBar?.value));
 
   if (!gpsLapList) return;
   if (!laps.length) {
@@ -677,6 +686,7 @@ function clearGpsLapAnalysis() {
     gpsLapMapLegend.hidden = true;
     gpsLapMapLegend.innerHTML = '';
   }
+  updateGpsCursorLapColor(Number(scrollBar?.value));
   if (gpsLapSetLine) gpsLapSetLine.classList.remove('active');
   if (gpsLapClear) gpsLapClear.disabled = true;
   if (gpsMap) gpsMap.getContainer().classList.remove('gps-lap-selecting');
@@ -1529,6 +1539,7 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
     const displayRow = getFilteredImuRowAtTime(row, clampedTime, globalIndex);
     const gpsPosition = getInterpolatedGpsPosition(clampedTime, globalIndex);
     updateNumericDisplays(displayRow, gpsPosition, clampedTime);
+    updateGpsCursorLapColor(clampedTime);
     drawExactImuCursor(clampedTime, displayRow);
   }
 }
@@ -1808,6 +1819,7 @@ function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverr
         gpsCursorMarker.setZIndexOffset(10000);
         gpsCursorMarker.getElement()?.classList.add('gps-cursor-top');
         updateGpsCursorScale();
+        updateGpsCursorLapColor(displayTime);
       }
     } else {
       cursorGpsCoords.textContent = '--.------, ---.------';
