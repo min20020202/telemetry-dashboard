@@ -2012,8 +2012,12 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   background: rgba(15, 23, 42, 0.84);
   color: #fff;
   font: 700 12px var(--font-mono);
-  pointer-events: none;
+  pointer-events: auto;
 }
+
+.gps-map-card:fullscreen .gps-lap-map-legend,
+.gps-map-card.is-gps-fullscreen .gps-lap-map-legend,
+.gps-map-card.gps-map-fullscreen-fallback .gps-lap-map-legend { display: none; }
 
 .gps-fullscreen-lap-times[hidden] { display: none !important; }
 .gps-fs-lap-head { display: flex; justify-content: space-between; gap: 6px; text-transform: uppercase; }
@@ -2026,19 +2030,43 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   text-align: center;
   font-size: 15px;
 }
+.gps-fs-lap-all {
+  width: 100%;
+  margin-bottom: 5px;
+  padding: 6px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 5px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.gps-fs-lap-all:hover,
+.gps-fs-lap-all.selected { border-color: rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.14); color: #fff; }
 .gps-fs-lap-list { display: grid; gap: 2px; }
-.gps-fs-lap-list > div {
+.gps-fs-lap-list > button {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 8px;
+  width: 100%;
   padding: 6px 7px;
+  border: 1px solid transparent;
   border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   opacity: 0.72;
 }
-.gps-fs-lap-list > div.active { background: color-mix(in srgb, var(--lap-color) 22%, transparent); opacity: 1; }
+.gps-fs-lap-list > button:hover { background: rgba(255, 255, 255, 0.1); opacity: 1; }
+.gps-fs-lap-list > button.active { outline: 1px solid color-mix(in srgb, var(--lap-color) 55%, transparent); opacity: 1; }
+.gps-fs-lap-list > button.selected { border-color: color-mix(in srgb, var(--lap-color) 65%, transparent); background: color-mix(in srgb, var(--lap-color) 22%, transparent); opacity: 1; }
 .gps-fs-lap-list span { display: flex; align-items: center; gap: 5px; }
 .gps-fs-lap-list i { width: 7px; height: 7px; border-radius: 50%; background: var(--lap-color); box-shadow: 0 0 4px var(--lap-color); }
-.gps-fs-lap-list strong { font-variant-numeric: tabular-nums; }
+.gps-fs-lap-list strong { color: inherit; font-variant-numeric: tabular-nums; }
 .gps-best-star {
   margin-left: 6px;
   color: #ffd21f;

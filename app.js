@@ -507,10 +507,11 @@ function renderFullscreenLapTimes(laps, best) {
   gpsFullscreenLapTimes.innerHTML = laps.length ? `
     <div class="gps-fs-lap-head"><span>Lap Times</span><strong>${bestLabel}</strong></div>
     <div class="gps-fs-lap-live" data-lap-live>완성된 랩 구간 밖</div>
+    <button type="button" class="gps-fs-lap-all${gpsSelectedLapIndex < 0 ? ' selected' : ''}" data-lap-panel-view="all">전체 랩 보기</button>
     <div class="gps-fs-lap-list">${laps.map((lap, index) => `
-      <div class="${index === bestIndex ? 'best' : ''}" data-lap-time-row="${index}" style="--lap-color:${GPS_LAP_COLORS[index % GPS_LAP_COLORS.length]}">
+      <button type="button" class="${index === bestIndex ? 'best ' : ''}${index === gpsSelectedLapIndex ? 'selected' : ''}" data-lap-time-row="${index}" data-lap-panel-view="${index}" style="--lap-color:${GPS_LAP_COLORS[index % GPS_LAP_COLORS.length]}">
         <span><i></i>LAP ${lap.number}${index === bestIndex ? '<b class="gps-best-star">★</b>' : ''}</span><strong>${formatLapTime(lap.duration)}</strong>
-      </div>`).join('')}</div>` : '';
+      </button>`).join('')}</div>` : '';
 }
 
 function refreshGpsFullscreenOverlays() {
@@ -587,6 +588,9 @@ function selectGpsLapView(index) {
   gpsLapMapLegend?.querySelectorAll('[data-lap-view]').forEach(button => {
     button.classList.toggle('active', isSingle ? Number(button.dataset.lapView) === index : button.dataset.lapView === 'all');
   });
+  gpsFullscreenLapTimes?.querySelectorAll('[data-lap-panel-view]').forEach(button => {
+    button.classList.toggle('selected', isSingle ? Number(button.dataset.lapPanelView) === index : button.dataset.lapPanelView === 'all');
+  });
 
   setGpsPlayback(false);
   if (isSingle) {
@@ -609,6 +613,7 @@ function selectGpsLapView(index) {
 
 function renderGpsLapResults(crossings, laps) {
   gpsLapResults = laps;
+  gpsSelectedLapIndex = -1;
   if (gpsLapCount) gpsLapCount.textContent = `${laps.length} LAPS`;
   const best = laps.length ? Math.min(...laps.map(lap => lap.duration)) : NaN;
   renderFullscreenLapTimes(laps, best);
@@ -941,6 +946,13 @@ gpsLapMapLegend?.addEventListener('click', event => {
   const button = event.target.closest('[data-lap-view]');
   if (!button) return;
   const index = button.dataset.lapView === 'all' ? -1 : Number(button.dataset.lapView);
+  selectGpsLapView(index);
+});
+
+gpsFullscreenLapTimes?.addEventListener('click', event => {
+  const button = event.target.closest('[data-lap-panel-view]');
+  if (!button) return;
+  const index = button.dataset.lapPanelView === 'all' ? -1 : Number(button.dataset.lapPanelView);
   selectGpsLapView(index);
 });
 
