@@ -459,6 +459,13 @@ function formatLapTime(seconds) {
   return `${minutes}:${String(secs).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
 }
 
+function formatKoreanDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '--';
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds - minutes * 60;
+  return `${minutes}분 ${remaining.toFixed(1).padStart(4, '0')}초`;
+}
+
 function parseGpsClockSeconds(value) {
   if (value === undefined || value === null) return NaN;
   const text = String(value).trim();
@@ -2360,7 +2367,7 @@ gpsGoProFile?.addEventListener('change', async event => {
     }
     gpsGoProTelemetryStartSec = match.telemetryStart;
     gpsGoProMatched = true;
-    gpsGoProStatus.textContent = `${file.name} · ${formatGpsClock(match.videoStartClock)} KST부터 ${formatLapTime(match.overlap)} 구간 자동 매칭`;
+    gpsGoProStatus.textContent = `영상 시작 ${formatGpsClock(match.videoStartClock)} KST · CSV와 ${formatKoreanDuration(match.overlap)} 겹침 · 자동 동기화 완료`;
     gpsGoProStatus.className = 'success';
     syncGoProVideo(Number(scrollBar.value) || 0, true);
   } catch (error) {
