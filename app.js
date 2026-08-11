@@ -462,6 +462,15 @@ function updateGpsFinishPreview(event) {
   gpsFinishPreviewLine.setLatLngs([[first.lat, first.lon], [event.latlng.lat, event.latlng.lng]]);
 }
 
+function updateGpsCursorScale() {
+  if (!gpsMap || !gpsCursorMarker) return;
+  const marker = gpsCursorMarker.getElement()?.querySelector('.gps-position-cursor');
+  if (!marker) return;
+  const zoom = gpsMap.getZoom();
+  const scale = Math.max(0.48, Math.min(1.55, 0.48 + (zoom - 7) * 0.071));
+  marker.style.setProperty('--gps-cursor-scale', scale.toFixed(3));
+}
+
 function drawGpsLapRoutes(laps) {
   if (gpsLapRouteLayer) gpsLapRouteLayer.clearLayers();
   if (gpsRouteLine) gpsRouteLine.setStyle({ opacity: laps.length ? 0.22 : 0.8, weight: laps.length ? 3 : 5 });
@@ -794,6 +803,7 @@ function initGpsMap() {
   gpsLapCrossingLayer = L.layerGroup().addTo(gpsMap);
   gpsMap.on('click', handleGpsLapMapClick);
   gpsMap.on('mousemove', updateGpsFinishPreview);
+  gpsMap.on('zoom', updateGpsCursorScale);
 }
 
 gpsLapSetLine?.addEventListener('click', beginGpsFinishLineSelection);
@@ -1787,7 +1797,7 @@ function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverr
         if (!gpsCursorMarker) {
           const pulseIcon = L.divIcon({
             className: 'custom-div-icon',
-            html: '<div class="gps-pulse-marker"><i></i></div>',
+            html: '<div class="gps-position-cursor"><span></span><i></i></div>',
             iconSize: [24, 24],
             iconAnchor: [12, 12]
           });
@@ -1797,6 +1807,7 @@ function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverr
         }
         gpsCursorMarker.setZIndexOffset(10000);
         gpsCursorMarker.getElement()?.classList.add('gps-cursor-top');
+        updateGpsCursorScale();
       }
     } else {
       cursorGpsCoords.textContent = '--.------, ---.------';
