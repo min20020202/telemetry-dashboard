@@ -143,6 +143,7 @@ const gpsFullscreenPlayToggle = document.getElementById('gps-fullscreen-play-tog
 const gpsFullscreenPlayRate = document.getElementById('gps-fullscreen-play-rate');
 const gpsFullscreenTimeline = document.getElementById('gps-fullscreen-timeline');
 const gpsFullscreenPlayTime = document.getElementById('gps-fullscreen-play-time');
+const gpsFullscreenLapTimes = document.getElementById('gps-fullscreen-lap-times');
 
 // Theme Switcher DOM
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
@@ -475,10 +476,38 @@ function updateGpsCursorScale() {
 
 function updateGpsCursorLapColor(targetTime) {
   const marker = gpsCursorMarker?.getElement()?.querySelector('.gps-position-cursor');
-  if (!marker) return;
   const lapIndex = gpsLapResults.findIndex(lap => targetTime >= lap.startTime && targetTime <= lap.endTime);
   const color = lapIndex >= 0 ? GPS_LAP_COLORS[lapIndex % GPS_LAP_COLORS.length] : '#00bfe8';
-  marker.style.setProperty('--gps-cursor-color', color);
+  if (marker) marker.style.setProperty('--gps-cursor-color', color);
+  if (gpsFullscreenLapTimes) {
+    gpsFullscreenLapTimes.querySelectorAll('[data-lap-time-row]').forEach(row => {
+      row.classList.toggle('active', Number(row.dataset.lapTimeRow) === lapIndex);
+    });
+    const live = gpsFullscreenLapTimes.querySelector('[data-lap-live]');
+    if (live) {
+      if (lapIndex >= 0) {
+        const lap = gpsLapResults[lapIndex];
+        const elapsed = Math.max(0, Math.min(lap.duration, targetTime - lap.startTime));
+        live.textContent = `LAP ${lap.number} · ${formatLapTime(elapsed)}`;
+        live.style.color = color;
+      } else {
+        live.textContent = '완성된 랩 구간 밖';
+        live.style.color = '';
+      }
+    }
+  }
+}
+
+function renderFullscreenLapTimes(laps, best) {
+  if (!gpsFullscreenLapTimes) return;
+  gpsFullscreenLapTimes.hidden = !laps.length;
+  gpsFullscreenLapTimes.innerHTML = laps.length ? `
+    <div class="gps-fs-lap-head"><span>Lap Times</span><strong>BEST ${formatLapTime(best)}</strong></div>
+    <div class="gps-fs-lap-live" data-lap-live>완성된 랩 구간 밖</div>
+    <div class="gps-fs-lap-list">${laps.map((lap, index) => `
+      <div data-lap-time-row="${index}" style="--lap-color:${GPS_LAP_COLORS[index % GPS_LAP_COLORS.length]}">
+        <span><i></i>LAP ${lap.number}</span><strong>${formatLapTime(lap.duration)}</strong>
+      </div>`).join('')}</div>` : '';
 }
 
 function drawGpsLapRoutes(laps) {
@@ -565,6 +594,7 @@ function renderGpsLapResults(crossings, laps) {
   gpsLapResults = laps;
   if (gpsLapCount) gpsLapCount.textContent = `${laps.length} LAPS`;
   const best = laps.length ? Math.min(...laps.map(lap => lap.duration)) : NaN;
+  renderFullscreenLapTimes(laps, best);
   if (gpsLapBestTime) gpsLapBestTime.textContent = formatLapTime(best);
   if (gpsLapFixSummary) {
     const timeBasis = laps.length && laps.every(lap => lap.timeBasis === 'gps') ? 'GPS 시각 기준' : '로거 경과시간 기준';
@@ -744,6 +774,10 @@ function clearGpsLapAnalysis() {
   if (gpsLapMapLegend) {
     gpsLapMapLegend.hidden = true;
     gpsLapMapLegend.innerHTML = '';
+  }
+  if (gpsFullscreenLapTimes) {
+    gpsFullscreenLapTimes.hidden = true;
+    gpsFullscreenLapTimes.innerHTML = '';
   }
   updateGpsCursorLapColor(Number(scrollBar?.value));
   if (tabGps?.classList.contains('active') && activeSampledData.length) {
