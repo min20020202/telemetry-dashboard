@@ -511,6 +511,20 @@ function renderFullscreenLapTimes(laps, best) {
       </div>`).join('')}</div>` : '';
 }
 
+function refreshGpsFullscreenOverlays() {
+  if (gpsLapResults.length) {
+    const best = Math.min(...gpsLapResults.map(lap => lap.duration));
+    renderFullscreenLapTimes(gpsLapResults, best);
+  } else if (gpsFullscreenLapTimes) {
+    gpsFullscreenLapTimes.hidden = true;
+  }
+  updateGpsCursorLapColor(Number(scrollBar?.value));
+  const row = globalData.length ? globalData[findGlobalIndexAtTime(Number(scrollBar?.value) || 0)] : null;
+  if (row && gpsFullscreenSpeedValue) {
+    gpsFullscreenSpeedValue.textContent = (Number(row.gps_speed_kmh) || 0).toFixed(1);
+  }
+}
+
 function drawGpsLapRoutes(laps) {
   if (gpsLapRouteLayer) gpsLapRouteLayer.clearLayers();
   gpsLapRouteLines = [];
@@ -933,6 +947,7 @@ gpsMapFullscreen?.addEventListener('click', async () => {
   if (!card) return;
   if (card.classList.contains('gps-map-fullscreen-fallback')) {
     card.classList.remove('gps-map-fullscreen-fallback');
+    card.classList.remove('is-gps-fullscreen');
     document.body.classList.remove('gps-map-fullscreen-open');
     gpsMapFullscreen.textContent = '⛶ 전체화면';
     setTimeout(() => gpsMap?.invalidateSize(), 80);
@@ -943,15 +958,20 @@ gpsMapFullscreen?.addEventListener('click', async () => {
     else await card.requestFullscreen();
   } catch (err) {
     card.classList.toggle('gps-map-fullscreen-fallback');
+    card.classList.toggle('is-gps-fullscreen', card.classList.contains('gps-map-fullscreen-fallback'));
     document.body.classList.toggle('gps-map-fullscreen-open', card.classList.contains('gps-map-fullscreen-fallback'));
     gpsMapFullscreen.textContent = card.classList.contains('gps-map-fullscreen-fallback') ? '✕ 전체화면 종료' : '⛶ 전체화면';
+    if (card.classList.contains('gps-map-fullscreen-fallback')) refreshGpsFullscreenOverlays();
   }
   setTimeout(() => gpsMap?.invalidateSize(), 80);
 });
 
 document.addEventListener('fullscreenchange', () => {
-  const active = document.fullscreenElement?.classList.contains('gps-map-card');
+  const card = gpsMapFullscreen?.closest('.gps-map-card');
+  const active = document.fullscreenElement === card;
+  card?.classList.toggle('is-gps-fullscreen', active);
   if (gpsMapFullscreen) gpsMapFullscreen.textContent = active ? '✕ 전체화면 종료' : '⛶ 전체화면';
+  if (active) refreshGpsFullscreenOverlays();
   setTimeout(() => gpsMap?.invalidateSize(), 80);
 });
 gpsLapList?.addEventListener('click', event => {

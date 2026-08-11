@@ -1882,11 +1882,13 @@ body {
 .gps-fullscreen-playback { display: none; }
 
 .gps-map-card:fullscreen .gps-lap-toolbar,
+.gps-map-card.is-gps-fullscreen .gps-lap-toolbar,
 .gps-map-card.gps-map-fullscreen-fallback .gps-lap-toolbar {
   flex-wrap: wrap;
 }
 
 .gps-map-card:fullscreen .gps-fullscreen-playback,
+.gps-map-card.is-gps-fullscreen .gps-fullscreen-playback,
 .gps-map-card.gps-map-fullscreen-fallback .gps-fullscreen-playback {
   order: 10;
   display: grid;
@@ -1994,11 +1996,12 @@ body.gps-map-fullscreen-open { overflow: hidden; }
 .gps-fullscreen-lap-times { display: none; }
 
 .gps-map-card:fullscreen .gps-fullscreen-lap-times,
+.gps-map-card.is-gps-fullscreen .gps-fullscreen-lap-times,
 .gps-map-card.gps-map-fullscreen-fallback .gps-fullscreen-lap-times {
   position: absolute;
   top: 58px;
   left: 10px;
-  z-index: 500;
+  z-index: 1000;
   display: block;
   width: 190px;
   max-height: calc(100% - 125px);
@@ -2040,11 +2043,12 @@ body.gps-map-fullscreen-open { overflow: hidden; }
 .gps-fullscreen-speed { display: none; }
 
 .gps-map-card:fullscreen .gps-fullscreen-speed,
+.gps-map-card.is-gps-fullscreen .gps-fullscreen-speed,
 .gps-map-card.gps-map-fullscreen-fallback .gps-fullscreen-speed {
   position: absolute;
   top: 12px;
   left: 50%;
-  z-index: 500;
+  z-index: 1000;
   display: flex;
   align-items: baseline;
   gap: 6px;
