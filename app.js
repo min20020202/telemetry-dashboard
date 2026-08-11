@@ -145,6 +145,8 @@ const gpsFullscreenTimeline = document.getElementById('gps-fullscreen-timeline')
 const gpsFullscreenPlayTime = document.getElementById('gps-fullscreen-play-time');
 const gpsFullscreenLapTimes = document.getElementById('gps-fullscreen-lap-times');
 const gpsFullscreenSpeedValue = document.getElementById('gps-fullscreen-speed-value');
+const gpsFullscreenDetailToggle = document.getElementById('gps-fullscreen-detail-toggle');
+const gpsFullscreenDetail = document.getElementById('gps-fullscreen-detail');
 
 // Theme Switcher DOM
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
@@ -265,6 +267,8 @@ let gpsLapSelectionActive = false;
 let gpsLapResults = [];
 let gpsLapRouteLines = [];
 let gpsSelectedLapIndex = -1;
+let gpsDetailCharts = [];
+let gpsDetailSourceData = null;
 const GPS_LAP_COLORS = ['#00e5ff', '#ff3d9a', '#76ff03', '#ffca28', '#7c4dff', '#ff6d00', '#00e676', '#40c4ff'];
 
 // GPS + IMU synchronized playback state.
@@ -574,7 +578,124 @@ function syncGpsTimelineRange(minTime, maxTime, value) {
     gpsFullscreenTimeline.step = scrollBar.step;
     gpsFullscreenTimeline.value = scrollBar.value;
   }
+  updateGpsDetailChartRange(minTime, maxTime);
   return safeValue;
+}
+
+const gpsDetailCursorPlugin = {
+  id: 'gpsDetailCursor',
+  afterDatasetsDraw(chart) {
+    const time = chart.$gpsCursorTime;
+    const xScale = chart.scales?.x;
+    const area = chart.chartArea;
+    if (!Number.isFinite(time) || !xScale || !area || time < xScale.min || time > xScale.max) return;
+    const x = xScale.getPixelForValue(time);
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.strokeStyle = '#ff7a1a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x, area.top);
+    ctx.lineTo(x, area.bottom);
+    ctx.stroke();
+    ctx.restore();
+  }
+};
+
+function destroyGpsDetailCharts() {
+  gpsDetailCharts.forEach(chart => chart?.destroy());
+  gpsDetailCharts = [];
+  gpsDetailSourceData = null;
+}
+
+function cloneGpsDetailDatasets(sourceChart) {
+  return (sourceChart?.data?.datasets || []).map(dataset => ({
+    label: dataset.label || '',
+    data: dataset.data,
+    borderColor: dataset.borderColor,
+    backgroundColor: dataset.backgroundColor,
+    borderWidth: Math.max(1.2, Number(dataset.borderWidth) || 1.2),
+    pointRadius: 0,
+    stepped: dataset.stepped,
+    tension: dataset.tension || 0,
+    fill: false,
+    yAxisID: dataset.yAxisID
+  }));
+}
+
+function ensureGpsDetailCharts() {
+  if (gpsDetailCharts.length && gpsDetailSourceData === globalData) return;
+  destroyGpsDetailCharts();
+  const specs = [
+    ['gps-detail-speed', chartSpeed],
+    ['gps-detail-rpm', chartRpm],
+    ['gps-detail-gear', chartGear],
+    ['gps-detail-steering', chartSteering],
+    ['gps-detail-throttle-brake', chartThrottleBrake]
+  ];
+  gpsDetailCharts = specs.map(([id, source]) => {
+    const canvas = document.getElementById(id);
+    if (!canvas || !source) return null;
+    const min = Number(scrollBar.min) || currentStartSec;
+    const max = Number(scrollBar.max) || currentEndSec;
+    return new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: { datasets: cloneGpsDetailDatasets(source) },
+      plugins: [gpsDetailCursorPlugin],
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        parsing: false,
+        normalized: true,
+        interaction: { enabled: false },
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: {
+          x: { type: 'linear', min, max, display: false, grid: { display: false } },
+          y: {
+            grid: { color: 'rgba(148, 163, 184, 0.16)' },
+            ticks: { color: '#b8c2d3', font: { size: 8 }, maxTicksLimit: 4 }
+          }
+        }
+      }
+    });
+  }).filter(Boolean);
+  gpsDetailSourceData = globalData;
+}
+
+function updateGpsDetailChartRange(minTime, maxTime) {
+  gpsDetailCharts.forEach(chart => {
+    chart.options.scales.x.min = minTime;
+    chart.options.scales.x.max = maxTime;
+    chart.update('none');
+  });
+}
+
+function updateGpsDetailCursors(targetTime) {
+  if (!gpsFullscreenDetail?.classList.contains('open')) return;
+  gpsDetailCharts.forEach(chart => {
+    chart.$gpsCursorTime = targetTime;
+    chart.draw();
+  });
+}
+
+function refitGpsMapToCurrentLapView() {
+  if (!gpsMap) return;
+  if (gpsSelectedLapIndex >= 0) {
+    const line = gpsLapRouteLines[gpsSelectedLapIndex];
+    if (line?.getBounds().isValid()) gpsMap.fitBounds(line.getBounds(), { padding: [35, 35], maxZoom: 20 });
+  } else {
+    const lines = gpsLapRouteLines.filter(Boolean);
+    const bounds = lines.length ? L.featureGroup(lines).getBounds() : gpsRouteLine?.getBounds();
+    if (bounds?.isValid()) gpsMap.fitBounds(bounds, { padding: [30, 30] });
+  }
+}
+
+function closeGpsFullscreenDetail() {
+  const stage = gpsFullscreenDetailToggle?.closest('.gps-map-stage');
+  gpsFullscreenDetail?.classList.remove('open');
+  stage?.classList.remove('gps-detail-open');
+  if (gpsFullscreenDetailToggle) gpsFullscreenDetailToggle.textContent = '상세정보 ›';
 }
 
 function selectGpsLapView(index) {
@@ -956,10 +1077,29 @@ gpsFullscreenLapTimes?.addEventListener('click', event => {
   selectGpsLapView(index);
 });
 
+gpsFullscreenDetailToggle?.addEventListener('click', () => {
+  const stage = gpsFullscreenDetailToggle.closest('.gps-map-stage');
+  const open = !gpsFullscreenDetail.classList.contains('open');
+  gpsFullscreenDetail.classList.toggle('open', open);
+  stage?.classList.toggle('gps-detail-open', open);
+  gpsFullscreenDetailToggle.textContent = open ? '상세정보 닫기 ›' : '상세정보 ›';
+  if (open) {
+    ensureGpsDetailCharts();
+    updateGpsDetailChartRange(Number(scrollBar.min), Number(scrollBar.max));
+    updateGpsDetailCursors(Number(scrollBar.value));
+  }
+  setTimeout(() => {
+    gpsMap?.invalidateSize();
+    refitGpsMapToCurrentLapView();
+    gpsDetailCharts.forEach(chart => chart.resize());
+  }, 100);
+});
+
 gpsMapFullscreen?.addEventListener('click', async () => {
   const card = gpsMapFullscreen.closest('.gps-map-card');
   if (!card) return;
   if (card.classList.contains('gps-map-fullscreen-fallback')) {
+    closeGpsFullscreenDetail();
     card.classList.remove('gps-map-fullscreen-fallback');
     card.classList.remove('is-gps-fullscreen');
     document.body.classList.remove('gps-map-fullscreen-open');
@@ -984,6 +1124,7 @@ document.addEventListener('fullscreenchange', () => {
   const card = gpsMapFullscreen?.closest('.gps-map-card');
   const active = document.fullscreenElement === card;
   card?.classList.toggle('is-gps-fullscreen', active);
+  if (!active) closeGpsFullscreenDetail();
   if (gpsMapFullscreen) gpsMapFullscreen.textContent = active ? '✕ 전체화면 종료' : '⛶ 전체화면';
   if (active) refreshGpsFullscreenOverlays();
   setTimeout(() => gpsMap?.invalidateSize(), 80);
@@ -1678,6 +1819,7 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
     const gpsPosition = getInterpolatedGpsPosition(clampedTime, globalIndex);
     updateNumericDisplays(displayRow, gpsPosition, clampedTime);
     updateGpsCursorLapColor(clampedTime);
+    updateGpsDetailCursors(clampedTime);
     drawExactImuCursor(clampedTime, displayRow);
   }
 }
