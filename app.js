@@ -1057,19 +1057,7 @@ function closeGpsFullscreenDetail() {
   const stage = gpsFullscreenDetailToggle?.closest('.gps-map-stage');
   gpsFullscreenDetail?.classList.remove('open');
   stage?.classList.remove('gps-detail-open');
-  dockGoProPanelForDetail(false);
   if (gpsFullscreenDetailToggle) gpsFullscreenDetailToggle.textContent = '상세정보 ›';
-}
-
-function dockGoProPanelForDetail(open) {
-  if (!gpsGoProPanel || !gpsFullscreenDetail) return;
-  const stage = gpsFullscreenDetail.closest('.gps-map-stage');
-  if (open) {
-    const firstSection = gpsFullscreenDetail.querySelector('section');
-    gpsFullscreenDetail.insertBefore(gpsGoProPanel, firstSection);
-  } else if (stage && gpsGoProPanel.parentElement !== stage) {
-    stage.appendChild(gpsGoProPanel);
-  }
 }
 
 function selectGpsLapView(index) {
@@ -1473,7 +1461,6 @@ gpsFullscreenDetailToggle?.addEventListener('click', () => {
   const open = !gpsFullscreenDetail.classList.contains('open');
   gpsFullscreenDetail.classList.toggle('open', open);
   stage?.classList.toggle('gps-detail-open', open);
-  dockGoProPanelForDetail(open);
   gpsFullscreenDetailToggle.textContent = open ? '상세정보 닫기 ›' : '상세정보 ›';
   if (open) {
     ensureGpsDetailCharts();

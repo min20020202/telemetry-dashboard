@@ -2250,21 +2250,18 @@ body.gps-map-fullscreen-open { overflow: hidden; }
 .gps-gopro-panel output { display: block; padding: 7px 9px; color: #cbd5e1; font: 700 9px/1.35 var(--font-mono); }
 .gps-gopro-panel output.success { color: #34d399; }
 .gps-gopro-panel output.error { color: #fb7185; }
-.gps-map-stage.gps-detail-open .gps-gopro-panel { right: calc(min(36vw, 540px) + 22px); width: min(28vw, 440px); }
-.gps-fullscreen-detail .gps-gopro-panel {
-  position: relative;
-  right: auto;
-  bottom: auto;
-  z-index: 1;
-  flex: 0 0 auto;
-  width: 100%;
-  min-width: 0;
-  margin: 0 0 8px;
-  border-color: #cbd5e1;
-  border-radius: 6px;
-  box-shadow: none;
+.gps-map-stage.gps-detail-open > .gps-gopro-panel {
+  right: calc(var(--gps-detail-width) + 8px);
+  bottom: 8px;
+  width: min(32vw, 620px);
+  min-width: 420px;
 }
-.gps-fullscreen-detail .gps-gopro-panel video { max-height: 230px; object-fit: contain; }
+.gps-map-stage.gps-detail-open > .gps-gopro-panel video {
+  width: 100%;
+  max-height: none;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+}
 
 .gps-lap-toolbar {
   display: flex;
