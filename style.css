@@ -1953,11 +1953,31 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   background: rgba(15, 23, 42, 0.82);
   color: #fff;
   font: 800 10px var(--font-mono);
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .gps-lap-map-legend[hidden] { display: none; }
-.gps-lap-map-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.gps-lap-map-legend button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.68);
+  font: inherit;
+  cursor: pointer;
+  opacity: 0.65;
+}
+
+.gps-lap-map-legend button:hover { opacity: 1; background: rgba(255, 255, 255, 0.1); }
+.gps-lap-map-legend button.active {
+  border-color: rgba(255, 255, 255, 0.38);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  opacity: 1;
+}
 .gps-lap-map-legend i,
 .gps-lap-color-dot {
   display: inline-block;

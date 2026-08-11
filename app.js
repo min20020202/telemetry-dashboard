@@ -261,6 +261,8 @@ let gpsFinishMarkers = [];
 let gpsLapPoints = [];
 let gpsLapSelectionActive = false;
 let gpsLapResults = [];
+let gpsLapRouteLines = [];
+let gpsSelectedLapIndex = -1;
 const GPS_LAP_COLORS = ['#00e5ff', '#ff3d9a', '#76ff03', '#ffca28', '#7c4dff', '#ff6d00', '#00e676', '#40c4ff'];
 
 // GPS + IMU synchronized playback state.
@@ -481,12 +483,16 @@ function updateGpsCursorLapColor(targetTime) {
 
 function drawGpsLapRoutes(laps) {
   if (gpsLapRouteLayer) gpsLapRouteLayer.clearLayers();
+  gpsLapRouteLines = [];
+  gpsSelectedLapIndex = -1;
   if (gpsRouteLine) gpsRouteLine.setStyle({ opacity: laps.length ? 0.22 : 0.8, weight: laps.length ? 3 : 5 });
   if (gpsLapMapLegend) {
     gpsLapMapLegend.hidden = !laps.length;
-    gpsLapMapLegend.innerHTML = laps.map((lap, index) =>
-      `<span><i style="--lap-color:${GPS_LAP_COLORS[index % GPS_LAP_COLORS.length]}"></i>LAP ${lap.number}</span>`
-    ).join('');
+    gpsLapMapLegend.innerHTML = laps.length
+      ? `<button type="button" class="active" data-lap-view="all">전체</button>` + laps.map((lap, index) =>
+          `<button type="button" data-lap-view="${index}"><i style="--lap-color:${GPS_LAP_COLORS[index % GPS_LAP_COLORS.length]}"></i>LAP ${lap.number}</button>`
+        ).join('')
+      : '';
   }
   if (!gpsLapRouteLayer || !laps.length) return;
 
@@ -497,13 +503,61 @@ function drawGpsLapRoutes(laps) {
     });
     coords.push([lap.endLat, lap.endLon]);
     if (coords.length < 2) return;
-    L.polyline(coords, {
+    const line = L.polyline(coords, {
       color: GPS_LAP_COLORS[index % GPS_LAP_COLORS.length],
       weight: 6,
       opacity: 0.92,
       interactive: false
-    }).addTo(gpsLapRouteLayer);
+    });
+    gpsLapRouteLines[index] = line;
+    line.addTo(gpsLapRouteLayer);
   });
+  if (gpsCursorMarker) gpsCursorMarker.setZIndexOffset(10000);
+}
+
+function syncGpsTimelineRange(minTime, maxTime, value) {
+  const safeValue = Math.max(minTime, Math.min(maxTime, Number(value) || minTime));
+  scrollBar.min = minTime.toFixed(2);
+  scrollBar.max = maxTime.toFixed(2);
+  scrollBar.step = '0.04';
+  scrollBar.value = safeValue.toFixed(2);
+  if (gpsFullscreenTimeline) {
+    gpsFullscreenTimeline.min = scrollBar.min;
+    gpsFullscreenTimeline.max = scrollBar.max;
+    gpsFullscreenTimeline.step = scrollBar.step;
+    gpsFullscreenTimeline.value = scrollBar.value;
+  }
+  return safeValue;
+}
+
+function selectGpsLapView(index) {
+  if (!gpsLapResults.length || !gpsLapRouteLayer) return;
+  const isSingle = Number.isInteger(index) && index >= 0 && index < gpsLapResults.length;
+  gpsSelectedLapIndex = isSingle ? index : -1;
+  gpsLapRouteLayer.clearLayers();
+  gpsLapRouteLines.forEach((line, lineIndex) => {
+    if (!isSingle || lineIndex === index) line.addTo(gpsLapRouteLayer);
+  });
+  gpsLapMapLegend?.querySelectorAll('[data-lap-view]').forEach(button => {
+    button.classList.toggle('active', isSingle ? Number(button.dataset.lapView) === index : button.dataset.lapView === 'all');
+  });
+
+  setGpsPlayback(false);
+  if (isSingle) {
+    const lap = gpsLapResults[index];
+    const targetTime = syncGpsTimelineRange(lap.startTime, lap.endTime, lap.startTime);
+    updateGpsCursorAtTime(targetTime);
+    const line = gpsLapRouteLines[index];
+    if (line?.getBounds().isValid()) gpsMap.fitBounds(line.getBounds(), { padding: [45, 45], maxZoom: 20 });
+  } else {
+    const targetTime = syncGpsTimelineRange(currentStartSec, currentEndSec, scrollBar.value);
+    updateGpsCursorAtTime(targetTime);
+    const visibleLines = gpsLapRouteLines.filter(Boolean);
+    if (visibleLines.length) {
+      const bounds = L.featureGroup(visibleLines).getBounds();
+      if (bounds.isValid()) gpsMap.fitBounds(bounds, { padding: [30, 30] });
+    }
+  }
   if (gpsCursorMarker) gpsCursorMarker.setZIndexOffset(10000);
 }
 
@@ -532,6 +586,9 @@ function renderGpsLapResults(crossings, laps) {
   }
   drawGpsLapRoutes(laps);
   updateGpsCursorLapColor(Number(scrollBar?.value));
+  if (tabGps?.classList.contains('active') && activeSampledData.length) {
+    syncGpsTimelineRange(currentStartSec, currentEndSec, scrollBar.value);
+  }
 
   if (!gpsLapList) return;
   if (!laps.length) {
@@ -673,6 +730,8 @@ function clearGpsLapAnalysis() {
   gpsLapSelectionActive = false;
   gpsFinishPoints = [];
   gpsLapResults = [];
+  gpsSelectedLapIndex = -1;
+  gpsLapRouteLines = [];
   if (gpsFinishLine && gpsMap) gpsMap.removeLayer(gpsFinishLine);
   gpsFinishLine = null;
   if (gpsFinishPreviewLine && gpsMap) gpsMap.removeLayer(gpsFinishPreviewLine);
@@ -687,6 +746,9 @@ function clearGpsLapAnalysis() {
     gpsLapMapLegend.innerHTML = '';
   }
   updateGpsCursorLapColor(Number(scrollBar?.value));
+  if (tabGps?.classList.contains('active') && activeSampledData.length) {
+    syncGpsTimelineRange(currentStartSec, currentEndSec, scrollBar.value);
+  }
   if (gpsLapSetLine) gpsLapSetLine.classList.remove('active');
   if (gpsLapClear) gpsLapClear.disabled = true;
   if (gpsMap) gpsMap.getContainer().classList.remove('gps-lap-selecting');
@@ -822,6 +884,13 @@ gpsLapMinTime?.addEventListener('change', () => {
   const clamped = Math.max(5, Math.min(600, Number(gpsLapMinTime.value) || 20));
   gpsLapMinTime.value = String(clamped);
   if (gpsFinishPoints.length === 2) calculateGpsLaps();
+});
+
+gpsLapMapLegend?.addEventListener('click', event => {
+  const button = event.target.closest('[data-lap-view]');
+  if (!button) return;
+  const index = button.dataset.lapView === 'all' ? -1 : Number(button.dataset.lapView);
+  selectGpsLapView(index);
 });
 
 gpsMapFullscreen?.addEventListener('click', async () => {
