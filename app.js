@@ -686,6 +686,7 @@ function ensureGpsDetailCharts() {
           y: {
             min: sourceYOptions.min ?? sourceYScale?.min,
             max: sourceYOptions.max ?? sourceYScale?.max,
+            afterFit(scale) { scale.width = 48; },
             grid: { color: 'rgba(71, 85, 105, 0.14)' },
             ticks: {
               color: '#475569',
