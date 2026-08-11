@@ -2144,9 +2144,9 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   min-width: 0;
   min-height: 0;
   padding: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid #cbd5e1;
   border-radius: 7px;
-  background: rgba(15, 23, 42, 0.94);
+  background: rgba(248, 250, 252, 0.97);
   overflow-y: auto;
 }
 
@@ -2155,19 +2155,22 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   justify-content: space-between;
   align-items: baseline;
   padding: 2px 3px 7px;
-  color: #fff;
+  color: #0f172a;
   font: 800 12px var(--font-mono);
 }
-.gps-detail-head span { color: #94a3b8; font-size: 8px; }
+.gps-detail-head span { color: #64748b; font-size: 8px; }
 .gps-fullscreen-detail section {
   flex: 1 0 115px;
   min-height: 115px;
   display: flex;
   flex-direction: column;
   padding: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-top: 1px solid #dbe3ed;
+  background: #ffffff;
 }
-.gps-fullscreen-detail section b { color: #dbe5f3; font: 800 9px var(--font-mono); }
+.gps-fullscreen-detail section header { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; min-height: 16px; }
+.gps-fullscreen-detail section b { color: #334155; font: 800 9px var(--font-mono); }
+.gps-fullscreen-detail section output { color: #0f172a; font: 800 8px var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
 .gps-fullscreen-detail section canvas { flex: 1; min-height: 0; width: 100% !important; height: 100% !important; }
 
 .gps-fullscreen-speed span { color: rgba(255, 255, 255, 0.7); font: 800 9px var(--font-mono); }

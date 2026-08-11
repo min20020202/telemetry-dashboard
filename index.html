@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260811-14">
+  <link rel="stylesheet" href="style.css?v=20260811-15">
 </head>
 <body>
 
@@ -327,11 +327,11 @@
               <button id="gps-fullscreen-detail-toggle" class="gps-fullscreen-detail-toggle" type="button">상세정보 ›</button>
               <aside id="gps-fullscreen-detail" class="gps-fullscreen-detail">
                 <div class="gps-detail-head"><strong>주행 상세정보</strong><span>현재 시점 동기화</span></div>
-                <section><b>Vehicle Speed</b><canvas id="gps-detail-speed"></canvas></section>
-                <section><b>Engine RPM</b><canvas id="gps-detail-rpm"></canvas></section>
-                <section><b>Gear</b><canvas id="gps-detail-gear"></canvas></section>
-                <section><b>Steering Angle</b><canvas id="gps-detail-steering"></canvas></section>
-                <section><b>Throttle / Brake</b><canvas id="gps-detail-throttle-brake"></canvas></section>
+                <section><header><b>Vehicle Speed</b><output id="gps-detail-speed-value">--.- km/h</output></header><canvas id="gps-detail-speed"></canvas></section>
+                <section><header><b>Engine RPM</b><output id="gps-detail-rpm-value">---- rpm</output></header><canvas id="gps-detail-rpm"></canvas></section>
+                <section><header><b>Gear</b><output id="gps-detail-gear-value">-</output></header><canvas id="gps-detail-gear"></canvas></section>
+                <section><header><b>Steering Angle</b><output id="gps-detail-steering-value">--.-°</output></header><canvas id="gps-detail-steering"></canvas></section>
+                <section><header><b>Throttle / Brake</b><output id="gps-detail-pedal-value">--.- / --.- %</output></header><canvas id="gps-detail-throttle-brake"></canvas></section>
               </aside>
 
               <!-- 지도 우측 상단: 현재 GPS 커서 지점의 조향각 위젯 -->
@@ -625,6 +625,6 @@
   <script src="filters.js?v=20260810-1"></script>
   <script src="steering.js?v=20260802-4"></script>
   <script src="realtime.js?v=20260802-4"></script>
-  <script src="app.js?v=20260811-13"></script>
+  <script src="app.js?v=20260811-14"></script>
 </body>
 </html>

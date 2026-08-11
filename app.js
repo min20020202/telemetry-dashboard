@@ -147,6 +147,11 @@ const gpsFullscreenLapTimes = document.getElementById('gps-fullscreen-lap-times'
 const gpsFullscreenSpeedValue = document.getElementById('gps-fullscreen-speed-value');
 const gpsFullscreenDetailToggle = document.getElementById('gps-fullscreen-detail-toggle');
 const gpsFullscreenDetail = document.getElementById('gps-fullscreen-detail');
+const gpsDetailSpeedValue = document.getElementById('gps-detail-speed-value');
+const gpsDetailRpmValue = document.getElementById('gps-detail-rpm-value');
+const gpsDetailGearValue = document.getElementById('gps-detail-gear-value');
+const gpsDetailSteeringValue = document.getElementById('gps-detail-steering-value');
+const gpsDetailPedalValue = document.getElementById('gps-detail-pedal-value');
 
 // Theme Switcher DOM
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
@@ -598,6 +603,30 @@ const gpsDetailCursorPlugin = {
     ctx.moveTo(x, area.top);
     ctx.lineTo(x, area.bottom);
     ctx.stroke();
+    chart.data.datasets.forEach((dataset, datasetIndex) => {
+      const data = dataset.data || [];
+      if (!data.length) return;
+      let lo = 0, hi = data.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (Number(data[mid].x) < time) lo = mid + 1;
+        else hi = mid;
+      }
+      const left = Math.max(0, lo - 1);
+      const nearest = Math.abs(Number(data[left].x) - time) <= Math.abs(Number(data[lo].x) - time) ? data[left] : data[lo];
+      const value = Number(nearest?.y);
+      const yScale = chart.scales[dataset.yAxisID || 'y'];
+      if (!Number.isFinite(value) || !yScale) return;
+      const y = yScale.getPixelForValue(value);
+      if (y < area.top || y > area.bottom) return;
+      ctx.beginPath();
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = dataset.borderColor || '#2563eb';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+    });
     ctx.restore();
   }
 };
@@ -608,11 +637,11 @@ function destroyGpsDetailCharts() {
   gpsDetailSourceData = null;
 }
 
-function cloneGpsDetailDatasets(sourceChart) {
-  return (sourceChart?.data?.datasets || []).map(dataset => ({
+function cloneGpsDetailDatasets(sourceChart, palette) {
+  return (sourceChart?.data?.datasets || []).map((dataset, index) => ({
     label: dataset.label || '',
     data: dataset.data,
-    borderColor: dataset.borderColor,
+    borderColor: palette[index] || dataset.borderColor,
     backgroundColor: dataset.backgroundColor,
     borderWidth: Math.max(1.2, Number(dataset.borderWidth) || 1.2),
     pointRadius: 0,
@@ -627,20 +656,22 @@ function ensureGpsDetailCharts() {
   if (gpsDetailCharts.length && gpsDetailSourceData === globalData) return;
   destroyGpsDetailCharts();
   const specs = [
-    ['gps-detail-speed', chartSpeed],
-    ['gps-detail-rpm', chartRpm],
-    ['gps-detail-gear', chartGear],
-    ['gps-detail-steering', chartSteering],
-    ['gps-detail-throttle-brake', chartThrottleBrake]
+    ['gps-detail-speed', chartSpeed, ['#f97316', '#2563eb', '#16a34a']],
+    ['gps-detail-rpm', chartRpm, ['#dc2626']],
+    ['gps-detail-gear', chartGear, ['#2563eb']],
+    ['gps-detail-steering', chartSteering, ['#db2777']],
+    ['gps-detail-throttle-brake', chartThrottleBrake, ['#16a34a', '#dc2626']]
   ];
-  gpsDetailCharts = specs.map(([id, source]) => {
+  gpsDetailCharts = specs.map(([id, source, palette]) => {
     const canvas = document.getElementById(id);
     if (!canvas || !source) return null;
     const min = Number(scrollBar.min) || currentStartSec;
     const max = Number(scrollBar.max) || currentEndSec;
+    const sourceYOptions = source.options?.scales?.y || {};
+    const sourceYScale = source.scales?.y;
     return new Chart(canvas.getContext('2d'), {
       type: 'line',
-      data: { datasets: cloneGpsDetailDatasets(source) },
+      data: { datasets: cloneGpsDetailDatasets(source, palette) },
       plugins: [gpsDetailCursorPlugin],
       options: {
         responsive: true,
@@ -653,8 +684,16 @@ function ensureGpsDetailCharts() {
         scales: {
           x: { type: 'linear', min, max, display: false, grid: { display: false } },
           y: {
-            grid: { color: 'rgba(148, 163, 184, 0.16)' },
-            ticks: { color: '#b8c2d3', font: { size: 8 }, maxTicksLimit: 4 }
+            min: sourceYOptions.min ?? sourceYScale?.min,
+            max: sourceYOptions.max ?? sourceYScale?.max,
+            grid: { color: 'rgba(71, 85, 105, 0.14)' },
+            ticks: {
+              color: '#475569',
+              font: { size: 8 },
+              maxTicksLimit: 4,
+              stepSize: sourceYOptions.ticks?.stepSize,
+              callback: sourceYOptions.ticks?.callback
+            }
           }
         }
       }
@@ -673,10 +712,38 @@ function updateGpsDetailChartRange(minTime, maxTime) {
 
 function updateGpsDetailCursors(targetTime) {
   if (!gpsFullscreenDetail?.classList.contains('open')) return;
+  updateGpsDetailReadouts(targetTime);
   gpsDetailCharts.forEach(chart => {
     chart.$gpsCursorTime = targetTime;
     chart.draw();
   });
+}
+
+function detailChannelValue(key, row, index, fallback) {
+  if (typeof channelValueAt === 'function' && index >= 0) {
+    const value = channelValueAt(key, index);
+    if (Number.isFinite(value)) return value;
+  }
+  return fallback(row);
+}
+
+function updateGpsDetailReadouts(targetTime) {
+  const index = globalData.length ? findGlobalIndexAtTime(targetTime) : -1;
+  const row = index >= 0 ? globalData[index] : null;
+  if (!row) return;
+  const fl = detailChannelValue('fl_speed', row, index, r => Number(r.fl_speed_kmh) || 0);
+  const rl = detailChannelValue('rl_speed', row, index, r => Number(r.rl_speed_kmh) || 0);
+  const rr = detailChannelValue('rr_speed', row, index, r => Number(r.rr_speed_kmh) || 0);
+  const rpm = detailChannelValue('rpm', row, index, r => Number(r.rpm) || 0);
+  const gear = detailChannelValue('gear', row, index, r => Number(r.gear) || 0);
+  const steering = detailChannelValue('steering', row, index, r => getCalibratedSteering(r.steering_raw));
+  const throttle = detailChannelValue('throttle', row, index, r => Number(r.decoded_tps) || 0);
+  const brake = detailChannelValue('brake', row, index, r => getCalibratedBrake(r.front_brake_raw));
+  if (gpsDetailSpeedValue) gpsDetailSpeedValue.textContent = `FL ${fl.toFixed(1)} · RL ${rl.toFixed(1)} · RR ${rr.toFixed(1)} km/h`;
+  if (gpsDetailRpmValue) gpsDetailRpmValue.textContent = `${Math.round(rpm)} rpm`;
+  if (gpsDetailGearValue) gpsDetailGearValue.textContent = gear > 0 ? String(Math.round(gear)) : 'N';
+  if (gpsDetailSteeringValue) gpsDetailSteeringValue.textContent = `${steering >= 0 ? '+' : ''}${steering.toFixed(1)}°`;
+  if (gpsDetailPedalValue) gpsDetailPedalValue.textContent = `T ${throttle.toFixed(1)} · B ${brake.toFixed(1)} %`;
 }
 
 function refitGpsMapToCurrentLapView() {
