@@ -479,6 +479,23 @@ function formatGpsClock(seconds) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${secs.toFixed(2).padStart(5, '0')}`;
 }
 
+function gpsClockAtTelemetryTime(targetTime, nearbyIndex = -1) {
+  if (!globalData.length || !Number.isFinite(targetTime)) return NaN;
+  let index = nearbyIndex >= 0 ? nearbyIndex : findGlobalIndexAtTime(targetTime);
+  index = Math.max(0, Math.min(globalData.length - 1, index));
+  for (let distance = 0; distance < globalData.length; distance += 1) {
+    for (const candidateIndex of distance ? [index - distance, index + distance] : [index]) {
+      if (candidateIndex < 0 || candidateIndex >= globalData.length) continue;
+      const row = globalData[candidateIndex];
+      const clock = parseGpsClockSeconds(row.gps_time);
+      if (Number.isFinite(clock) && Number.isFinite(row.time_sec)) {
+        return clock + (targetTime - row.time_sec);
+      }
+    }
+  }
+  return NaN;
+}
+
 function setGpsLapStatus(text, className = '') {
   if (!gpsLapToolbarStatus) return;
   gpsLapToolbarStatus.textContent = text;
@@ -675,9 +692,14 @@ function refreshGpsFullscreenOverlays() {
     gpsFullscreenLapTimes.hidden = true;
   }
   updateGpsCursorLapColor(Number(scrollBar?.value));
-  const row = globalData.length ? globalData[findGlobalIndexAtTime(Number(scrollBar?.value) || 0)] : null;
+  const targetTime = Number(scrollBar?.value) || 0;
+  const rowIndex = globalData.length ? findGlobalIndexAtTime(targetTime) : -1;
+  const row = rowIndex >= 0 ? globalData[rowIndex] : null;
   if (row && gpsFullscreenSpeedValue) {
     gpsFullscreenSpeedValue.textContent = (Number(row.gps_speed_kmh) || 0).toFixed(1);
+  }
+  if (gpsFullscreenPlayTime) {
+    gpsFullscreenPlayTime.textContent = `${formatGpsClock(gpsClockAtTelemetryTime(targetTime, rowIndex))} KST`;
   }
 }
 
@@ -1035,7 +1057,19 @@ function closeGpsFullscreenDetail() {
   const stage = gpsFullscreenDetailToggle?.closest('.gps-map-stage');
   gpsFullscreenDetail?.classList.remove('open');
   stage?.classList.remove('gps-detail-open');
+  dockGoProPanelForDetail(false);
   if (gpsFullscreenDetailToggle) gpsFullscreenDetailToggle.textContent = '상세정보 ›';
+}
+
+function dockGoProPanelForDetail(open) {
+  if (!gpsGoProPanel || !gpsFullscreenDetail) return;
+  const stage = gpsFullscreenDetail.closest('.gps-map-stage');
+  if (open) {
+    const firstSection = gpsFullscreenDetail.querySelector('section');
+    gpsFullscreenDetail.insertBefore(gpsGoProPanel, firstSection);
+  } else if (stage && gpsGoProPanel.parentElement !== stage) {
+    stage.appendChild(gpsGoProPanel);
+  }
 }
 
 function selectGpsLapView(index) {
@@ -1439,6 +1473,7 @@ gpsFullscreenDetailToggle?.addEventListener('click', () => {
   const open = !gpsFullscreenDetail.classList.contains('open');
   gpsFullscreenDetail.classList.toggle('open', open);
   stage?.classList.toggle('gps-detail-open', open);
+  dockGoProPanelForDetail(open);
   gpsFullscreenDetailToggle.textContent = open ? '상세정보 닫기 ›' : '상세정보 ›';
   if (open) {
     ensureGpsDetailCharts();
@@ -2168,10 +2203,10 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
     scrollBar.value = clampedTime.toFixed(2);
     if (gpsPlayTime) gpsPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
     if (gpsFullscreenTimeline) gpsFullscreenTimeline.value = clampedTime.toFixed(2);
-    if (gpsFullscreenPlayTime) gpsFullscreenPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
     const primaryLap = gpsLapResults[gpsSelectedLapIndices[0]];
     const primaryTime = primaryLap.startTime + Math.min(clampedTime, primaryLap.duration);
     const primaryIndex = findGlobalIndexAtTime(primaryTime);
+    if (gpsFullscreenPlayTime) gpsFullscreenPlayTime.textContent = `${formatGpsClock(gpsClockAtTelemetryTime(primaryTime, primaryIndex))} KST`;
     const primaryRow = primaryIndex >= 0 ? globalData[primaryIndex] : null;
     if (primaryRow) {
       currentCursorIndex = findSampleIndexAtTime(primaryTime);
@@ -2200,7 +2235,7 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
   scrollBar.value = clampedTime.toFixed(2);
   if (gpsPlayTime) gpsPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
   if (gpsFullscreenTimeline) gpsFullscreenTimeline.value = clampedTime.toFixed(2);
-  if (gpsFullscreenPlayTime) gpsFullscreenPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
+  if (gpsFullscreenPlayTime) gpsFullscreenPlayTime.textContent = `${formatGpsClock(gpsClockAtTelemetryTime(clampedTime, globalIndex))} KST`;
   if (row) {
     const displayRow = getFilteredImuRowAtTime(row, clampedTime, globalIndex);
     const gpsPosition = getInterpolatedGpsPosition(clampedTime, globalIndex);
