@@ -1476,29 +1476,27 @@ gpsFullscreenDetailToggle?.addEventListener('click', () => {
   }, 100);
 });
 
-gpsMapFullscreen?.addEventListener('click', async () => {
+function setGpsAppFullscreen(active) {
   const card = gpsMapFullscreen.closest('.gps-map-card');
   if (!card) return;
-  if (card.classList.contains('gps-map-fullscreen-fallback')) {
-    closeGpsFullscreenDetail();
-    card.classList.remove('gps-map-fullscreen-fallback');
-    card.classList.remove('is-gps-fullscreen');
-    document.body.classList.remove('gps-map-fullscreen-open');
-    gpsMapFullscreen.textContent = '⛶ 전체화면';
-    setTimeout(() => gpsMap?.invalidateSize(), 80);
-    return;
-  }
-  try {
-    if (document.fullscreenElement === card) await document.exitFullscreen();
-    else await card.requestFullscreen();
-  } catch (err) {
-    card.classList.toggle('gps-map-fullscreen-fallback');
-    card.classList.toggle('is-gps-fullscreen', card.classList.contains('gps-map-fullscreen-fallback'));
-    document.body.classList.toggle('gps-map-fullscreen-open', card.classList.contains('gps-map-fullscreen-fallback'));
-    gpsMapFullscreen.textContent = card.classList.contains('gps-map-fullscreen-fallback') ? '✕ 전체화면 종료' : '⛶ 전체화면';
-    if (card.classList.contains('gps-map-fullscreen-fallback')) refreshGpsFullscreenOverlays();
-  }
+  card.classList.toggle('gps-map-fullscreen-fallback', active);
+  card.classList.toggle('is-gps-fullscreen', active);
+  document.body.classList.toggle('gps-map-fullscreen-open', active);
+  gpsMapFullscreen.textContent = active ? '✕ 전체화면 종료' : '⛶ 전체화면';
+  if (active) refreshGpsFullscreenOverlays();
+  else closeGpsFullscreenDetail();
   setTimeout(() => gpsMap?.invalidateSize(), 80);
+}
+
+gpsMapFullscreen?.addEventListener('click', () => {
+  const card = gpsMapFullscreen.closest('.gps-map-card');
+  setGpsAppFullscreen(!card?.classList.contains('gps-map-fullscreen-fallback'));
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  const card = gpsMapFullscreen?.closest('.gps-map-card');
+  if (card?.classList.contains('gps-map-fullscreen-fallback')) setGpsAppFullscreen(false);
 });
 
 document.addEventListener('fullscreenchange', () => {
