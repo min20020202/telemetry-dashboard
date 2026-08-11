@@ -144,6 +144,7 @@ const gpsFullscreenPlayRate = document.getElementById('gps-fullscreen-play-rate'
 const gpsFullscreenTimeline = document.getElementById('gps-fullscreen-timeline');
 const gpsFullscreenPlayTime = document.getElementById('gps-fullscreen-play-time');
 const gpsFullscreenLapTimes = document.getElementById('gps-fullscreen-lap-times');
+const gpsFullscreenSpeedValue = document.getElementById('gps-fullscreen-speed-value');
 
 // Theme Switcher DOM
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
@@ -1933,6 +1934,7 @@ function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverr
   const gpsSpd = parseFloat(row.gps_speed_kmh) || 0.0;
   const wheelSpd = cursorChannelValue('fl_speed', row.fl_speed_kmh || 0);
   if (gpsCursorSpeed) gpsCursorSpeed.textContent = gpsSpd.toFixed(1);
+  if (gpsFullscreenSpeedValue) gpsFullscreenSpeedValue.textContent = gpsSpd.toFixed(1);
   if (gpsCursorWheelSpeed) gpsCursorWheelSpeed.textContent = wheelSpd.toFixed(1);
   if (gpsSpeedDelta) {
     const d = wheelSpd - gpsSpd;
