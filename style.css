@@ -2330,6 +2330,13 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   overflow: hidden;
 }
 .gps-map-stage.gps-video-loaded > #gps-map .leaflet-control-container { display: none; }
+.gps-map-stage.gps-video-loaded > #gps-map {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  pointer-events: none;
+}
+.gps-map-stage.gps-video-loaded > #gps-map .leaflet-tile-pane { display: none; }
 .gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded.gps-detail-open,
 .gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded.gps-detail-open {
   display: grid;
