@@ -2319,16 +2319,17 @@ body.gps-map-fullscreen-open { overflow: hidden; }
 .gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded > #gps-map,
 .gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded > #gps-map {
   position: absolute !important;
-  left: 14px;
-  bottom: 14px;
+  left: 4px;
+  bottom: 4px;
   z-index: 900;
-  width: min(31vw, 520px) !important;
-  height: min(38vh, 410px) !important;
+  width: clamp(260px, 19vw, 360px) !important;
+  height: clamp(260px, 34vh, 360px) !important;
   border: 2px solid rgba(255, 255, 255, 0.9);
   border-radius: 10px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.48);
   overflow: hidden;
 }
+.gps-map-stage.gps-video-loaded > #gps-map .leaflet-control-container { display: none; }
 .gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded.gps-detail-open,
 .gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded.gps-detail-open {
   display: grid;

@@ -983,14 +983,16 @@ function updateGpsDetailReadouts(targetTime) {
 
 function refitGpsMapToCurrentLapView() {
   if (!gpsMap) return;
+  const compactVideoMap = gpsMap.getContainer()?.closest('.gps-map-stage')?.classList.contains('gps-video-loaded');
+  const padding = compactVideoMap ? [4, 4] : [35, 35];
   if (gpsSelectedLapIndices.length) {
     const lines = gpsSelectedLapIndices.map(index => gpsLapRouteLines[index]).filter(Boolean);
     const bounds = lines.length ? L.featureGroup(lines).getBounds() : null;
-    if (bounds?.isValid()) gpsMap.fitBounds(bounds, { padding: [35, 35], maxZoom: 20 });
+    if (bounds?.isValid()) gpsMap.fitBounds(bounds, { padding, maxZoom: 20 });
   } else {
     const lines = gpsLapRouteLines.filter(Boolean);
     const bounds = lines.length ? L.featureGroup(lines).getBounds() : gpsRouteLine?.getBounds();
-    if (bounds?.isValid()) gpsMap.fitBounds(bounds, { padding: [30, 30] });
+    if (bounds?.isValid()) gpsMap.fitBounds(bounds, { padding: compactVideoMap ? [4, 4] : [30, 30], maxZoom: 20 });
   }
 }
 
