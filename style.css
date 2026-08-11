@@ -2160,6 +2160,7 @@ body.gps-map-fullscreen-open { overflow: hidden; }
 }
 .gps-detail-head span { color: #64748b; font-size: 8px; }
 .gps-fullscreen-detail section {
+  position: relative;
   flex: 1 0 115px;
   min-height: 115px;
   display: flex;
@@ -2172,6 +2173,28 @@ body.gps-map-fullscreen-open { overflow: hidden; }
 .gps-fullscreen-detail section b { color: #334155; font: 800 9px var(--font-mono); }
 .gps-fullscreen-detail section output { color: #0f172a; font: 800 8px var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
 .gps-fullscreen-detail section canvas { flex: 1; min-height: 0; width: 100% !important; height: 100% !important; }
+
+.gps-detail-cursor-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.gps-detail-cursor-line {
+  position: absolute;
+  width: 1.5px;
+  background: #ff7a1a;
+  transform: translateX(-50%);
+}
+.gps-detail-cursor-dots > i {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  transform: translate(-50%, -50%);
+}
 
 .gps-fullscreen-speed span { color: rgba(255, 255, 255, 0.7); font: 800 9px var(--font-mono); }
 .gps-fullscreen-speed strong { color: #fff; font: 800 26px/1 var(--font-mono); font-variant-numeric: tabular-nums; }

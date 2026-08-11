@@ -672,7 +672,6 @@ function ensureGpsDetailCharts() {
     return new Chart(canvas.getContext('2d'), {
       type: 'line',
       data: { datasets: cloneGpsDetailDatasets(source, palette) },
-      plugins: [gpsDetailCursorPlugin],
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -700,6 +699,7 @@ function ensureGpsDetailCharts() {
       }
     });
   }).filter(Boolean);
+  gpsDetailCharts.forEach(ensureGpsDetailCursorOverlay);
   gpsDetailSourceData = globalData;
 }
 
@@ -716,7 +716,63 @@ function updateGpsDetailCursors(targetTime) {
   updateGpsDetailReadouts(targetTime);
   gpsDetailCharts.forEach(chart => {
     chart.$gpsCursorTime = targetTime;
-    chart.draw();
+    updateGpsDetailCursorOverlay(chart, targetTime);
+  });
+}
+
+function ensureGpsDetailCursorOverlay(chart) {
+  const section = chart.canvas.closest('section');
+  if (!section || section.querySelector('.gps-detail-cursor-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'gps-detail-cursor-overlay';
+  overlay.innerHTML = '<i class="gps-detail-cursor-line"></i><div class="gps-detail-cursor-dots"></div>';
+  section.appendChild(overlay);
+}
+
+function nearestGpsDetailPoint(data, time) {
+  if (!data?.length) return null;
+  let lo = 0, hi = data.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (Number(data[mid].x) < time) lo = mid + 1;
+    else hi = mid;
+  }
+  const left = Math.max(0, lo - 1);
+  return Math.abs(Number(data[left].x) - time) <= Math.abs(Number(data[lo].x) - time) ? data[left] : data[lo];
+}
+
+function updateGpsDetailCursorOverlay(chart, targetTime) {
+  const section = chart.canvas.closest('section');
+  const overlay = section?.querySelector('.gps-detail-cursor-overlay');
+  const xScale = chart.scales?.x;
+  const area = chart.chartArea;
+  if (!overlay || !xScale || !area || targetTime < xScale.min || targetTime > xScale.max) {
+    if (overlay) overlay.style.display = 'none';
+    return;
+  }
+  overlay.style.display = 'block';
+  const canvasLeft = chart.canvas.offsetLeft;
+  const canvasTop = chart.canvas.offsetTop;
+  const x = canvasLeft + xScale.getPixelForValue(targetTime);
+  const line = overlay.querySelector('.gps-detail-cursor-line');
+  line.style.left = `${x}px`;
+  line.style.top = `${canvasTop + area.top}px`;
+  line.style.height = `${area.bottom - area.top}px`;
+
+  const dots = overlay.querySelector('.gps-detail-cursor-dots');
+  dots.innerHTML = '';
+  chart.data.datasets.forEach(dataset => {
+    const point = nearestGpsDetailPoint(dataset.data, targetTime);
+    const value = Number(point?.y);
+    const yScale = chart.scales[dataset.yAxisID || 'y'];
+    if (!Number.isFinite(value) || !yScale) return;
+    const y = canvasTop + yScale.getPixelForValue(value);
+    if (y < canvasTop + area.top || y > canvasTop + area.bottom) return;
+    const dot = document.createElement('i');
+    dot.style.left = `${x}px`;
+    dot.style.top = `${y}px`;
+    dot.style.background = dataset.borderColor || '#2563eb';
+    dots.appendChild(dot);
   });
 }
 
@@ -1160,6 +1216,7 @@ gpsFullscreenDetailToggle?.addEventListener('click', () => {
     gpsMap?.invalidateSize();
     refitGpsMapToCurrentLapView();
     gpsDetailCharts.forEach(chart => chart.resize());
+    updateGpsDetailCursors(Number(scrollBar.value));
   }, 100);
 });
 
