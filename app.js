@@ -147,6 +147,11 @@ const gpsFullscreenLapTimes = document.getElementById('gps-fullscreen-lap-times'
 const gpsFullscreenSpeedValue = document.getElementById('gps-fullscreen-speed-value');
 const gpsFullscreenDetailToggle = document.getElementById('gps-fullscreen-detail-toggle');
 const gpsFullscreenDetail = document.getElementById('gps-fullscreen-detail');
+const gpsGoProFile = document.getElementById('gps-gopro-file');
+const gpsGoProPanel = document.getElementById('gps-gopro-panel');
+const gpsGoProVideo = document.getElementById('gps-gopro-video');
+const gpsGoProStatus = document.getElementById('gps-gopro-status');
+const gpsGoProClose = document.getElementById('gps-gopro-close');
 const gpsDetailSpeedValue = document.getElementById('gps-detail-speed-value');
 const gpsDetailRpmValue = document.getElementById('gps-detail-rpm-value');
 const gpsDetailGearValue = document.getElementById('gps-detail-gear-value');
@@ -283,6 +288,130 @@ let gpsPlaybackActive = false;
 let gpsPlaybackFrame = null;
 let gpsPlaybackLastTimestamp = null;
 let gpsPlaybackCursorSec = 0;
+let gpsGoProObjectUrl = '';
+let gpsGoProTelemetryStartSec = NaN;
+let gpsGoProMatched = false;
+
+async function readMp4AtomHeader(file, offset) {
+  if (offset + 8 > file.size) return null;
+  const bytes = new Uint8Array(await file.slice(offset, Math.min(file.size, offset + 16)).arrayBuffer());
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let size = view.getUint32(0);
+  const type = String.fromCharCode(...bytes.slice(4, 8));
+  let headerSize = 8;
+  if (size === 1 && bytes.length >= 16) {
+    size = Number(view.getBigUint64(8));
+    headerSize = 16;
+  } else if (size === 0) size = file.size - offset;
+  if (!Number.isFinite(size) || size < headerSize) return null;
+  return { offset, size, type, headerSize };
+}
+
+async function extractMp4CreationDate(file) {
+  let offset = 0;
+  for (let count = 0; offset < file.size && count < 10000; count += 1) {
+    const atom = await readMp4AtomHeader(file, offset);
+    if (!atom) break;
+    if (atom.type === 'moov') {
+      const buffer = await file.slice(atom.offset, atom.offset + atom.size).arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      const view = new DataView(buffer);
+      let child = atom.headerSize;
+      while (child + 12 <= bytes.length) {
+        let size = view.getUint32(child);
+        const type = String.fromCharCode(...bytes.slice(child + 4, child + 8));
+        let headerSize = 8;
+        if (size === 1 && child + 16 <= bytes.length) {
+          size = Number(view.getBigUint64(child + 8));
+          headerSize = 16;
+        }
+        if (!Number.isFinite(size) || size < headerSize || child + size > bytes.length) break;
+        if (type === 'mvhd') {
+          const version = view.getUint8(child + headerSize);
+          const creation = version === 1
+            ? Number(view.getBigUint64(child + headerSize + 4))
+            : view.getUint32(child + headerSize + 4);
+          if (creation > 2082844800) return new Date((creation - 2082844800) * 1000);
+        }
+        child += size;
+      }
+      break;
+    }
+    offset += atom.size;
+  }
+  return null;
+}
+
+function getCsvGpsClockRange() {
+  let first = null;
+  let last = null;
+  let previousClock = NaN;
+  let dayOffset = 0;
+  for (const row of globalData) {
+    const rawClock = parseGpsClockSeconds(row.gps_time);
+    if (!Number.isFinite(rawClock)) continue;
+    if (Number.isFinite(previousClock) && rawClock + dayOffset < previousClock - 43200) dayOffset += 86400;
+    const clock = rawClock + dayOffset;
+    const point = { clock, telemetry: Number(row.time_sec) };
+    if (!Number.isFinite(point.telemetry)) continue;
+    if (!first) first = point;
+    last = point;
+    previousClock = clock;
+  }
+  return first && last ? { first, last } : null;
+}
+
+function matchGoProToCsv(creationDate, duration) {
+  const range = getCsvGpsClockRange();
+  if (!range || !Number.isFinite(duration)) return null;
+  const rawStart = creationDate.getUTCHours() * 3600 + creationDate.getUTCMinutes() * 60 + creationDate.getUTCSeconds() + creationDate.getUTCMilliseconds() / 1000;
+  let best = null;
+  for (let day = -1; day <= 1; day += 1) {
+    const videoStart = rawStart + day * 86400;
+    const overlap = Math.min(range.last.clock, videoStart + duration) - Math.max(range.first.clock, videoStart);
+    if (!best || overlap > best.overlap) best = { videoStart, overlap, range };
+  }
+  if (!best || best.overlap <= 0) return null;
+  return {
+    telemetryStart: best.range.first.telemetry + (best.videoStart - best.range.first.clock),
+    overlap: best.overlap,
+    videoStartClock: best.videoStart
+  };
+}
+
+function syncGoProVideo(targetTime, force = false) {
+  if (!gpsGoProMatched || !gpsGoProVideo) return;
+  const videoTime = targetTime - gpsGoProTelemetryStartSec;
+  if (videoTime < 0 || videoTime > gpsGoProVideo.duration) {
+    gpsGoProVideo.pause();
+    return;
+  }
+  const drift = Math.abs(gpsGoProVideo.currentTime - videoTime);
+  if (force || !gpsPlaybackActive || drift > 0.12) gpsGoProVideo.currentTime = videoTime;
+  const rate = Number(gpsPlayRate?.value) || 1;
+  gpsGoProVideo.playbackRate = rate;
+  if (gpsPlaybackActive && gpsGoProVideo.paused) gpsGoProVideo.play().catch(() => {});
+  if (!gpsPlaybackActive && !gpsGoProVideo.paused) gpsGoProVideo.pause();
+}
+
+function getGoProTargetTelemetryTime(cursorTime) {
+  if (gpsSelectedLapIndices.length > 1) {
+    const primaryLap = gpsLapResults[gpsSelectedLapIndices[0]];
+    if (primaryLap) return primaryLap.startTime + Math.min(cursorTime, primaryLap.duration);
+  }
+  return cursorTime;
+}
+
+function closeGoProVideo() {
+  gpsGoProVideo?.pause();
+  if (gpsGoProVideo) gpsGoProVideo.removeAttribute('src');
+  if (gpsGoProObjectUrl) URL.revokeObjectURL(gpsGoProObjectUrl);
+  gpsGoProObjectUrl = '';
+  gpsGoProMatched = false;
+  gpsGoProTelemetryStartSec = NaN;
+  if (gpsGoProPanel) gpsGoProPanel.hidden = true;
+  if (gpsGoProFile) gpsGoProFile.value = '';
+}
 
 // NMEA coordinate converter helper
 function convertNmeaToDecimal(val, isLongitude = false) {
@@ -2048,6 +2177,7 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
         live.textContent = `${gpsSelectedLapIndices.length}개 랩 비교 · ${formatLapTime(clampedTime)}`;
         live.style.color = '#f97316';
       }
+      syncGoProVideo(primaryTime, !playbackFrame);
     }
     return;
   }
@@ -2067,6 +2197,7 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
     updateGpsCursorLapColor(clampedTime);
     updateGpsDetailCursors(clampedTime);
     drawExactImuCursor(clampedTime, displayRow);
+    syncGoProVideo(clampedTime, !playbackFrame);
   }
 }
 
@@ -2089,7 +2220,11 @@ function setGpsPlayback(shouldPlay) {
     gpsFullscreenPlayToggle.textContent = gpsPlaybackActive ? '❚❚ 일시정지' : '▶ 재생';
     gpsFullscreenPlayToggle.classList.toggle('playing', gpsPlaybackActive);
   }
-  if (!gpsPlaybackActive) return;
+  if (!gpsPlaybackActive) {
+    const cursorTime = Number(scrollBar?.value) || gpsPlaybackCursorSec;
+    syncGoProVideo(getGoProTargetTelemetryTime(cursorTime), true);
+    return;
+  }
 
   const minTime = Number(scrollBar.min) || 0;
   const maxTime = Number(scrollBar.max) || totalDurationSec;
@@ -2098,6 +2233,7 @@ function setGpsPlayback(shouldPlay) {
     gpsPlaybackCursorSec = minTime;
     updateGpsCursorAtTime(gpsPlaybackCursorSec);
   }
+  syncGoProVideo(getGoProTargetTelemetryTime(gpsPlaybackCursorSec), true);
 
   const playbackStep = timestamp => {
     if (!gpsPlaybackActive) return;
@@ -2147,6 +2283,53 @@ gpsFullscreenTimeline?.addEventListener('input', event => {
   setGpsPlayback(false);
   gpsPlaybackCursorSec = targetTime;
   updateGpsCursorAtTime(targetTime);
+});
+
+gpsGoProClose?.addEventListener('click', closeGoProVideo);
+gpsGoProFile?.addEventListener('change', async event => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  setGpsPlayback(false);
+  closeGoProVideo();
+  gpsGoProFile.value = '';
+  if (!globalData.length) {
+    gpsGoProPanel.hidden = false;
+    gpsGoProStatus.textContent = '먼저 CSV를 열어주세요.';
+    gpsGoProStatus.className = 'error';
+    return;
+  }
+  gpsGoProPanel.hidden = false;
+  gpsGoProStatus.textContent = 'MP4 촬영 시각을 확인하는 중…';
+  gpsGoProStatus.className = '';
+  try {
+    const creationDate = await extractMp4CreationDate(file);
+    if (!creationDate) throw new Error('MP4 내부 촬영 시각을 찾을 수 없습니다.');
+    gpsGoProObjectUrl = URL.createObjectURL(file);
+    gpsGoProVideo.src = gpsGoProObjectUrl;
+    await new Promise((resolve, reject) => {
+      gpsGoProVideo.onloadedmetadata = resolve;
+      gpsGoProVideo.onerror = () => reject(new Error('브라우저에서 이 MP4를 재생할 수 없습니다.'));
+    });
+    const match = matchGoProToCsv(creationDate, gpsGoProVideo.duration);
+    if (!match) {
+      gpsGoProMatched = false;
+      gpsGoProVideo.removeAttribute('src');
+      URL.revokeObjectURL(gpsGoProObjectUrl);
+      gpsGoProObjectUrl = '';
+      gpsGoProStatus.textContent = 'CSV와 영상의 시간이 겹치지 않습니다. 잘못된 파일 매칭이라 연결할 수 없습니다.';
+      gpsGoProStatus.className = 'error';
+      return;
+    }
+    gpsGoProTelemetryStartSec = match.telemetryStart;
+    gpsGoProMatched = true;
+    gpsGoProStatus.textContent = `${file.name} · ${formatGpsClock(match.videoStartClock)}부터 ${formatLapTime(match.overlap)} 구간 자동 매칭`;
+    gpsGoProStatus.className = 'success';
+    syncGoProVideo(Number(scrollBar.value) || 0, true);
+  } catch (error) {
+    gpsGoProMatched = false;
+    gpsGoProStatus.textContent = error.message || 'MP4 시간 정보를 읽지 못했습니다.';
+    gpsGoProStatus.className = 'error';
+  }
 });
 function applyGpsImuLowPassFilter() {
   const keys = ['imu_ax', 'imu_ay', 'imu_gx', 'imu_gy', 'imu_gz'];
