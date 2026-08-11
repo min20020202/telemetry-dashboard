@@ -272,6 +272,8 @@ let gpsLapSelectionActive = false;
 let gpsLapResults = [];
 let gpsLapRouteLines = [];
 let gpsSelectedLapIndex = -1;
+let gpsSelectedLapIndices = [];
+let gpsCompareMarkers = [];
 let gpsDetailCharts = [];
 let gpsDetailSourceData = null;
 const GPS_LAP_COLORS = ['#00e5ff', '#ff3d9a', '#76ff03', '#ffca28', '#7c4dff', '#ff6d00', '#00e676', '#40c4ff'];
@@ -476,12 +478,14 @@ function updateGpsFinishPreview(event) {
 }
 
 function updateGpsCursorScale() {
-  if (!gpsMap || !gpsCursorMarker) return;
-  const marker = gpsCursorMarker.getElement()?.querySelector('.gps-position-cursor');
-  if (!marker) return;
+  if (!gpsMap) return;
   const zoom = gpsMap.getZoom();
   const scale = Math.max(0.72, Math.min(1.18, 0.72 + (zoom - 7) * 0.031));
-  marker.style.setProperty('--gps-cursor-scale', scale.toFixed(3));
+  const marker = gpsCursorMarker?.getElement()?.querySelector('.gps-position-cursor');
+  if (marker) marker.style.setProperty('--gps-cursor-scale', scale.toFixed(3));
+  gpsCompareMarkers.forEach(compareMarker => {
+    compareMarker.getElement()?.querySelector('.gps-position-cursor')?.style.setProperty('--gps-cursor-scale', scale.toFixed(3));
+  });
 }
 
 function updateGpsCursorLapColor(targetTime) {
@@ -516,9 +520,9 @@ function renderFullscreenLapTimes(laps, best) {
   gpsFullscreenLapTimes.innerHTML = laps.length ? `
     <div class="gps-fs-lap-head"><span>Lap Times</span><strong>${bestLabel}</strong></div>
     <div class="gps-fs-lap-live" data-lap-live>완성된 랩 구간 밖</div>
-    <button type="button" class="gps-fs-lap-all${gpsSelectedLapIndex < 0 ? ' selected' : ''}" data-lap-panel-view="all">전체 랩 보기</button>
+    <button type="button" class="gps-fs-lap-all${gpsSelectedLapIndices.length === 0 ? ' selected' : ''}" data-lap-panel-view="all">전체 랩 보기</button>
     <div class="gps-fs-lap-list">${laps.map((lap, index) => `
-      <button type="button" class="${index === bestIndex ? 'best ' : ''}${index === gpsSelectedLapIndex ? 'selected' : ''}" data-lap-time-row="${index}" data-lap-panel-view="${index}" style="--lap-color:${GPS_LAP_COLORS[index % GPS_LAP_COLORS.length]}">
+      <button type="button" class="${index === bestIndex ? 'best ' : ''}${gpsSelectedLapIndices.includes(index) ? 'selected' : ''}" data-lap-time-row="${index}" data-lap-panel-view="${index}" style="--lap-color:${GPS_LAP_COLORS[index % GPS_LAP_COLORS.length]}">
         <span><i></i>LAP ${lap.number}${index === bestIndex ? '<b class="gps-best-star">★</b>' : ''}</span><strong>${formatLapTime(lap.duration)}</strong>
       </button>`).join('')}</div>` : '';
 }
@@ -541,6 +545,7 @@ function drawGpsLapRoutes(laps) {
   if (gpsLapRouteLayer) gpsLapRouteLayer.clearLayers();
   gpsLapRouteLines = [];
   gpsSelectedLapIndex = -1;
+  gpsSelectedLapIndices = [];
   if (gpsRouteLine) gpsRouteLine.setStyle({ opacity: laps.length ? 0.22 : 0.8, weight: laps.length ? 3 : 5 });
   if (gpsLapMapLegend) {
     gpsLapMapLegend.hidden = !laps.length;
@@ -768,8 +773,9 @@ function updateGpsDetailCursorOverlay(chart, targetTime) {
     if (!Number.isFinite(value) || !yScale) return;
     const y = canvasTop + yScale.getPixelForValue(value);
     if (y < canvasTop + area.top || y > canvasTop + area.bottom) return;
+    const dotX = canvasLeft + xScale.getPixelForValue(Number(point.x));
     const dot = document.createElement('i');
-    dot.style.left = `${x}px`;
+    dot.style.left = `${dotX}px`;
     dot.style.top = `${y}px`;
     dot.style.background = dataset.borderColor || '#2563eb';
     dots.appendChild(dot);
@@ -785,7 +791,9 @@ function detailChannelValue(key, row, index, fallback) {
 }
 
 function updateGpsDetailReadouts(targetTime) {
-  const index = globalData.length ? findGlobalIndexAtTime(targetTime) : -1;
+  const primaryLap = gpsSelectedLapIndices.length > 1 ? gpsLapResults[gpsSelectedLapIndices[0]] : null;
+  const lookupTime = primaryLap ? primaryLap.startTime + Math.min(targetTime, primaryLap.duration) : targetTime;
+  const index = globalData.length ? findGlobalIndexAtTime(lookupTime) : -1;
   const row = index >= 0 ? globalData[index] : null;
   if (!row) return;
   const fl = detailChannelValue('fl_speed', row, index, r => Number(r.fl_speed_kmh) || 0);
@@ -805,14 +813,87 @@ function updateGpsDetailReadouts(targetTime) {
 
 function refitGpsMapToCurrentLapView() {
   if (!gpsMap) return;
-  if (gpsSelectedLapIndex >= 0) {
-    const line = gpsLapRouteLines[gpsSelectedLapIndex];
-    if (line?.getBounds().isValid()) gpsMap.fitBounds(line.getBounds(), { padding: [35, 35], maxZoom: 20 });
+  if (gpsSelectedLapIndices.length) {
+    const lines = gpsSelectedLapIndices.map(index => gpsLapRouteLines[index]).filter(Boolean);
+    const bounds = lines.length ? L.featureGroup(lines).getBounds() : null;
+    if (bounds?.isValid()) gpsMap.fitBounds(bounds, { padding: [35, 35], maxZoom: 20 });
   } else {
     const lines = gpsLapRouteLines.filter(Boolean);
     const bounds = lines.length ? L.featureGroup(lines).getBounds() : gpsRouteLine?.getBounds();
     if (bounds?.isValid()) gpsMap.fitBounds(bounds, { padding: [30, 30] });
   }
+}
+
+function clearGpsCompareMarkers() {
+  gpsCompareMarkers.forEach(marker => gpsMap?.removeLayer(marker));
+  gpsCompareMarkers = [];
+  if (gpsCursorMarker) gpsCursorMarker.setOpacity(1);
+}
+
+function updateGpsCompareMarkers(relativeTime) {
+  if (gpsSelectedLapIndices.length < 2 || !gpsMap) return;
+  if (gpsCursorMarker) gpsCursorMarker.setOpacity(0);
+  while (gpsCompareMarkers.length > gpsSelectedLapIndices.length) {
+    gpsMap.removeLayer(gpsCompareMarkers.pop());
+  }
+  gpsSelectedLapIndices.forEach((lapIndex, markerIndex) => {
+    const lap = gpsLapResults[lapIndex];
+    const absoluteTime = lap.startTime + Math.min(relativeTime, lap.duration);
+    const globalIndex = findGlobalIndexAtTime(absoluteTime);
+    const position = getInterpolatedGpsPosition(absoluteTime, globalIndex);
+    if (!position) return;
+    let marker = gpsCompareMarkers[markerIndex];
+    if (!marker) {
+      const color = GPS_LAP_COLORS[lapIndex % GPS_LAP_COLORS.length];
+      const icon = L.divIcon({
+        className: 'custom-div-icon',
+        html: `<div class="gps-position-cursor gps-compare-cursor" style="--gps-cursor-color:${color}"><b>${lap.number}</b></div>`,
+        iconSize: [16, 16], iconAnchor: [8, 8]
+      });
+      marker = L.marker([position.lat, position.lon], { icon, zIndexOffset: 11000 + markerIndex }).addTo(gpsMap);
+      gpsCompareMarkers[markerIndex] = marker;
+    } else {
+      marker.setLatLng([position.lat, position.lon]);
+    }
+  });
+  updateGpsCursorScale();
+}
+
+function rebuildGpsDetailChartsForSelection() {
+  if (!gpsFullscreenDetail?.classList.contains('open')) return;
+  destroyGpsDetailCharts();
+  ensureGpsDetailCharts();
+  if (gpsSelectedLapIndices.length < 2) return;
+  const sources = [chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake];
+  const sourceDatasetIndexes = [[0], [0], [0], [0], [0, 1]];
+  gpsDetailCharts.forEach((chart, chartIndex) => {
+    const source = sources[chartIndex];
+    const selectedDatasets = [];
+    gpsSelectedLapIndices.forEach(lapIndex => {
+      const lap = gpsLapResults[lapIndex];
+      const color = GPS_LAP_COLORS[lapIndex % GPS_LAP_COLORS.length];
+      sourceDatasetIndexes[chartIndex].forEach((datasetIndex, subIndex) => {
+        const sourceDataset = source.data.datasets[datasetIndex];
+        const data = (sourceDataset.data || [])
+          .filter(point => point.x >= lap.startTime && point.x <= lap.endTime)
+          .map(point => ({ x: point.x - lap.startTime, y: point.y }));
+        selectedDatasets.push({
+          label: `LAP ${lap.number}${subIndex ? ' Brake' : ''}`,
+          data,
+          borderColor: color,
+          borderWidth: subIndex ? 1.2 : 1.8,
+          borderDash: subIndex ? [5, 3] : [],
+          pointRadius: 0,
+          stepped: sourceDataset.stepped,
+          fill: false
+        });
+      });
+    });
+    chart.data.datasets = selectedDatasets;
+    chart.options.scales.x.min = 0;
+    chart.options.scales.x.max = Math.max(...gpsSelectedLapIndices.map(index => gpsLapResults[index].duration));
+    chart.update('none');
+  });
 }
 
 function closeGpsFullscreenDetail() {
@@ -824,26 +905,39 @@ function closeGpsFullscreenDetail() {
 
 function selectGpsLapView(index) {
   if (!gpsLapResults.length || !gpsLapRouteLayer) return;
-  const isSingle = Number.isInteger(index) && index >= 0 && index < gpsLapResults.length;
-  gpsSelectedLapIndex = isSingle ? index : -1;
+  const validLap = Number.isInteger(index) && index >= 0 && index < gpsLapResults.length;
+  if (!validLap) gpsSelectedLapIndices = [];
+  else if (gpsSelectedLapIndices.includes(index)) gpsSelectedLapIndices = gpsSelectedLapIndices.filter(value => value !== index);
+  else gpsSelectedLapIndices = [...gpsSelectedLapIndices, index].sort((a, b) => a - b);
+  gpsSelectedLapIndex = gpsSelectedLapIndices.length === 1 ? gpsSelectedLapIndices[0] : -1;
+  const hasSelection = gpsSelectedLapIndices.length > 0;
+  const isComparison = gpsSelectedLapIndices.length > 1;
   gpsLapRouteLayer.clearLayers();
   gpsLapRouteLines.forEach((line, lineIndex) => {
-    if (!isSingle || lineIndex === index) line.addTo(gpsLapRouteLayer);
+    if (!hasSelection || gpsSelectedLapIndices.includes(lineIndex)) line.addTo(gpsLapRouteLayer);
   });
   gpsLapMapLegend?.querySelectorAll('[data-lap-view]').forEach(button => {
-    button.classList.toggle('active', isSingle ? Number(button.dataset.lapView) === index : button.dataset.lapView === 'all');
+    button.classList.toggle('active', button.dataset.lapView === 'all' ? !hasSelection : gpsSelectedLapIndices.includes(Number(button.dataset.lapView)));
   });
   gpsFullscreenLapTimes?.querySelectorAll('[data-lap-panel-view]').forEach(button => {
-    button.classList.toggle('selected', isSingle ? Number(button.dataset.lapPanelView) === index : button.dataset.lapPanelView === 'all');
+    button.classList.toggle('selected', button.dataset.lapPanelView === 'all' ? !hasSelection : gpsSelectedLapIndices.includes(Number(button.dataset.lapPanelView)));
   });
 
   setGpsPlayback(false);
-  if (isSingle) {
-    const lap = gpsLapResults[index];
+  clearGpsCompareMarkers();
+  rebuildGpsDetailChartsForSelection();
+  if (gpsSelectedLapIndices.length === 1) {
+    const selectedIndex = gpsSelectedLapIndices[0];
+    const lap = gpsLapResults[selectedIndex];
     const targetTime = syncGpsTimelineRange(lap.startTime, lap.endTime, lap.startTime);
     updateGpsCursorAtTime(targetTime);
-    const line = gpsLapRouteLines[index];
+    const line = gpsLapRouteLines[selectedIndex];
     if (line?.getBounds().isValid()) gpsMap.fitBounds(line.getBounds(), { padding: [45, 45], maxZoom: 20 });
+  } else if (isComparison) {
+    const maxDuration = Math.max(...gpsSelectedLapIndices.map(lapIndex => gpsLapResults[lapIndex].duration));
+    const targetTime = syncGpsTimelineRange(0, maxDuration, 0);
+    updateGpsCursorAtTime(targetTime);
+    refitGpsMapToCurrentLapView();
   } else {
     const targetTime = syncGpsTimelineRange(currentStartSec, currentEndSec, scrollBar.value);
     updateGpsCursorAtTime(targetTime);
@@ -859,6 +953,8 @@ function selectGpsLapView(index) {
 function renderGpsLapResults(crossings, laps) {
   gpsLapResults = laps;
   gpsSelectedLapIndex = -1;
+  gpsSelectedLapIndices = [];
+  clearGpsCompareMarkers();
   if (gpsLapCount) gpsLapCount.textContent = `${laps.length} LAPS`;
   const best = laps.length ? Math.min(...laps.map(lap => lap.duration)) : NaN;
   renderFullscreenLapTimes(laps, best);
@@ -1028,7 +1124,9 @@ function clearGpsLapAnalysis() {
   gpsFinishPoints = [];
   gpsLapResults = [];
   gpsSelectedLapIndex = -1;
+  gpsSelectedLapIndices = [];
   gpsLapRouteLines = [];
+  clearGpsCompareMarkers();
   if (gpsFinishLine && gpsMap) gpsMap.removeLayer(gpsFinishLine);
   gpsFinishLine = null;
   if (gpsFinishPreviewLine && gpsMap) gpsMap.removeLayer(gpsFinishPreviewLine);
@@ -1209,6 +1307,7 @@ gpsFullscreenDetailToggle?.addEventListener('click', () => {
   gpsFullscreenDetailToggle.textContent = open ? '상세정보 닫기 ›' : '상세정보 ›';
   if (open) {
     ensureGpsDetailCharts();
+    if (gpsSelectedLapIndices.length > 1) rebuildGpsDetailChartsForSelection();
     updateGpsDetailChartRange(Number(scrollBar.min), Number(scrollBar.max));
     updateGpsDetailCursors(Number(scrollBar.value));
   }
@@ -1930,6 +2029,33 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
   const minTime = Number(scrollBar.min) || 0;
   const maxTime = Number(scrollBar.max) || totalDurationSec;
   const clampedTime = Math.max(minTime, Math.min(maxTime, targetTime));
+  if (gpsSelectedLapIndices.length > 1) {
+    scrollBar.value = clampedTime.toFixed(2);
+    if (gpsPlayTime) gpsPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
+    if (gpsFullscreenTimeline) gpsFullscreenTimeline.value = clampedTime.toFixed(2);
+    if (gpsFullscreenPlayTime) gpsFullscreenPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
+    const primaryLap = gpsLapResults[gpsSelectedLapIndices[0]];
+    const primaryTime = primaryLap.startTime + Math.min(clampedTime, primaryLap.duration);
+    const primaryIndex = findGlobalIndexAtTime(primaryTime);
+    const primaryRow = primaryIndex >= 0 ? globalData[primaryIndex] : null;
+    if (primaryRow) {
+      currentCursorIndex = findSampleIndexAtTime(primaryTime);
+      const displayRow = getFilteredImuRowAtTime(primaryRow, primaryTime, primaryIndex);
+      const gpsPosition = getInterpolatedGpsPosition(primaryTime, primaryIndex);
+      updateNumericDisplays(displayRow, gpsPosition, clampedTime);
+      updateGpsCompareMarkers(clampedTime);
+      updateGpsDetailCursors(clampedTime);
+      gpsFullscreenLapTimes?.querySelectorAll('[data-lap-time-row]').forEach(row => {
+        row.classList.toggle('active', gpsSelectedLapIndices.includes(Number(row.dataset.lapTimeRow)));
+      });
+      const live = gpsFullscreenLapTimes?.querySelector('[data-lap-live]');
+      if (live) {
+        live.textContent = `${gpsSelectedLapIndices.length}개 랩 비교 · ${formatLapTime(clampedTime)}`;
+        live.style.color = '#f97316';
+      }
+    }
+    return;
+  }
   currentCursorIndex = findSampleIndexAtTime(clampedTime);
   // Numeric widgets, G meter and map use the original 100 Hz row. Charts keep
   // their 4,500-point series and only move the cursor to the nearest sample.
