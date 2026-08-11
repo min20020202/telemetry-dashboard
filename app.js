@@ -150,6 +150,9 @@ const gpsFullscreenDetail = document.getElementById('gps-fullscreen-detail');
 const gpsGoProFile = document.getElementById('gps-gopro-file');
 const gpsGoProPanel = document.getElementById('gps-gopro-panel');
 const gpsGoProVideo = document.getElementById('gps-gopro-video');
+const gpsGoProCompareVideo = document.getElementById('gps-gopro-compare-video');
+const gpsGoProPrimaryLabel = document.getElementById('gps-gopro-primary-label');
+const gpsGoProCompareLabel = document.getElementById('gps-gopro-compare-label');
 const gpsGoProStatus = document.getElementById('gps-gopro-status');
 const gpsGoProClose = document.getElementById('gps-gopro-close');
 const gpsDetailSpeedValue = document.getElementById('gps-detail-speed-value');
@@ -292,6 +295,7 @@ let gpsPlaybackCursorSec = 0;
 let gpsGoProObjectUrl = '';
 let gpsGoProTelemetryStartSec = NaN;
 let gpsGoProMatched = false;
+let gpsGoProCompareLapIndex = -1;
 
 async function readMp4AtomHeader(file, offset) {
   if (offset + 8 > file.size) return null;
@@ -382,27 +386,70 @@ function matchGoProToCsv(creationDate, duration) {
   };
 }
 
-function syncGoProVideo(targetTime, force = false) {
-  if (!gpsGoProMatched || !gpsGoProVideo) return;
+function syncOneGoProVideo(video, targetTime, force, rate) {
+  if (!video || !Number.isFinite(video.duration)) return;
   const videoTime = targetTime - gpsGoProTelemetryStartSec;
-  if (videoTime < 0 || videoTime > gpsGoProVideo.duration) {
-    gpsGoProVideo.pause();
+  if (videoTime < 0 || videoTime > video.duration) {
+    video.pause();
     return;
   }
-  const rate = Number(gpsPlayRate?.value) || 1;
-  const drift = gpsGoProVideo.currentTime - videoTime;
+  const drift = video.currentTime - videoTime;
   if (force || !gpsPlaybackActive || Math.abs(drift) > 1.0) {
-    // Seeking every animation frame makes a 60 fps GoPro clip look like a
-    // slideshow. Seek only on scrubs/large errors and let the video decoder
-    // render every source frame during normal playback.
-    gpsGoProVideo.currentTime = videoTime;
+    video.currentTime = videoTime;
   }
-  // GPS playback and video both use the browser's monotonic clock. Keeping the
-  // exact same rate prevents a small decoder reporting delay from accumulating
-  // into an artificial speed-up that makes the video finish early.
-  gpsGoProVideo.playbackRate = rate;
-  if (gpsPlaybackActive && gpsGoProVideo.paused) gpsGoProVideo.play().catch(() => {});
-  if (!gpsPlaybackActive && !gpsGoProVideo.paused) gpsGoProVideo.pause();
+  video.playbackRate = rate;
+  if (gpsPlaybackActive && video.paused) video.play().catch(() => {});
+  if (!gpsPlaybackActive && !video.paused) video.pause();
+}
+
+function getGoProLapPair() {
+  if (gpsSelectedLapIndices.length < 2) return null;
+  const primaryIndex = gpsSelectedLapIndices.reduce((best, index) =>
+    gpsLapResults[index].duration < gpsLapResults[best].duration ? index : best);
+  const compareIndex = gpsSelectedLapIndices.includes(gpsGoProCompareLapIndex) && gpsGoProCompareLapIndex !== primaryIndex
+    ? gpsGoProCompareLapIndex
+    : gpsSelectedLapIndices.find(index => index !== primaryIndex);
+  return { primaryIndex, compareIndex };
+}
+
+function updateGoProComparisonLayout() {
+  const pair = getGoProLapPair();
+  gpsGoProPanel?.classList.toggle('comparing', Boolean(pair));
+  gpsFullscreenLapTimes?.querySelectorAll('[data-gopro-pick]').forEach(button => {
+    button.classList.toggle('video-target', Boolean(pair) && Number(button.dataset.goproPick) === pair.compareIndex);
+  });
+  if (!pair) {
+    if (gpsGoProPrimaryLabel) gpsGoProPrimaryLabel.textContent = '';
+    gpsGoProCompareVideo?.pause();
+    return;
+  }
+  const primary = gpsLapResults[pair.primaryIndex];
+  const compare = gpsLapResults[pair.compareIndex];
+  if (gpsGoProPrimaryLabel) {
+    gpsGoProPrimaryLabel.textContent = `기준 · LAP ${primary.number} · ${formatLapTime(primary.duration)}`;
+    gpsGoProPrimaryLabel.style.setProperty('--lap-color', GPS_LAP_COLORS[pair.primaryIndex % GPS_LAP_COLORS.length]);
+  }
+  if (gpsGoProCompareLabel) {
+    gpsGoProCompareLabel.textContent = `비교 · LAP ${compare.number} · +${(compare.duration - primary.duration).toFixed(3)}초`;
+    gpsGoProCompareLabel.style.setProperty('--lap-color', GPS_LAP_COLORS[pair.compareIndex % GPS_LAP_COLORS.length]);
+  }
+}
+
+function syncGoProVideo(targetTime, force = false) {
+  if (!gpsGoProMatched || !gpsGoProVideo) return;
+  const rate = Number(gpsPlayRate?.value) || 1;
+  const pair = getGoProLapPair();
+  if (pair) {
+    const timelineLap = gpsLapResults[gpsSelectedLapIndices[0]];
+    const relativeTime = Math.max(0, targetTime - timelineLap.startTime);
+    const primary = gpsLapResults[pair.primaryIndex];
+    const compare = gpsLapResults[pair.compareIndex];
+    syncOneGoProVideo(gpsGoProVideo, primary.startTime + Math.min(relativeTime, primary.duration), force, rate);
+    syncOneGoProVideo(gpsGoProCompareVideo, compare.startTime + Math.min(relativeTime, compare.duration), force, rate);
+  } else {
+    syncOneGoProVideo(gpsGoProVideo, targetTime, force, rate);
+    gpsGoProCompareVideo?.pause();
+  }
 }
 
 function getGoProTargetTelemetryTime(cursorTime) {
@@ -415,10 +462,13 @@ function getGoProTargetTelemetryTime(cursorTime) {
 
 function closeGoProVideo() {
   gpsGoProVideo?.pause();
+  gpsGoProCompareVideo?.pause();
   if (gpsGoProVideo) gpsGoProVideo.removeAttribute('src');
+  if (gpsGoProCompareVideo) gpsGoProCompareVideo.removeAttribute('src');
   if (gpsGoProObjectUrl) URL.revokeObjectURL(gpsGoProObjectUrl);
   gpsGoProObjectUrl = '';
   gpsGoProMatched = false;
+  gpsGoProCompareLapIndex = -1;
   gpsGoProTelemetryStartSec = NaN;
   const stage = gpsGoProPanel?.closest('.gps-map-stage');
   stage?.classList.remove('gps-video-loaded');
@@ -693,8 +743,9 @@ function renderFullscreenLapTimes(laps, best) {
     <button type="button" class="gps-fs-lap-all${gpsSelectedLapIndices.length === 0 ? ' selected' : ''}" data-lap-panel-view="all">전체 랩 보기</button>
     <div class="gps-fs-lap-list">${laps.map((lap, index) => `
       <button type="button" class="${index === bestIndex ? 'best ' : ''}${gpsSelectedLapIndices.includes(index) ? 'selected' : ''}" data-lap-time-row="${index}" data-lap-panel-view="${index}" style="--lap-color:${GPS_LAP_COLORS[index % GPS_LAP_COLORS.length]}">
-        <span><i></i>LAP ${lap.number}${index === bestIndex ? '<b class="gps-best-star">★</b>' : ''}</span><strong>${formatLapTime(lap.duration)}</strong>
+        <span><i></i>LAP ${lap.number}${index === bestIndex ? '<b class="gps-best-star">★</b>' : ''}<b class="gps-lap-video-pick" data-gopro-pick="${index}" title="이 LAP을 비교 영상으로 표시">🎥</b></span><strong>${formatLapTime(lap.duration)}</strong>
       </button>`).join('')}</div>` : '';
+  updateGoProComparisonLayout();
 }
 
 function refreshGpsFullscreenOverlays() {
@@ -1078,9 +1129,12 @@ function closeGpsFullscreenDetail() {
 function selectGpsLapView(index) {
   if (!gpsLapResults.length || !gpsLapRouteLayer) return;
   const validLap = Number.isInteger(index) && index >= 0 && index < gpsLapResults.length;
+  const wasSelected = validLap && gpsSelectedLapIndices.includes(index);
   if (!validLap) gpsSelectedLapIndices = [];
-  else if (gpsSelectedLapIndices.includes(index)) gpsSelectedLapIndices = gpsSelectedLapIndices.filter(value => value !== index);
+  else if (wasSelected) gpsSelectedLapIndices = gpsSelectedLapIndices.filter(value => value !== index);
   else gpsSelectedLapIndices = [...gpsSelectedLapIndices, index].sort((a, b) => a - b);
+  if (validLap && !wasSelected && gpsSelectedLapIndices.length > 1) gpsGoProCompareLapIndex = index;
+  if (!gpsSelectedLapIndices.includes(gpsGoProCompareLapIndex)) gpsGoProCompareLapIndex = -1;
   gpsSelectedLapIndex = gpsSelectedLapIndices.length === 1 ? gpsSelectedLapIndices[0] : -1;
   const hasSelection = gpsSelectedLapIndices.length > 0;
   const isComparison = gpsSelectedLapIndices.length > 1;
@@ -1094,6 +1148,7 @@ function selectGpsLapView(index) {
   gpsFullscreenLapTimes?.querySelectorAll('[data-lap-panel-view]').forEach(button => {
     button.classList.toggle('selected', button.dataset.lapPanelView === 'all' ? !hasSelection : gpsSelectedLapIndices.includes(Number(button.dataset.lapPanelView)));
   });
+  updateGoProComparisonLayout();
 
   setGpsPlayback(false);
   clearGpsCompareMarkers();
@@ -1126,6 +1181,7 @@ function renderGpsLapResults(crossings, laps) {
   gpsLapResults = laps;
   gpsSelectedLapIndex = -1;
   gpsSelectedLapIndices = [];
+  gpsGoProCompareLapIndex = -1;
   clearGpsCompareMarkers();
   if (gpsLapCount) gpsLapCount.textContent = `${laps.length} LAPS`;
   const best = laps.length ? Math.min(...laps.map(lap => lap.duration)) : NaN;
@@ -1465,6 +1521,18 @@ gpsLapMapLegend?.addEventListener('click', event => {
 });
 
 gpsFullscreenLapTimes?.addEventListener('click', event => {
+  const videoPick = event.target.closest('[data-gopro-pick]');
+  if (videoPick) {
+    event.stopPropagation();
+    const index = Number(videoPick.dataset.goproPick);
+    const pair = getGoProLapPair();
+    if (pair && gpsSelectedLapIndices.includes(index) && index !== pair.primaryIndex) {
+      gpsGoProCompareLapIndex = index;
+      updateGoProComparisonLayout();
+      updateGpsCursorAtTime(Number(scrollBar.value) || 0);
+    }
+    return;
+  }
   const button = event.target.closest('[data-lap-panel-view]');
   if (!button) return;
   const index = button.dataset.lapPanelView === 'all' ? -1 : Number(button.dataset.lapPanelView);
@@ -2352,6 +2420,7 @@ gpsGoProFile?.addEventListener('change', async event => {
     if (!creationDate) throw new Error('MP4 내부 촬영 시각을 찾을 수 없습니다.');
     gpsGoProObjectUrl = URL.createObjectURL(file);
     gpsGoProVideo.src = gpsGoProObjectUrl;
+    if (gpsGoProCompareVideo) gpsGoProCompareVideo.src = gpsGoProObjectUrl;
     await new Promise((resolve, reject) => {
       gpsGoProVideo.onloadedmetadata = resolve;
       gpsGoProVideo.onerror = () => reject(new Error('브라우저에서 이 MP4를 재생할 수 없습니다.'));
@@ -2361,6 +2430,7 @@ gpsGoProFile?.addEventListener('change', async event => {
     if (!match?.matched) {
       gpsGoProMatched = false;
       gpsGoProVideo.removeAttribute('src');
+      gpsGoProCompareVideo?.removeAttribute('src');
       URL.revokeObjectURL(gpsGoProObjectUrl);
       gpsGoProObjectUrl = '';
       const videoRange = match
@@ -2376,6 +2446,7 @@ gpsGoProFile?.addEventListener('change', async event => {
     gpsGoProTelemetryStartSec = match.telemetryStart;
     gpsGoProMatched = true;
     gpsGoProPanel.closest('.gps-map-stage')?.classList.add('gps-video-loaded');
+    updateGoProComparisonLayout();
     gpsGoProStatus.textContent = `영상 시작 ${formatGpsClock(match.videoStartClock)} KST · CSV와 ${formatKoreanDuration(match.overlap)} 겹침 · 자동 동기화 완료`;
     gpsGoProStatus.className = 'success';
     syncGoProVideo(Number(scrollBar.value) || 0, true);
