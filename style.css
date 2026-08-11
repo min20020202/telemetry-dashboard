@@ -1857,6 +1857,82 @@ body {
   background: var(--panel-bg);
 }
 
+.gps-map-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gps-map-fullscreen-button {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: rgba(128, 128, 128, 0.08);
+  color: var(--text-primary);
+  font: 700 9px var(--font-mono);
+  cursor: pointer;
+}
+
+.gps-map-fullscreen-button:hover {
+  border-color: var(--accent-orange);
+  color: var(--accent-orange);
+}
+
+.gps-fullscreen-playback { display: none; }
+
+.gps-map-card:fullscreen .gps-lap-toolbar,
+.gps-map-card.gps-map-fullscreen-fallback .gps-lap-toolbar {
+  flex-wrap: wrap;
+}
+
+.gps-map-card:fullscreen .gps-fullscreen-playback,
+.gps-map-card.gps-map-fullscreen-fallback .gps-fullscreen-playback {
+  order: 10;
+  display: grid;
+  grid-template-columns: auto auto minmax(180px, 1fr) 72px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.gps-fullscreen-playback button,
+.gps-fullscreen-playback select {
+  height: 30px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--panel-bg);
+  color: var(--text-primary);
+  font: 700 10px var(--font-mono);
+}
+
+.gps-fullscreen-playback button.playing {
+  border-color: var(--accent-orange);
+  color: var(--accent-orange);
+}
+
+#gps-fullscreen-timeline { width: 100%; accent-color: var(--accent-orange); }
+#gps-fullscreen-play-time { color: var(--accent-orange); font: 700 10px var(--font-mono); text-align: right; }
+
+.gps-pulse-marker {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #ff2d55;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.45), 0 0 16px 6px rgba(255, 45, 85, 0.9);
+}
+
+.gps-pulse-marker i {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.gps-cursor-top { z-index: 10000 !important; }
+
 .gps-map-card.gps-map-fullscreen-fallback {
   position: fixed;
   inset: 0;

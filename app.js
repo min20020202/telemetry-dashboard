@@ -139,6 +139,10 @@ const gpsLapList = document.getElementById('gps-lap-list');
 const gpsImuLpfFrequency = document.getElementById('gps-imu-lpf-frequency');
 const gpsMapFullscreen = document.getElementById('gps-map-fullscreen');
 const gpsLapMapLegend = document.getElementById('gps-lap-map-legend');
+const gpsFullscreenPlayToggle = document.getElementById('gps-fullscreen-play-toggle');
+const gpsFullscreenPlayRate = document.getElementById('gps-fullscreen-play-rate');
+const gpsFullscreenTimeline = document.getElementById('gps-fullscreen-timeline');
+const gpsFullscreenPlayTime = document.getElementById('gps-fullscreen-play-time');
 
 // Theme Switcher DOM
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
@@ -483,6 +487,7 @@ function drawGpsLapRoutes(laps) {
       interactive: false
     }).addTo(gpsLapRouteLayer);
   });
+  if (gpsCursorMarker) gpsCursorMarker.setZIndexOffset(10000);
 }
 
 function renderGpsLapResults(crossings, laps) {
@@ -805,7 +810,7 @@ gpsMapFullscreen?.addEventListener('click', async () => {
   if (card.classList.contains('gps-map-fullscreen-fallback')) {
     card.classList.remove('gps-map-fullscreen-fallback');
     document.body.classList.remove('gps-map-fullscreen-open');
-    gpsMapFullscreen.textContent = '⛶ GPS 전체화면';
+    gpsMapFullscreen.textContent = '⛶ 전체화면';
     setTimeout(() => gpsMap?.invalidateSize(), 80);
     return;
   }
@@ -815,14 +820,14 @@ gpsMapFullscreen?.addEventListener('click', async () => {
   } catch (err) {
     card.classList.toggle('gps-map-fullscreen-fallback');
     document.body.classList.toggle('gps-map-fullscreen-open', card.classList.contains('gps-map-fullscreen-fallback'));
-    gpsMapFullscreen.textContent = card.classList.contains('gps-map-fullscreen-fallback') ? '✕ 전체화면 종료' : '⛶ GPS 전체화면';
+    gpsMapFullscreen.textContent = card.classList.contains('gps-map-fullscreen-fallback') ? '✕ 전체화면 종료' : '⛶ 전체화면';
   }
   setTimeout(() => gpsMap?.invalidateSize(), 80);
 });
 
 document.addEventListener('fullscreenchange', () => {
   const active = document.fullscreenElement?.classList.contains('gps-map-card');
-  if (gpsMapFullscreen) gpsMapFullscreen.textContent = active ? '✕ 전체화면 종료' : '⛶ GPS 전체화면';
+  if (gpsMapFullscreen) gpsMapFullscreen.textContent = active ? '✕ 전체화면 종료' : '⛶ 전체화면';
   setTimeout(() => gpsMap?.invalidateSize(), 80);
 });
 gpsLapList?.addEventListener('click', event => {
@@ -1508,6 +1513,8 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
   const row = globalIndex >= 0 ? globalData[globalIndex] : activeSampledData[currentCursorIndex];
   scrollBar.value = clampedTime.toFixed(2);
   if (gpsPlayTime) gpsPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
+  if (gpsFullscreenTimeline) gpsFullscreenTimeline.value = clampedTime.toFixed(2);
+  if (gpsFullscreenPlayTime) gpsFullscreenPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
   if (row) {
     const displayRow = getFilteredImuRowAtTime(row, clampedTime, globalIndex);
     const gpsPosition = getInterpolatedGpsPosition(clampedTime, globalIndex);
@@ -1530,6 +1537,10 @@ function setGpsPlayback(shouldPlay) {
   if (gpsPlayToggle) {
     gpsPlayToggle.textContent = gpsPlaybackActive ? '❚❚ 일시정지' : '▶ 재생';
     gpsPlayToggle.classList.toggle('playing', gpsPlaybackActive);
+  }
+  if (gpsFullscreenPlayToggle) {
+    gpsFullscreenPlayToggle.textContent = gpsPlaybackActive ? '❚❚ 일시정지' : '▶ 재생';
+    gpsFullscreenPlayToggle.classList.toggle('playing', gpsPlaybackActive);
   }
   if (!gpsPlaybackActive) return;
 
@@ -1576,6 +1587,20 @@ function setGpsPlayback(shouldPlay) {
 if (gpsPlayToggle) {
   gpsPlayToggle.addEventListener('click', () => setGpsPlayback(!gpsPlaybackActive));
 }
+gpsFullscreenPlayToggle?.addEventListener('click', () => setGpsPlayback(!gpsPlaybackActive));
+gpsFullscreenPlayRate?.addEventListener('change', () => {
+  if (gpsPlayRate) gpsPlayRate.value = gpsFullscreenPlayRate.value;
+});
+gpsPlayRate?.addEventListener('change', () => {
+  if (gpsFullscreenPlayRate) gpsFullscreenPlayRate.value = gpsPlayRate.value;
+});
+gpsFullscreenTimeline?.addEventListener('input', event => {
+  const targetTime = Number(event.target.value);
+  if (!Number.isFinite(targetTime)) return;
+  setGpsPlayback(false);
+  gpsPlaybackCursorSec = targetTime;
+  updateGpsCursorAtTime(targetTime);
+});
 function applyGpsImuLowPassFilter() {
   const keys = ['imu_ax', 'imu_ay', 'imu_gx', 'imu_gy', 'imu_gz'];
   if (!gpsImuLpf || typeof getFilterState !== 'function' ||
@@ -1762,14 +1787,16 @@ function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverr
         if (!gpsCursorMarker) {
           const pulseIcon = L.divIcon({
             className: 'custom-div-icon',
-            html: `<div class="gps-pulse-marker" style="background:#f97316; width:12px; height:12px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 8px rgba(0,0,0,0.5);"></div>`,
-            iconSize: [12, 12],
-            iconAnchor: [6, 6]
+            html: '<div class="gps-pulse-marker"><i></i></div>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
           });
-          gpsCursorMarker = L.marker([lat, lon], { icon: pulseIcon }).addTo(gpsMap);
+          gpsCursorMarker = L.marker([lat, lon], { icon: pulseIcon, zIndexOffset: 10000 }).addTo(gpsMap);
         } else {
           gpsCursorMarker.setLatLng([lat, lon]);
         }
+        gpsCursorMarker.setZIndexOffset(10000);
+        gpsCursorMarker.getElement()?.classList.add('gps-cursor-top');
       }
     } else {
       cursorGpsCoords.textContent = '--.------, ---.------';
@@ -2129,6 +2156,8 @@ function initDataAndDashboard() {
       }
       gpsLapPoints = buildGpsLapPoints(globalData);
       clearGpsLapAnalysis();
+      const initialGpsRow = activeSampledData[currentCursorIndex];
+      if (initialGpsRow) updateNumericDisplays(initialGpsRow);
       if (gpsLapFixSummary && gpsLapPoints.length) {
         gpsLapFixSummary.textContent = `${gpsLapPoints.length.toLocaleString()}개 유효 GPS fix 준비됨`;
       }
@@ -2171,6 +2200,13 @@ function applyZoomRange(start, end) {
     }
     scrollBar.value = targetTime.toFixed(2);
     scrollBar.disabled = (cleanEnd - cleanStart <= 0.05);
+    if (gpsFullscreenTimeline) {
+      gpsFullscreenTimeline.min = scrollBar.min;
+      gpsFullscreenTimeline.max = scrollBar.max;
+      gpsFullscreenTimeline.step = scrollBar.step;
+      gpsFullscreenTimeline.value = scrollBar.value;
+      gpsFullscreenTimeline.disabled = scrollBar.disabled;
+    }
   } else {
     // 차트 페이지의 경우: 차트 좌우 이동(Panning) 스크롤바로 세팅
     const visibleSpan = cleanEnd - cleanStart;
