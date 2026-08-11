@@ -1892,7 +1892,7 @@ body {
 .gps-map-card.gps-map-fullscreen-fallback .gps-fullscreen-playback {
   order: 10;
   display: grid;
-  grid-template-columns: auto auto minmax(180px, 1fr) 72px;
+  grid-template-columns: auto auto auto minmax(180px, 1fr) 72px;
   align-items: center;
   gap: 8px;
   width: 100%;
@@ -2210,14 +2210,20 @@ body.gps-map-fullscreen-open { overflow: hidden; }
 .gps-fullscreen-speed strong { color: #fff; font: 800 26px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
 .gps-fullscreen-speed em { color: #00d9ff; font: 800 10px var(--font-mono); }
 
-.gps-gopro-open {
-  padding: 5px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 5px;
-  background: rgba(15, 23, 42, 0.84);
-  color: #fff;
-  font: 700 11px var(--font-mono);
+.gps-fullscreen-playback .gps-gopro-open {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid #f97316;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #c2410c;
+  font: 900 11px var(--font-mono);
   cursor: pointer;
+  box-shadow: 0 1px 4px rgba(194, 65, 12, 0.18);
+}
+.gps-fullscreen-playback .gps-gopro-open:hover {
+  background: #f97316;
+  color: #fff;
 }
 .gps-gopro-panel {
   display: none;
