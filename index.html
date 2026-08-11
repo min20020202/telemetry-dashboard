@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260810-4">
+  <link rel="stylesheet" href="style.css?v=20260811-1">
 </head>
 <body>
 
@@ -299,10 +299,12 @@
                 <input id="gps-lap-min-time" type="number" min="5" max="600" step="1" value="20">
                 <span>초</span>
               </label>
+              <button id="gps-map-fullscreen" type="button" aria-label="GPS 지도 전체화면">⛶ GPS 전체화면</button>
               <span id="gps-lap-toolbar-status">지도에서 라인 양 끝을 차례로 선택하십시오.</span>
             </div>
             <div class="gps-map-stage">
               <div id="gps-map"></div>
+              <div id="gps-lap-map-legend" class="gps-lap-map-legend" hidden></div>
 
               <!-- 지도 우측 상단: 현재 GPS 커서 지점의 조향각 위젯 -->
               <div class="gps-steering-widget">
@@ -595,6 +597,6 @@
   <script src="filters.js?v=20260810-1"></script>
   <script src="steering.js?v=20260802-4"></script>
   <script src="realtime.js?v=20260802-4"></script>
-  <script src="app.js?v=20260810-8"></script>
+  <script src="app.js?v=20260811-1"></script>
 </body>
 </html>

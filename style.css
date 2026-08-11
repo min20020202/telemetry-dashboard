@@ -1846,6 +1846,58 @@ body {
   z-index: 1;
 }
 
+.gps-map-card:fullscreen,
+.gps-map-card.gps-map-fullscreen-fallback {
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  padding: 12px;
+  border: 0;
+  border-radius: 0;
+  background: var(--panel-bg);
+}
+
+.gps-map-card.gps-map-fullscreen-fallback {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+}
+
+body.gps-map-fullscreen-open { overflow: hidden; }
+
+.gps-lap-map-legend {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 500;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 9px;
+  max-width: calc(100% - 80px);
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #fff;
+  font: 800 10px var(--font-mono);
+  pointer-events: none;
+}
+
+.gps-lap-map-legend[hidden] { display: none; }
+.gps-lap-map-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.gps-lap-map-legend i,
+.gps-lap-color-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--lap-color);
+  box-shadow: 0 0 5px var(--lap-color);
+}
+
+.gps-lap-color-dot { margin-right: 4px; }
+
 .gps-lap-toolbar {
   display: flex;
   align-items: center;

@@ -137,6 +137,8 @@ const gpsLapCount = document.getElementById('gps-lap-count');
 const gpsLapBestTime = document.getElementById('gps-lap-best-time');
 const gpsLapList = document.getElementById('gps-lap-list');
 const gpsImuLpfFrequency = document.getElementById('gps-imu-lpf-frequency');
+const gpsMapFullscreen = document.getElementById('gps-map-fullscreen');
+const gpsLapMapLegend = document.getElementById('gps-lap-map-legend');
 
 // Theme Switcher DOM
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
@@ -248,12 +250,14 @@ let currentGpsLayerMode = 'graphic'; // 'graphic' | 'satellite'
 let gpsFinishLine = null;
 let gpsFinishEndpointLayer = null;
 let gpsLapCrossingLayer = null;
+let gpsLapRouteLayer = null;
 let gpsFinishPoints = [];
 let gpsFinishPreviewLine = null;
 let gpsFinishMarkers = [];
 let gpsLapPoints = [];
 let gpsLapSelectionActive = false;
 let gpsLapResults = [];
+const GPS_LAP_COLORS = ['#00e5ff', '#ff3d9a', '#76ff03', '#ffca28', '#7c4dff', '#ff6d00', '#00e676', '#40c4ff'];
 
 // GPS + IMU synchronized playback state.
 let gpsPlaybackActive = false;
@@ -454,6 +458,33 @@ function updateGpsFinishPreview(event) {
   gpsFinishPreviewLine.setLatLngs([[first.lat, first.lon], [event.latlng.lat, event.latlng.lng]]);
 }
 
+function drawGpsLapRoutes(laps) {
+  if (gpsLapRouteLayer) gpsLapRouteLayer.clearLayers();
+  if (gpsRouteLine) gpsRouteLine.setStyle({ opacity: laps.length ? 0.22 : 0.8, weight: laps.length ? 3 : 5 });
+  if (gpsLapMapLegend) {
+    gpsLapMapLegend.hidden = !laps.length;
+    gpsLapMapLegend.innerHTML = laps.map((lap, index) =>
+      `<span><i style="--lap-color:${GPS_LAP_COLORS[index % GPS_LAP_COLORS.length]}"></i>LAP ${lap.number}</span>`
+    ).join('');
+  }
+  if (!gpsLapRouteLayer || !laps.length) return;
+
+  laps.forEach((lap, index) => {
+    const coords = [[lap.startLat, lap.startLon]];
+    gpsLapPoints.forEach(point => {
+      if (point.time > lap.startTime && point.time < lap.endTime) coords.push([point.lat, point.lon]);
+    });
+    coords.push([lap.endLat, lap.endLon]);
+    if (coords.length < 2) return;
+    L.polyline(coords, {
+      color: GPS_LAP_COLORS[index % GPS_LAP_COLORS.length],
+      weight: 6,
+      opacity: 0.92,
+      interactive: false
+    }).addTo(gpsLapRouteLayer);
+  });
+}
+
 function renderGpsLapResults(crossings, laps) {
   gpsLapResults = laps;
   if (gpsLapCount) gpsLapCount.textContent = `${laps.length} LAPS`;
@@ -477,6 +508,7 @@ function renderGpsLapResults(crossings, laps) {
       }).addTo(gpsLapCrossingLayer);
     });
   }
+  drawGpsLapRoutes(laps);
 
   if (!gpsLapList) return;
   if (!laps.length) {
@@ -489,7 +521,7 @@ function renderGpsLapResults(crossings, laps) {
     const delta = lap.duration - best;
     return `<details class="gps-lap-row${isBest ? ' best' : ''}">
       <summary>
-        <span>LAP ${lap.number}</span>
+        <span><i class="gps-lap-color-dot" style="--lap-color:${GPS_LAP_COLORS[(lap.number - 1) % GPS_LAP_COLORS.length]}"></i>LAP ${lap.number}</span>
         <span class="lap-time">${formatLapTime(lap.duration)}</span>
         <span class="lap-delta">${isBest ? 'BEST' : `+${delta.toFixed(3)}`}</span>
       </summary>
@@ -602,7 +634,11 @@ function calculateGpsLaps() {
       startTime: crossings[i - 1].time,
       endTime: crossings[i].time,
       startGpsTime: crossings[i - 1].gpsTime,
-      endGpsTime: crossings[i].gpsTime
+      endGpsTime: crossings[i].gpsTime,
+      startLat: crossings[i - 1].lat,
+      startLon: crossings[i - 1].lon,
+      endLat: crossings[i].lat,
+      endLon: crossings[i].lon
     });
   }
 
@@ -621,6 +657,12 @@ function clearGpsLapAnalysis() {
   gpsFinishMarkers = [];
   if (gpsFinishEndpointLayer) gpsFinishEndpointLayer.clearLayers();
   if (gpsLapCrossingLayer) gpsLapCrossingLayer.clearLayers();
+  if (gpsLapRouteLayer) gpsLapRouteLayer.clearLayers();
+  if (gpsRouteLine) gpsRouteLine.setStyle({ opacity: 0.8, weight: 5 });
+  if (gpsLapMapLegend) {
+    gpsLapMapLegend.hidden = true;
+    gpsLapMapLegend.innerHTML = '';
+  }
   if (gpsLapSetLine) gpsLapSetLine.classList.remove('active');
   if (gpsLapClear) gpsLapClear.disabled = true;
   if (gpsMap) gpsMap.getContainer().classList.remove('gps-lap-selecting');
@@ -743,6 +785,7 @@ function initGpsMap() {
     interactive: true
   }).addTo(gpsMap);
   gpsFinishEndpointLayer = L.layerGroup().addTo(gpsMap);
+  gpsLapRouteLayer = L.layerGroup().addTo(gpsMap);
   gpsLapCrossingLayer = L.layerGroup().addTo(gpsMap);
   gpsMap.on('click', handleGpsLapMapClick);
   gpsMap.on('mousemove', updateGpsFinishPreview);
@@ -754,6 +797,33 @@ gpsLapMinTime?.addEventListener('change', () => {
   const clamped = Math.max(5, Math.min(600, Number(gpsLapMinTime.value) || 20));
   gpsLapMinTime.value = String(clamped);
   if (gpsFinishPoints.length === 2) calculateGpsLaps();
+});
+
+gpsMapFullscreen?.addEventListener('click', async () => {
+  const card = gpsMapFullscreen.closest('.gps-map-card');
+  if (!card) return;
+  if (card.classList.contains('gps-map-fullscreen-fallback')) {
+    card.classList.remove('gps-map-fullscreen-fallback');
+    document.body.classList.remove('gps-map-fullscreen-open');
+    gpsMapFullscreen.textContent = '⛶ GPS 전체화면';
+    setTimeout(() => gpsMap?.invalidateSize(), 80);
+    return;
+  }
+  try {
+    if (document.fullscreenElement === card) await document.exitFullscreen();
+    else await card.requestFullscreen();
+  } catch (err) {
+    card.classList.toggle('gps-map-fullscreen-fallback');
+    document.body.classList.toggle('gps-map-fullscreen-open', card.classList.contains('gps-map-fullscreen-fallback'));
+    gpsMapFullscreen.textContent = card.classList.contains('gps-map-fullscreen-fallback') ? '✕ 전체화면 종료' : '⛶ GPS 전체화면';
+  }
+  setTimeout(() => gpsMap?.invalidateSize(), 80);
+});
+
+document.addEventListener('fullscreenchange', () => {
+  const active = document.fullscreenElement?.classList.contains('gps-map-card');
+  if (gpsMapFullscreen) gpsMapFullscreen.textContent = active ? '✕ 전체화면 종료' : '⛶ GPS 전체화면';
+  setTimeout(() => gpsMap?.invalidateSize(), 80);
 });
 gpsLapList?.addEventListener('click', event => {
   const summary = event.target.closest('summary');
