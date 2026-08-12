@@ -22,7 +22,7 @@
 
 // ==================== 보정 상태 ====================
 
-const STEER_CAL_DEFAULT = { zeroRaw: 998, degPerLsb: 0.1, invert: false };
+const STEER_CAL_DEFAULT = { zeroRaw: 998, degPerLsb: 0.1, axisLimit: 250, invert: false };
 const STEER_CAL_STORE_KEY = 'nssur_steering_cal';
 
 const steeringCal = Object.assign({}, STEER_CAL_DEFAULT);
@@ -32,7 +32,10 @@ const steeringCal = Object.assign({}, STEER_CAL_DEFAULT);
     const s = JSON.parse(localStorage.getItem(STEER_CAL_STORE_KEY) || 'null');
     if (s && Number.isFinite(s.zeroRaw) && Number.isFinite(s.degPerLsb)) {
       steeringCal.zeroRaw = s.zeroRaw;
-      steeringCal.degPerLsb = s.degPerLsb;
+      // Sensor conversion is fixed at the logger calibration. The former
+      // multiplier is intentionally ignored because it changed real values.
+      steeringCal.degPerLsb = 0.1;
+      steeringCal.axisLimit = Number.isFinite(s.axisLimit) ? Math.max(20, Math.min(500, s.axisLimit)) : 250;
       steeringCal.invert = !!s.invert;
     }
   } catch (err) { /* 저장값이 깨졌으면 기본값 사용 */ }
@@ -45,6 +48,7 @@ function saveSteeringCal() {
 function isSteeringCalDefault() {
   return steeringCal.zeroRaw === STEER_CAL_DEFAULT.zeroRaw &&
          steeringCal.degPerLsb === STEER_CAL_DEFAULT.degPerLsb &&
+         steeringCal.axisLimit === STEER_CAL_DEFAULT.axisLimit &&
          steeringCal.invert === STEER_CAL_DEFAULT.invert;
 }
 
@@ -266,31 +270,20 @@ function currentSteerRaw() {
 }
 
 /**
- * 조향 차트의 Y축 범위를 데이터에 맞춰 조정합니다.
- * 기본 범위(1페이지 ±250°, 2페이지 ±200°)는 유지하되, 배율을 크게 잡아
- * 값이 범위를 넘어가면 잘리지 않도록 대칭으로 확장합니다.
+ * 조향 차트의 Y축만 사용자가 지정한 범위로 조정합니다.
+ * 실제 조향각 값과 Yaw/횡G 전용 축은 변경하지 않습니다.
  */
 function updateSteeringAxisRange() {
-  const src = (typeof filteredChannel !== 'undefined' && filteredChannel.steering) || null;
-  if (!src || !src.length) return;
-
-  let peak = 0;
-  for (let i = 0; i < src.length; i++) {
-    const a = Math.abs(src[i]);
-    if (a > peak) peak = a;
-  }
-
-  const fit = (chart, base) => {
+  const fit = (chart) => {
     if (!chart || !chart.options.scales || !chart.options.scales.y) return;
-    let lim = base;
-    if (peak > base) lim = Math.ceil((peak * 1.1) / 50) * 50;
+    const lim = steeringCal.axisLimit;
     chart.options.scales.y.min = -lim;
     chart.options.scales.y.max = lim;
     chart.update('none');
   };
 
-  if (typeof chartSteering !== 'undefined') fit(chartSteering, 250);
-  if (typeof diagChartSteering !== 'undefined') fit(diagChartSteering, 200);
+  if (typeof chartSteering !== 'undefined') fit(chartSteering);
+  if (typeof diagChartSteering !== 'undefined') fit(diagChartSteering);
 }
 
 function applySteeringCalChange() {
@@ -326,7 +319,7 @@ function openSteeringPanel(x, y) {
         <span class="sc-arrow">→</span>
         <strong class="sc-deg">${deg === null ? '--.-' : (deg >= 0 ? '+' : '') + deg.toFixed(1)}°</strong>
       </div>
-      <div class="sc-formula">조향각 = (raw − 영점) × 배율 ${steeringCal.invert ? '× (−1)' : ''}</div>
+      <div class="sc-formula">조향각 = (raw − 영점) × 0.1°/LSB ${steeringCal.invert ? '× (−1)' : ''}</div>
     </div>`;
 
     html += `<div class="fm-sec">
@@ -337,10 +330,10 @@ function openSteeringPanel(x, y) {
         <span class="fm-unit">LSB</span>
       </div>
       <div class="fm-param">
-        <label>배율</label>
-        <input class="fm-range" type="range" data-act="scale" min="0.01" max="1" step="0.005" value="${steeringCal.degPerLsb}">
-        <input class="fm-num fm-num-w" type="number" data-act="scale-num" min="0.005" max="5" step="0.005" value="${steeringCal.degPerLsb}">
-        <span class="fm-unit">°/LSB</span>
+        <label>조향 Y축</label>
+        <input class="fm-range" type="range" data-act="axis" min="20" max="500" step="10" value="${steeringCal.axisLimit}">
+        <input class="fm-num fm-num-w" type="number" data-act="axis-num" min="20" max="500" step="10" value="${steeringCal.axisLimit}">
+        <span class="fm-unit">± °</span>
       </div>
       <label class="fm-check" style="margin-top:8px;">
         <input type="checkbox" data-act="invert" ${steeringCal.invert ? 'checked' : ''}>
@@ -442,11 +435,11 @@ function openSteeringPanel(x, y) {
         schedule();
       };
 
-      if (act === 'scale' || act === 'scale-num') node.oninput = e => {
+      if (act === 'axis' || act === 'axis-num') node.oninput = e => {
         const v = parseFloat(e.target.value);
-        if (!Number.isFinite(v) || v === 0) return;
-        steeringCal.degPerLsb = v;
-        el.querySelectorAll('[data-act="scale"],[data-act="scale-num"]').forEach(n => { if (n !== e.target) n.value = v; });
+        if (!Number.isFinite(v)) return;
+        steeringCal.axisLimit = Math.max(20, Math.min(500, v));
+        el.querySelectorAll('[data-act="axis"],[data-act="axis-num"]').forEach(n => { if (n !== e.target) n.value = steeringCal.axisLimit; });
         schedule();
       };
 
@@ -504,7 +497,7 @@ function updateSteeringCalBadges() {
   document.querySelectorAll('.steering-cal-trigger').forEach(el => {
     el.classList.toggle('cal-custom', custom);
     el.title = custom
-      ? `조향 영점 보정됨 (영점 raw ${steeringCal.zeroRaw}, 배율 ${steeringCal.degPerLsb}°/LSB${steeringCal.invert ? ', 반전' : ''}) — 클릭하여 변경`
+      ? `조향 설정 (영점 raw ${steeringCal.zeroRaw}, Y축 ±${steeringCal.axisLimit}°${steeringCal.invert ? ', 반전' : ''}) — 클릭하여 변경`
       : '클릭하여 조향 영점 보정';
   });
 }

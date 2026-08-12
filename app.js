@@ -259,7 +259,7 @@ function getCalibratedBrake(rawValue) {
 function getCalibratedSteering(rawValue) {
   const cal = (typeof steeringCal !== 'undefined') ? steeringCal : { zeroRaw: 998, degPerLsb: 0.1, invert: false };
   const rawVal = (rawValue === undefined || rawValue === null || isNaN(rawValue)) ? cal.zeroRaw : rawValue;
-  const deg = (rawVal - cal.zeroRaw) * cal.degPerLsb;
+  const deg = (rawVal - cal.zeroRaw) * 0.1;
   return cal.invert ? -deg : deg;
 }
 
