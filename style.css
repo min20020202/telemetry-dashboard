@@ -2251,7 +2251,8 @@ body.gps-map-fullscreen-open { overflow: hidden; }
 .gps-gopro-panel header {
   position: absolute;
   top: 7px;
-  right: 7px;
+  right: auto;
+  left: 7px;
   z-index: 2;
   padding: 0;
 }
@@ -2286,7 +2287,7 @@ body.gps-map-fullscreen-open { overflow: hidden; }
 .gps-gopro-video-label {
   position: absolute;
   top: 10px;
-  left: 10px;
+  left: 50%;
   z-index: 2;
   padding: 6px 9px;
   border-left: 4px solid var(--lap-color, #f97316);
@@ -2295,8 +2296,16 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   color: #fff;
   font: 900 11px var(--font-mono);
   pointer-events: none;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
 }
-.gps-gopro-video-label:empty { display: none; }
+.gps-gopro-panel:not(.comparing) .gps-gopro-video-label { display: none; }
+.gps-gopro-video-label strong { color: #fff; font: 900 22px/1 var(--font-mono); }
+.gps-gopro-video-label strong em { color: #22d3ee; font: 800 9px var(--font-mono); }
+.gps-gopro-panel.comparing ~ .gps-fullscreen-speed { display: none !important; }
 .gps-gopro-panel output { display: block; padding: 7px 9px; color: #cbd5e1; font: 700 9px/1.35 var(--font-mono); }
 .gps-gopro-panel output.success { color: #34d399; }
 .gps-gopro-panel output.error { color: #fb7185; }

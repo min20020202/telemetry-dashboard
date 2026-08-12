@@ -153,6 +153,8 @@ const gpsGoProVideo = document.getElementById('gps-gopro-video');
 const gpsGoProCompareVideo = document.getElementById('gps-gopro-compare-video');
 const gpsGoProPrimaryLabel = document.getElementById('gps-gopro-primary-label');
 const gpsGoProCompareLabel = document.getElementById('gps-gopro-compare-label');
+const gpsGoProPrimarySpeed = document.getElementById('gps-gopro-primary-speed');
+const gpsGoProCompareSpeed = document.getElementById('gps-gopro-compare-speed');
 const gpsGoProStatus = document.getElementById('gps-gopro-status');
 const gpsGoProClose = document.getElementById('gps-gopro-close');
 const gpsDetailSpeedValue = document.getElementById('gps-detail-speed-value');
@@ -427,12 +429,21 @@ function updateGoProComparisonLayout() {
   const compare = gpsLapResults[pair.compareIndex];
   if (gpsGoProPrimaryLabel) {
     gpsGoProPrimaryLabel.textContent = `기준 · LAP ${primary.number} · ${formatLapTime(primary.duration)}`;
-    gpsGoProPrimaryLabel.style.setProperty('--lap-color', GPS_LAP_COLORS[pair.primaryIndex % GPS_LAP_COLORS.length]);
+    gpsGoProPrimaryLabel.parentElement?.style.setProperty('--lap-color', GPS_LAP_COLORS[pair.primaryIndex % GPS_LAP_COLORS.length]);
   }
   if (gpsGoProCompareLabel) {
     gpsGoProCompareLabel.textContent = `비교 · LAP ${compare.number} · +${(compare.duration - primary.duration).toFixed(3)}초`;
-    gpsGoProCompareLabel.style.setProperty('--lap-color', GPS_LAP_COLORS[pair.compareIndex % GPS_LAP_COLORS.length]);
+    gpsGoProCompareLabel.parentElement?.style.setProperty('--lap-color', GPS_LAP_COLORS[pair.compareIndex % GPS_LAP_COLORS.length]);
   }
+}
+
+function gpsSpeedAtTelemetryTime(targetTime) {
+  const index = globalData.length ? findGlobalIndexAtTime(targetTime) : -1;
+  return index >= 0 ? Number(globalData[index].gps_speed_kmh) || 0 : 0;
+}
+
+function setGoProSlotSpeed(element, speed) {
+  if (element?.firstChild) element.firstChild.nodeValue = `${speed.toFixed(1)} `;
 }
 
 function syncGoProVideo(targetTime, force = false) {
@@ -444,8 +455,12 @@ function syncGoProVideo(targetTime, force = false) {
     const relativeTime = Math.max(0, targetTime - timelineLap.startTime);
     const primary = gpsLapResults[pair.primaryIndex];
     const compare = gpsLapResults[pair.compareIndex];
-    syncOneGoProVideo(gpsGoProVideo, primary.startTime + Math.min(relativeTime, primary.duration), force, rate);
-    syncOneGoProVideo(gpsGoProCompareVideo, compare.startTime + Math.min(relativeTime, compare.duration), force, rate);
+    const primaryTime = primary.startTime + Math.min(relativeTime, primary.duration);
+    const compareTime = compare.startTime + Math.min(relativeTime, compare.duration);
+    syncOneGoProVideo(gpsGoProVideo, primaryTime, force, rate);
+    syncOneGoProVideo(gpsGoProCompareVideo, compareTime, force, rate);
+    setGoProSlotSpeed(gpsGoProPrimarySpeed, gpsSpeedAtTelemetryTime(primaryTime));
+    setGoProSlotSpeed(gpsGoProCompareSpeed, gpsSpeedAtTelemetryTime(compareTime));
   } else {
     syncOneGoProVideo(gpsGoProVideo, targetTime, force, rate);
     gpsGoProCompareVideo?.pause();
