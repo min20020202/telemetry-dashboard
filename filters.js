@@ -439,7 +439,7 @@ const CHART_CHANNELS = {
   'chart-ground-speed': ['fl_speed', 'rl_speed', 'rr_speed'],
   'chart-engine-rpm': ['rpm'],
   'chart-vehicle-gear': ['gear'],
-  'chart-steering-angle': ['steering'],
+  'chart-steering-angle': ['steering', 'imu_gz', 'imu_ay'],
   'chart-throttle-brake': ['throttle', 'brake'],
   'diag-chart-throttle-brake': ['throttle', 'brake'],
   'diag-chart-steering': ['steering'],

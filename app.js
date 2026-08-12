@@ -1694,7 +1694,9 @@ function updateDatasetColors(chart, isDark) {
     } else if (id === 'chart-vehicle-gear') {
       dataset.borderColor = isDark ? '#74b9ff' : '#2563eb';
     } else if (id === 'chart-steering-angle') {
-      dataset.borderColor = isDark ? '#fd79a8' : '#db2777';
+      if (idx === 0) dataset.borderColor = isDark ? '#fd79a8' : '#db2777';
+      if (idx === 1) dataset.borderColor = isDark ? '#4ade80' : '#22c55e';
+      if (idx === 2) dataset.borderColor = isDark ? '#22d3ee' : '#06b6d4';
     } else if (id === 'chart-throttle-brake' || id === 'diag-chart-throttle-brake') {
       if (idx === 0) dataset.borderColor = isDark ? '#55efc4' : '#16a34a'; // Throttle
       if (idx === 1) dataset.borderColor = isDark ? '#ff7675' : '#dc2626'; // Brake
@@ -2528,6 +2530,16 @@ document.querySelectorAll('.imu-axis-toggle').forEach(button => {
 });
 
 if (scrollBar) {
+  document.querySelectorAll('.steering-series-toggle').forEach(button => {
+    button.addEventListener('click', () => {
+      if (!chartSteering) return;
+      const enabled = button.getAttribute('aria-pressed') !== 'true';
+      button.setAttribute('aria-pressed', String(enabled));
+      button.classList.toggle('active', enabled);
+      chartSteering.setDatasetVisibility(Number(button.dataset.dataset), enabled);
+      chartSteering.update('none');
+    });
+  });
   scrollBar.addEventListener('pointerdown', () => setGpsPlayback(false));
 }
 
@@ -3495,15 +3507,36 @@ function renderMotecCharts(data) {
     color: (context) => (context.value === 0 ? '#ff2d55' : gridColor),
     lineWidth: 1
   };
+  optionsSteering.scales.yYaw = { position: 'right', display: false, grid: { display: false } };
+  optionsSteering.scales.yLat = { position: 'right', min: -2.5, max: 2.5, display: false, grid: { display: false } };
   chartSteering = new Chart(ctxSteering, {
     type: 'line',
     data: {
       datasets: [{
+        label: 'Steering Angle',
         data: S('steering', r => getCalibratedSteering(r.steering_raw)),
         borderColor: '#db2777',
         borderWidth: 1.2,
         pointRadius: 0,
         fill: false
+      }, {
+        label: 'Yaw Rate',
+        data: S('imu_gz', r => Number(r.imu_gyro_z_dps) || 0),
+        borderColor: '#22c55e',
+        borderWidth: 1.3,
+        borderDash: [7, 4],
+        pointRadius: 0,
+        fill: false,
+        yAxisID: 'yYaw'
+      }, {
+        label: 'Lateral G',
+        data: S('imu_ay', r => Number(r.imu_accel_y_g) || 0),
+        borderColor: '#06b6d4',
+        borderWidth: 1.3,
+        borderDash: [3, 4],
+        pointRadius: 0,
+        fill: false,
+        yAxisID: 'yLat'
       }]
     },
     options: optionsSteering
