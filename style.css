@@ -562,7 +562,7 @@ body {
 }
 .steering-series-toggle i { width: 15px; border-top: 2px dashed currentColor; }
 .steering-series-toggle.yaw { color: #22c55e; }
-.steering-series-toggle.lateral { color: #06b6d4; }
+.steering-series-toggle.lateral { color: #2563eb; }
 .steering-series-toggle:not(.active) { opacity: 0.35; text-decoration: line-through; }
 
 .suspension-cal-btn {

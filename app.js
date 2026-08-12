@@ -1696,7 +1696,7 @@ function updateDatasetColors(chart, isDark) {
     } else if (id === 'chart-steering-angle') {
       if (idx === 0) dataset.borderColor = isDark ? '#fd79a8' : '#db2777';
       if (idx === 1) dataset.borderColor = isDark ? '#4ade80' : '#22c55e';
-      if (idx === 2) dataset.borderColor = isDark ? '#22d3ee' : '#06b6d4';
+      if (idx === 2) dataset.borderColor = isDark ? '#74b9ff' : '#2563eb';
     } else if (id === 'chart-throttle-brake' || id === 'diag-chart-throttle-brake') {
       if (idx === 0) dataset.borderColor = isDark ? '#55efc4' : '#16a34a'; // Throttle
       if (idx === 1) dataset.borderColor = isDark ? '#ff7675' : '#dc2626'; // Brake
@@ -3531,7 +3531,7 @@ function renderMotecCharts(data) {
       }, {
         label: 'Lateral G',
         data: S('imu_ay', r => Number(r.imu_accel_y_g) || 0),
-        borderColor: '#06b6d4',
+        borderColor: '#2563eb',
         borderWidth: 1.3,
         borderDash: [3, 4],
         pointRadius: 0,
