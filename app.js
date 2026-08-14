@@ -500,6 +500,12 @@ function createYouTubePlayer(mount, videoId) {
           settled = true;
           resolve(event.target);
         },
+        onStateChange: event => {
+          if (event.data === window.YT?.PlayerState?.PLAYING &&
+              (!gpsPlaybackActive || gpsGoProSourceType !== 'youtube')) {
+            event.target.pauseVideo?.();
+          }
+        },
         onError: event => {
           if (!settled) reject(new Error(`YouTube 영상을 재생할 수 없습니다. 오류 코드 ${event.data}`));
         }
@@ -587,7 +593,7 @@ function syncOneGoProVideo(video, targetTime, force, rate, holdAtFinish = false)
     }
     const currentTime = Number(player.getCurrentTime?.());
     const drift = currentTime - videoTime;
-    if (force || !gpsPlaybackActive || !Number.isFinite(currentTime) || Math.abs(drift) > 1.0) {
+    if (force || !gpsPlaybackActive || !Number.isFinite(currentTime) || Math.abs(drift) > 0.35) {
       player.seekTo?.(videoTime, true);
     }
     player.setPlaybackRate?.(rate);
@@ -597,7 +603,7 @@ function syncOneGoProVideo(video, targetTime, force, rate, holdAtFinish = false)
       player.pauseVideo?.();
     } else {
       if (gpsPlaybackActive && state !== window.YT?.PlayerState?.PLAYING) player.playVideo?.();
-      if (!gpsPlaybackActive && state === window.YT?.PlayerState?.PLAYING) player.pauseVideo?.();
+      if (!gpsPlaybackActive) player.pauseVideo?.();
     }
     return;
   }
@@ -2714,6 +2720,9 @@ gpsFullscreenTimeline?.addEventListener('input', event => {
   updateGpsFullscreenTimelineVisual();
 });
 window.addEventListener('resize', updateGpsFullscreenTimelineVisual);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && gpsPlaybackActive) setGpsPlayback(false);
+});
 
 function closeYouTubeDialog() {
   if (gpsYouTubeDialog?.open) gpsYouTubeDialog.close();
