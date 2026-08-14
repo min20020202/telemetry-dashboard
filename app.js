@@ -334,6 +334,29 @@ function isYouTubeBuffering() {
   return getVisibleYouTubePlayers().some(player => player.getPlayerState?.() === bufferingState);
 }
 
+function isGoProPlaybackWaiting() {
+  if (!gpsGoProMatched || !gpsPlaybackActive) return false;
+  const pair = getGoProLapPair();
+  const relativeTime = pair ? Number(scrollBar?.value) || 0 : NaN;
+  if (gpsGoProSourceType === 'youtube') {
+    const playingState = window.YT?.PlayerState?.PLAYING;
+    const players = pair
+      ? [
+          relativeTime < gpsLapResults[pair.primaryIndex].duration ? gpsYouTubePrimaryPlayer : null,
+          relativeTime < gpsLapResults[pair.compareIndex].duration ? gpsYouTubeComparePlayer : null
+        ].filter(Boolean)
+      : [gpsYouTubePrimaryPlayer].filter(Boolean);
+    return players.some(player => player.getPlayerState?.() !== playingState);
+  }
+  const videos = pair
+    ? [
+        relativeTime < gpsLapResults[pair.primaryIndex].duration ? gpsGoProVideo : null,
+        relativeTime < gpsLapResults[pair.compareIndex].duration ? gpsGoProCompareVideo : null
+      ].filter(Boolean)
+    : [gpsGoProVideo].filter(Boolean);
+  return videos.some(video => video.paused || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA);
+}
+
 function refreshYouTubeBufferingState() {
   const buffering = isYouTubeBuffering();
   gpsGoProPanel?.classList.toggle('youtube-buffering', buffering);
@@ -2765,10 +2788,11 @@ function setGpsPlayback(shouldPlay) {
       return;
     }
 
-    // YouTube가 새 구간을 버퍼링하는 동안 텔레메트리 커서도 함께 기다립니다.
-    // 버퍼링이 끝난 뒤 경과시간이 한꺼번에 더해지지 않도록 기준 시각을 갱신합니다.
-    if (isYouTubeBuffering()) {
+    // 랩을 바꾼 직후 영상 탐색·디코딩이 실제 재생 상태가 될 때까지 텔레메트리도
+    // 같은 위치에서 기다립니다. 준비 시간만큼 커서가 먼저 출발하는 현상을 막습니다.
+    if (isGoProPlaybackWaiting()) {
       gpsPlaybackLastTimestamp = timestamp;
+      syncGoProVideo(getGoProTargetTelemetryTime(gpsPlaybackCursorSec), false);
       gpsPlaybackFrame = requestAnimationFrame(playbackStep);
       return;
     }
