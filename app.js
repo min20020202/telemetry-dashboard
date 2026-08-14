@@ -2933,12 +2933,13 @@ async function connectYouTubeVideo(rawUrl) {
 
   gpsGoProTelemetryStartSec = match.telemetryStart;
   gpsGoProMatched = true;
+  gpsGoProAudioSlot = 'primary';
   gpsGoProPanel.closest('.gps-map-stage')?.classList.add('gps-video-loaded');
   updateGoProComparisonLayout();
   gpsGoProStatus.textContent = `YouTube · 영상 시작 ${formatGpsClock(match.videoStartClock)} KST · CSV와 ${formatKoreanDuration(match.overlap)} 겹침 · 자동 동기화 완료`;
   gpsGoProStatus.className = 'success';
   window.localStorage?.setItem('nssur-youtube-url', rawUrl);
-  setGpsPlayback(true);
+  syncGoProVideo(Number(scrollBar.value) || 0, true);
   window.setTimeout(() => {
     gpsMap?.invalidateSize();
     refitGpsMapToCurrentLapView();
@@ -3052,11 +3053,12 @@ gpsGoProFile?.addEventListener('change', async event => {
     }
     gpsGoProTelemetryStartSec = match.telemetryStart;
     gpsGoProMatched = true;
+    gpsGoProAudioSlot = 'primary';
     gpsGoProPanel.closest('.gps-map-stage')?.classList.add('gps-video-loaded');
     updateGoProComparisonLayout();
     gpsGoProStatus.textContent = `영상 시작 ${formatGpsClock(match.videoStartClock)} KST · CSV와 ${formatKoreanDuration(match.overlap)} 겹침 · 자동 동기화 완료`;
     gpsGoProStatus.className = 'success';
-    setGpsPlayback(true);
+    syncGoProVideo(Number(scrollBar.value) || 0, true);
     setTimeout(() => {
       gpsMap?.invalidateSize();
       refitGpsMapToCurrentLapView();
