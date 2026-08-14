@@ -2275,10 +2275,6 @@ body.gps-map-fullscreen-open { overflow: hidden; }
 .gps-fs-lap-list > button.active { outline: 1px solid color-mix(in srgb, var(--lap-color) 55%, transparent); opacity: 1; }
 .gps-fs-lap-list > button.selected { border-color: color-mix(in srgb, var(--lap-color) 65%, transparent); background: color-mix(in srgb, var(--lap-color) 22%, transparent); opacity: 1; }
 .gps-fs-lap-list span { display: flex; align-items: center; gap: 5px; }
-.gps-lap-video-pick { display: none; margin-left: auto; padding: 2px 4px; border-radius: 4px; opacity: 0.58; }
-.gps-fs-lap-list > button.selected .gps-lap-video-pick { display: inline-block; }
-.gps-lap-video-pick:hover,
-.gps-lap-video-pick.video-target { background: rgba(255, 255, 255, 0.18); opacity: 1; }
 .gps-fs-lap-list i { width: 7px; height: 7px; border-radius: 50%; background: var(--lap-color); box-shadow: 0 0 4px var(--lap-color); }
 .gps-fs-lap-list strong { color: inherit; font-variant-numeric: tabular-nums; }
 .gps-best-star {

@@ -638,9 +638,6 @@ function getGoProLapPair() {
 function updateGoProComparisonLayout() {
   const pair = getGoProLapPair();
   gpsGoProPanel?.classList.toggle('comparing', Boolean(pair));
-  gpsFullscreenLapTimes?.querySelectorAll('[data-gopro-pick]').forEach(button => {
-    button.classList.toggle('video-target', Boolean(pair) && Number(button.dataset.goproPick) === pair.compareIndex);
-  });
   if (!pair) {
     if (gpsGoProPrimaryLabel) gpsGoProPrimaryLabel.textContent = '';
     if (gpsGoProSourceType === 'youtube') gpsYouTubeComparePlayer?.pauseVideo?.();
@@ -999,7 +996,7 @@ function renderFullscreenLapTimes(laps, best) {
     <button type="button" class="gps-fs-lap-all${gpsSelectedLapIndices.length === 0 ? ' selected' : ''}" data-lap-panel-view="all">전체 랩 보기</button>
     <div class="gps-fs-lap-list">${laps.map((lap, index) => `
       <button type="button" class="${index === bestIndex ? 'best ' : ''}${gpsSelectedLapIndices.includes(index) ? 'selected' : ''}" data-lap-time-row="${index}" data-lap-panel-view="${index}" style="--lap-color:${GPS_LAP_COLORS[index % GPS_LAP_COLORS.length]}">
-        <span><i></i>LAP ${lap.number}${index === bestIndex ? '<b class="gps-best-star">★</b>' : ''}<b class="gps-lap-video-pick" data-gopro-pick="${index}" title="이 LAP을 비교 영상으로 표시">🎥</b></span><strong>${formatLapTime(lap.duration)}</strong>
+        <span><i></i>LAP ${lap.number}${index === bestIndex ? '<b class="gps-best-star">★</b>' : ''}</span><strong>${formatLapTime(lap.duration)}</strong>
       </button>`).join('')}</div>` : '';
   updateGoProComparisonLayout();
 }
@@ -1810,18 +1807,6 @@ gpsLapMapLegend?.addEventListener('click', event => {
 });
 
 gpsFullscreenLapTimes?.addEventListener('click', event => {
-  const videoPick = event.target.closest('[data-gopro-pick]');
-  if (videoPick) {
-    event.stopPropagation();
-    const index = Number(videoPick.dataset.goproPick);
-    const pair = getGoProLapPair();
-    if (pair && gpsSelectedLapIndices.includes(index) && index !== pair.primaryIndex) {
-      gpsGoProCompareLapIndex = index;
-      updateGoProComparisonLayout();
-      updateGpsCursorAtTime(Number(scrollBar.value) || 0);
-    }
-    return;
-  }
   const button = event.target.closest('[data-lap-panel-view]');
   if (!button) return;
   const index = button.dataset.lapPanelView === 'all' ? -1 : Number(button.dataset.lapPanelView);
