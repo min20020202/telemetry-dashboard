@@ -165,6 +165,12 @@ const gpsYouTubeForm = document.getElementById('gps-youtube-form');
 const gpsYouTubeUrl = document.getElementById('gps-youtube-url');
 const gpsYouTubeCancel = document.getElementById('gps-youtube-cancel');
 const gpsYouTubeCancelBottom = document.getElementById('gps-youtube-cancel-bottom');
+const helpVideoTitleFile = document.getElementById('help-video-title-file');
+const helpVideoTitleStatus = document.getElementById('help-video-title-status');
+const helpVideoTitleOutput = document.getElementById('help-video-title-output');
+const helpVideoDescriptionOutput = document.getElementById('help-video-description-output');
+const helpVideoTitleCopy = document.getElementById('help-video-title-copy');
+const helpVideoDescriptionCopy = document.getElementById('help-video-description-copy');
 const gpsDetailSpeedValue = document.getElementById('gps-detail-speed-value');
 const gpsDetailRpmValue = document.getElementById('gps-detail-rpm-value');
 const gpsDetailGearValue = document.getElementById('gps-detail-gear-value');
@@ -393,6 +399,43 @@ function parseYouTubeKstStartDate(title) {
   const millis = Number(millisText.padEnd(3, '0'));
   if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) return null;
   return new Date(Date.UTC(year, month - 1, day, hour - 9, minute, second, millis));
+}
+
+function getKstDateParts(date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map(part => [part.type, part.value]));
+}
+
+function makeYouTubeUploadMetadata(file, creationDate) {
+  const { year, month, day, hour, minute, second } = getKstDateParts(creationDate);
+  const sourceName = String(file?.name || 'GOPRO').replace(/\.mp4$/i, '');
+  const safeName = sourceName.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'GOPRO';
+  const startText = `${year}-${month}-${day} ${hour}:${minute}:${second} KST`;
+  return {
+    title: `NS26F_${year}-${month}-${day}_${hour}-${minute}-${second}_KST_${safeName}`.slice(0, 100),
+    description: `NSSUR Telemetry 동기화 정보\n영상 시작: ${startText}\n원본 파일: ${file.name}\n\n※ 설명은 기록용이며, 사이트 동기화는 YouTube 제목의 시작 시각을 사용합니다.`,
+    startText
+  };
+}
+
+async function copyHelpVideoText(value, button, defaultLabel) {
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    button.textContent = '복사 완료';
+    window.setTimeout(() => { button.textContent = defaultLabel; }, 1400);
+  } catch (_) {
+    const field = button.closest('div')?.querySelector('input, textarea');
+    field?.select();
+    document.execCommand('copy');
+    button.textContent = '복사 완료';
+    window.setTimeout(() => { button.textContent = defaultLabel; }, 1400);
+  }
 }
 
 function loadYouTubeIframeApi() {
@@ -2707,6 +2750,33 @@ gpsYouTubeForm?.addEventListener('submit', async event => {
     showYouTubeError(error.message || 'YouTube 영상을 연결하지 못했습니다.');
   }
 });
+
+helpVideoTitleFile?.addEventListener('change', async event => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  helpVideoTitleStatus.textContent = 'MP4 내부 촬영 시작 시각을 읽는 중…';
+  helpVideoTitleStatus.classList.remove('success', 'error');
+  helpVideoTitleOutput.value = '';
+  helpVideoDescriptionOutput.value = '';
+  helpVideoTitleCopy.disabled = true;
+  helpVideoDescriptionCopy.disabled = true;
+  try {
+    const creationDate = await extractMp4CreationDate(file);
+    if (!creationDate) throw new Error('MP4 내부 촬영 시작 시각을 찾지 못했습니다. GoPro 원본 MP4인지 확인하세요.');
+    const metadata = makeYouTubeUploadMetadata(file, creationDate);
+    helpVideoTitleOutput.value = metadata.title;
+    helpVideoDescriptionOutput.value = metadata.description;
+    helpVideoTitleCopy.disabled = false;
+    helpVideoDescriptionCopy.disabled = false;
+    helpVideoTitleStatus.textContent = `${file.name} · 영상 시작 ${metadata.startText} · 제목 생성 완료`;
+    helpVideoTitleStatus.classList.add('success');
+  } catch (error) {
+    helpVideoTitleStatus.textContent = error.message || '영상 정보를 읽지 못했습니다.';
+    helpVideoTitleStatus.classList.add('error');
+  }
+});
+helpVideoTitleCopy?.addEventListener('click', () => copyHelpVideoText(helpVideoTitleOutput.value, helpVideoTitleCopy, '제목 복사'));
+helpVideoDescriptionCopy?.addEventListener('click', () => copyHelpVideoText(helpVideoDescriptionOutput.value, helpVideoDescriptionCopy, '설명 복사'));
 
 gpsGoProClose?.addEventListener('click', closeGoProVideo);
 gpsGoProFile?.addEventListener('change', async event => {

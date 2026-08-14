@@ -2614,6 +2614,76 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   cursor: pointer;
 }
 .gps-youtube-dialog-actions button[type="submit"] { border-color: #dc2626; background: #dc2626; color: #fff; }
+
+.help-video-title-tool {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid rgba(220, 38, 38, 0.24);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(254, 242, 242, 0.96), rgba(255, 255, 255, 0.98));
+}
+.help-video-title-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.help-video-title-head > div { min-width: 0; }
+.help-video-title-head span { color: #dc2626; font: 900 10px var(--font-mono); letter-spacing: 0.08em; }
+.help-video-title-head h3 { margin: 4px 0 5px; color: #172033; font-size: 17px; }
+.help-video-title-head p { margin: 0; color: #64748b; font-size: 12px; line-height: 1.55; }
+.help-video-file-button {
+  flex: 0 0 auto;
+  padding: 10px 15px;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.help-video-title-status { margin: 0; color: #64748b; font: 700 11px var(--font-mono); }
+.help-video-title-status.success { color: #059669; }
+.help-video-title-status.error { color: #dc2626; }
+.help-video-output { display: grid; gap: 6px; }
+.help-video-output > label { color: #334155; font-size: 12px; font-weight: 900; }
+.help-video-output > label small { margin-left: 5px; color: #dc2626; font-size: 10px; }
+.help-video-output.description > label small { color: #64748b; }
+.help-video-output > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; gap: 7px; }
+.help-video-output input,
+.help-video-output textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #172033;
+  font: 700 11px/1.5 var(--font-mono);
+  box-sizing: border-box;
+  resize: vertical;
+}
+.help-video-output button {
+  min-width: 82px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.help-video-output button:disabled { opacity: 0.45; cursor: default; }
+body.dark-theme .help-video-title-tool { background: linear-gradient(135deg, rgba(127, 29, 29, 0.18), rgba(15, 23, 42, 0.94)); }
+body.dark-theme .help-video-title-head h3,
+body.dark-theme .help-video-output > label { color: #e2e8f0; }
+body.dark-theme .help-video-output input,
+body.dark-theme .help-video-output textarea,
+body.dark-theme .help-video-output button { border-color: #475569; background: #172033; color: #e2e8f0; }
+
+@media (max-width: 720px) {
+  .help-video-title-head { align-items: stretch; flex-direction: column; }
+  .help-video-file-button { text-align: center; }
+  .help-video-output > div { grid-template-columns: 1fr; }
+  .help-video-output button { min-height: 38px; }
+}
 .gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded > #gps-map,
 .gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded > #gps-map {
   position: absolute !important;
