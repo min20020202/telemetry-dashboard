@@ -2658,6 +2658,7 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   cursor: pointer;
 }
 .gps-youtube-dialog label { font: 800 12px var(--font-mono); }
+.gps-youtube-url-field { position: relative; }
 .gps-youtube-dialog input {
   width: 100%;
   height: 42px;
@@ -2668,6 +2669,24 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   font: 700 13px var(--font-mono);
   box-sizing: border-box;
 }
+.gps-youtube-url-field input { padding-right: 46px; }
+.gps-youtube-url-field #gps-youtube-url-clear {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.gps-youtube-url-field #gps-youtube-url-clear:hover { background: #cbd5e1; color: #172033; }
 .gps-youtube-dialog input:focus { outline: 2px solid rgba(220, 38, 38, 0.22); border-color: #dc2626; }
 .gps-youtube-dialog p { margin: 0; color: #64748b; font-size: 11px; line-height: 1.5; }
 .gps-youtube-dialog code { color: #b91c1c; font: 700 10px var(--font-mono); overflow-wrap: anywhere; }

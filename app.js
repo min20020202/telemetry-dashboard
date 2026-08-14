@@ -165,6 +165,7 @@ const gpsYouTubeOpen = document.getElementById('gps-youtube-open');
 const gpsYouTubeDialog = document.getElementById('gps-youtube-dialog');
 const gpsYouTubeForm = document.getElementById('gps-youtube-form');
 const gpsYouTubeUrl = document.getElementById('gps-youtube-url');
+const gpsYouTubeUrlClear = document.getElementById('gps-youtube-url-clear');
 const gpsYouTubeCancel = document.getElementById('gps-youtube-cancel');
 const gpsYouTubeCancelBottom = document.getElementById('gps-youtube-cancel-bottom');
 const helpVideoTitleFile = document.getElementById('help-video-title-file');
@@ -945,37 +946,8 @@ function drawGpsFinishLine() {
     color: '#eab308',
     weight: 5,
     opacity: 0.95,
-    dashArray: '8 6',
     interactive: false
   }).addTo(gpsMap);
-
-  gpsFinishPoints.forEach(point => {
-    const pointIndex = gpsFinishMarkers.length;
-    const marker = L.marker([point.lat, point.lon], {
-      draggable: true,
-      autoPan: true,
-      title: '드래그해서 피니시 라인 끝점 이동',
-      icon: L.divIcon({ className: 'gps-finish-marker', html: '<div class="gps-finish-line-icon"></div>', iconSize: [18, 18], iconAnchor: [9, 9] })
-    }).addTo(gpsFinishEndpointLayer);
-
-    marker.on('dragstart', () => {
-      if (gpsLapCrossingLayer) gpsLapCrossingLayer.clearLayers();
-      setGpsLapStatus('끝점을 이동하는 중입니다. 놓으면 랩을 다시 계산합니다.', 'warn');
-    });
-    marker.on('drag', event => {
-      const latLng = event.target.getLatLng();
-      gpsFinishPoints[pointIndex] = { lat: latLng.lat, lon: latLng.lng };
-      if (gpsFinishLine) {
-        gpsFinishLine.setLatLngs(gpsFinishPoints.map(item => [item.lat, item.lon]));
-      }
-    });
-    marker.on('dragend', event => {
-      const latLng = event.target.getLatLng();
-      gpsFinishPoints[pointIndex] = { lat: latLng.lat, lon: latLng.lng };
-      calculateGpsLaps();
-    });
-    gpsFinishMarkers.push(marker);
-  });
 }
 
 function drawGpsFinishFirstPoint() {
@@ -1775,6 +1747,21 @@ function beginGpsFinishLineSelection() {
   setGpsLapStatus('피니시 라인의 첫 번째 끝점을 클릭하십시오.', 'warn');
 }
 
+function cancelGpsFinishLineSelection() {
+  if (!gpsLapSelectionActive) return false;
+  gpsLapSelectionActive = false;
+  gpsFinishPoints = [];
+  gpsLapSetLine?.classList.remove('active');
+  gpsMap?.getContainer().classList.remove('gps-lap-selecting');
+  if (gpsFinishPreviewLine && gpsMap) gpsMap.removeLayer(gpsFinishPreviewLine);
+  gpsFinishPreviewLine = null;
+  gpsFinishMarkers = [];
+  gpsFinishEndpointLayer?.clearLayers();
+  setGpsLapStatus('피니시 라인 설정을 취소했습니다. 다시 설정 버튼을 눌러 시작하십시오.');
+  updateGpsVideoControlAvailability();
+  return true;
+}
+
 function handleGpsLapMapClick(event) {
   if (!gpsLapSelectionActive) return;
   gpsFinishPoints.push({ lat: event.latlng.lat, lon: event.latlng.lng });
@@ -1948,6 +1935,10 @@ gpsMapFullscreen?.addEventListener('click', () => {
 
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape') return;
+  if (cancelGpsFinishLineSelection()) {
+    event.preventDefault();
+    return;
+  }
   const card = gpsMapFullscreen?.closest('.gps-map-card');
   if (card?.classList.contains('gps-map-fullscreen-fallback')) setGpsAppFullscreen(false);
 });
@@ -2909,6 +2900,11 @@ gpsYouTubeOpen?.addEventListener('click', () => {
   if (typeof gpsYouTubeDialog?.showModal === 'function') gpsYouTubeDialog.showModal();
   else gpsYouTubeDialog?.setAttribute('open', '');
   window.setTimeout(() => gpsYouTubeUrl?.focus(), 0);
+});
+gpsYouTubeUrlClear?.addEventListener('click', () => {
+  if (gpsYouTubeUrl) gpsYouTubeUrl.value = '';
+  window.localStorage?.removeItem('nssur-youtube-url');
+  gpsYouTubeUrl?.focus();
 });
 gpsGoProOpen?.addEventListener('click', event => requireGpsFinishLineForVideo(event));
 gpsYouTubeCancel?.addEventListener('click', closeYouTubeDialog);
