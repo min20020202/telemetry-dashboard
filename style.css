@@ -2246,6 +2246,21 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   background: #f97316;
   color: #fff;
 }
+.gps-fullscreen-playback .gps-youtube-open {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid #dc2626;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font: 900 11px var(--font-mono);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(185, 28, 28, 0.16);
+}
+.gps-fullscreen-playback .gps-youtube-open:hover {
+  background: #dc2626;
+  color: #fff;
+}
 .gps-gopro-panel {
   display: none;
   position: absolute;
@@ -2288,7 +2303,8 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   line-height: 1;
   cursor: pointer;
 }
-.gps-gopro-panel video { display: block; width: 100%; max-height: 38vh; background: #000; }
+.gps-gopro-panel video,
+.gps-gopro-panel .gps-youtube-player { display: block; width: 100%; max-height: 38vh; background: #000; }
 .gps-gopro-video-grid {
   flex: 1 1 auto;
   display: grid;
@@ -2297,7 +2313,11 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   background: #000;
 }
 .gps-gopro-video-slot { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #000; }
-.gps-gopro-video-slot video { width: 100%; height: 100%; max-height: none; object-fit: contain; }
+.gps-gopro-video-slot video,
+.gps-gopro-video-slot .gps-youtube-player { width: 100%; height: 100%; max-height: none; object-fit: contain; }
+.gps-gopro-video-slot .gps-youtube-player { display: none; border: 0; }
+.gps-gopro-panel.youtube-source .gps-gopro-video-slot video { display: none; }
+.gps-gopro-panel.youtube-source .gps-gopro-video-slot .gps-youtube-player { display: block; }
 .gps-gopro-compare-slot { display: none; }
 .gps-gopro-panel.comparing .gps-gopro-video-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; }
 .gps-gopro-panel.comparing .gps-gopro-compare-slot { display: block; }
@@ -2338,6 +2358,11 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   aspect-ratio: 16 / 9;
   object-fit: contain;
 }
+.gps-map-stage.gps-detail-open > .gps-gopro-panel .gps-youtube-player {
+  width: 100%;
+  max-height: none;
+  aspect-ratio: 16 / 9;
+}
 
 /* GoPro-first fullscreen layout: video fills the driving view and the fixed
    test-track map remains available as a compact picture-in-picture. */
@@ -2372,6 +2397,68 @@ body.gps-map-fullscreen-open { overflow: hidden; }
   aspect-ratio: auto;
   object-fit: contain;
 }
+.gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded > .gps-gopro-panel .gps-youtube-player,
+.gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded > .gps-gopro-panel .gps-youtube-player {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  border: 0;
+}
+
+.gps-youtube-dialog {
+  width: min(92vw, 520px);
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: #fff;
+  color: #172033;
+  box-shadow: 0 22px 70px rgba(15, 23, 42, 0.35);
+}
+.gps-youtube-dialog::backdrop { background: rgba(15, 23, 42, 0.58); backdrop-filter: blur(2px); }
+.gps-youtube-dialog form { display: grid; gap: 12px; padding: 20px; }
+.gps-youtube-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.gps-youtube-dialog-head > div { display: grid; gap: 4px; }
+.gps-youtube-dialog-head strong { font-size: 18px; }
+.gps-youtube-dialog-head span { color: #64748b; font-size: 12px; }
+.gps-youtube-dialog-head button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 22px;
+  cursor: pointer;
+}
+.gps-youtube-dialog label { font: 800 12px var(--font-mono); }
+.gps-youtube-dialog input {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #172033;
+  font: 700 13px var(--font-mono);
+  box-sizing: border-box;
+}
+.gps-youtube-dialog input:focus { outline: 2px solid rgba(220, 38, 38, 0.22); border-color: #dc2626; }
+.gps-youtube-dialog p { margin: 0; color: #64748b; font-size: 11px; line-height: 1.5; }
+.gps-youtube-dialog code { color: #b91c1c; font: 700 10px var(--font-mono); overflow-wrap: anywhere; }
+.gps-youtube-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.gps-youtube-dialog-actions button {
+  height: 36px;
+  padding: 0 15px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #fff;
+  color: #475569;
+  font-weight: 800;
+  cursor: pointer;
+}
+.gps-youtube-dialog-actions button[type="submit"] { border-color: #dc2626; background: #dc2626; color: #fff; }
 .gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded > #gps-map,
 .gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded > #gps-map {
   position: absolute !important;

@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260812-7">
+  <link rel="stylesheet" href="style.css?v=20260815-1">
 </head>
 <body>
 
@@ -310,6 +310,7 @@
               <div class="gps-fullscreen-playback">
                 <label class="gps-gopro-open" for="gps-gopro-file">🎥 GoPro MP4</label>
                 <input id="gps-gopro-file" type="file" accept="video/mp4,.mp4" hidden>
+                <button id="gps-youtube-open" class="gps-youtube-open" type="button">▶ YouTube</button>
                 <button id="gps-fullscreen-play-toggle" type="button">▶ 재생</button>
                 <select id="gps-fullscreen-play-rate" aria-label="전체화면 재생 속도">
                   <option value="0.5">0.5×</option>
@@ -329,10 +330,12 @@
                   <div class="gps-gopro-video-slot gps-gopro-primary-slot">
                     <div class="gps-gopro-video-label"><span id="gps-gopro-primary-label"></span><strong id="gps-gopro-primary-speed">--.- <em>km/h</em></strong></div>
                     <video id="gps-gopro-video" playsinline muted preload="metadata"></video>
+                    <div id="gps-youtube-player" class="gps-youtube-player" aria-label="YouTube 기준 영상"></div>
                   </div>
                   <div class="gps-gopro-video-slot gps-gopro-compare-slot">
                     <div class="gps-gopro-video-label"><span id="gps-gopro-compare-label"></span><strong id="gps-gopro-compare-speed">--.- <em>km/h</em></strong></div>
                     <video id="gps-gopro-compare-video" playsinline muted preload="metadata"></video>
+                    <div id="gps-youtube-compare-player" class="gps-youtube-player" aria-label="YouTube 비교 영상"></div>
                   </div>
                 </div>
                 <output id="gps-gopro-status"></output>
@@ -640,11 +643,30 @@
     </div>
   </div>
 
+  <dialog id="gps-youtube-dialog" class="gps-youtube-dialog">
+    <form id="gps-youtube-form" method="dialog">
+      <div class="gps-youtube-dialog-head">
+        <div>
+          <strong>YouTube 영상 연결</strong>
+          <span>일부 공개 또는 공개 영상의 링크를 입력하세요.</span>
+        </div>
+        <button id="gps-youtube-cancel" type="button" aria-label="닫기">×</button>
+      </div>
+      <label for="gps-youtube-url">YouTube 링크</label>
+      <input id="gps-youtube-url" type="url" inputmode="url" autocomplete="off" placeholder="https://youtu.be/영상ID" required>
+      <p>제목 형식: <code>NS26F_2026-08-11_15-13-24.000_KST_GX014229</code></p>
+      <div class="gps-youtube-dialog-actions">
+        <button id="gps-youtube-connect" type="submit">영상 연결</button>
+        <button id="gps-youtube-cancel-bottom" type="button">취소</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Custom JS -->
   <script src="suspension.js?v=20260810-1"></script>
   <script src="filters.js?v=20260812-1"></script>
   <script src="steering.js?v=20260812-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
-  <script src="app.js?v=20260812-7"></script>
+  <script src="app.js?v=20260815-1"></script>
 </body>
 </html>

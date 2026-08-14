@@ -157,6 +157,12 @@ const gpsGoProPrimarySpeed = document.getElementById('gps-gopro-primary-speed');
 const gpsGoProCompareSpeed = document.getElementById('gps-gopro-compare-speed');
 const gpsGoProStatus = document.getElementById('gps-gopro-status');
 const gpsGoProClose = document.getElementById('gps-gopro-close');
+const gpsYouTubeOpen = document.getElementById('gps-youtube-open');
+const gpsYouTubeDialog = document.getElementById('gps-youtube-dialog');
+const gpsYouTubeForm = document.getElementById('gps-youtube-form');
+const gpsYouTubeUrl = document.getElementById('gps-youtube-url');
+const gpsYouTubeCancel = document.getElementById('gps-youtube-cancel');
+const gpsYouTubeCancelBottom = document.getElementById('gps-youtube-cancel-bottom');
 const gpsDetailSpeedValue = document.getElementById('gps-detail-speed-value');
 const gpsDetailRpmValue = document.getElementById('gps-detail-rpm-value');
 const gpsDetailGearValue = document.getElementById('gps-detail-gear-value');
@@ -298,6 +304,11 @@ let gpsGoProObjectUrl = '';
 let gpsGoProTelemetryStartSec = NaN;
 let gpsGoProMatched = false;
 let gpsGoProCompareLapIndex = -1;
+let gpsGoProSourceType = '';
+let gpsYouTubeApiPromise = null;
+let gpsYouTubePrimaryPlayer = null;
+let gpsYouTubeComparePlayer = null;
+let gpsYouTubeVideoId = '';
 
 async function readMp4AtomHeader(file, offset) {
   if (offset + 8 > file.size) return null;
@@ -349,6 +360,137 @@ async function extractMp4CreationDate(file) {
   return null;
 }
 
+function extractYouTubeVideoId(value) {
+  const raw = String(value || '').trim();
+  if (/^[A-Za-z0-9_-]{11}$/.test(raw)) return raw;
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    const host = url.hostname.replace(/^www\./, '').toLowerCase();
+    if (host === 'youtu.be') return url.pathname.split('/').filter(Boolean)[0] || '';
+    if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+      if (url.pathname === '/watch') return url.searchParams.get('v') || '';
+      const parts = url.pathname.split('/').filter(Boolean);
+      if (['embed', 'shorts', 'live'].includes(parts[0])) return parts[1] || '';
+    }
+  } catch (_) {
+    return '';
+  }
+  return '';
+}
+
+function parseYouTubeKstStartDate(title) {
+  const match = String(title || '').match(/(?:^|[^0-9])(\d{4})[-_.](\d{2})[-_.](\d{2})[_\s-]+(\d{2})[-:.](\d{2})[-:.](\d{2})(?:[.,](\d{1,3}))?[_\s-]*KST(?:[^A-Z]|$)/i);
+  if (!match) return null;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, millisText = '0'] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  const millis = Number(millisText.padEnd(3, '0'));
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) return null;
+  return new Date(Date.UTC(year, month - 1, day, hour - 9, minute, second, millis));
+}
+
+function loadYouTubeIframeApi() {
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (gpsYouTubeApiPromise) return gpsYouTubeApiPromise;
+  gpsYouTubeApiPromise = new Promise((resolve, reject) => {
+    const previousReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof previousReady === 'function') previousReady();
+      resolve(window.YT);
+    };
+    let script = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+    if (!script) {
+      script = document.createElement('script');
+      script.src = 'https://www.youtube.com/iframe_api';
+      script.async = true;
+      document.head.appendChild(script);
+    }
+    script.addEventListener('error', () => reject(new Error('YouTube 플레이어를 불러오지 못했습니다. 인터넷 연결을 확인하세요.')), { once: true });
+    window.setTimeout(() => {
+      if (!window.YT?.Player) reject(new Error('YouTube 플레이어 연결 시간이 초과되었습니다.'));
+    }, 15000);
+  });
+  return gpsYouTubeApiPromise;
+}
+
+function ensureYouTubeMount(id, slotSelector) {
+  let mount = document.getElementById(id);
+  if (mount) return mount;
+  const slot = document.querySelector(slotSelector);
+  if (!slot) return null;
+  mount = document.createElement('div');
+  mount.id = id;
+  mount.className = 'gps-youtube-player';
+  slot.appendChild(mount);
+  return mount;
+}
+
+function createYouTubePlayer(mount, videoId) {
+  return new Promise((resolve, reject) => {
+    if (!mount || !window.YT?.Player) {
+      reject(new Error('YouTube 플레이어 영역을 준비하지 못했습니다.'));
+      return;
+    }
+    let settled = false;
+    const player = new window.YT.Player(mount, {
+      videoId,
+      width: '100%',
+      height: '100%',
+      playerVars: {
+        autoplay: 0,
+        controls: 0,
+        disablekb: 1,
+        fs: 0,
+        playsinline: 1,
+        rel: 0
+      },
+      events: {
+        onReady: event => {
+          event.target.getIframe?.().classList.add('gps-youtube-player');
+          event.target.mute();
+          settled = true;
+          resolve(event.target);
+        },
+        onError: event => {
+          if (!settled) reject(new Error(`YouTube 영상을 재생할 수 없습니다. 오류 코드 ${event.data}`));
+        }
+      }
+    });
+  });
+}
+
+async function waitForYouTubeMetadata(player) {
+  for (let count = 0; count < 40; count += 1) {
+    const duration = Number(player?.getDuration?.());
+    const title = String(player?.getVideoData?.()?.title || '').trim();
+    if (duration > 0 && title) return { duration, title };
+    await new Promise(resolve => window.setTimeout(resolve, 125));
+  }
+  return {
+    duration: Number(player?.getDuration?.()),
+    title: String(player?.getVideoData?.()?.title || '').trim()
+  };
+}
+
+function destroyYouTubePlayers() {
+  [gpsYouTubePrimaryPlayer, gpsYouTubeComparePlayer].forEach(player => {
+    try { player?.destroy?.(); } catch (_) { /* 이미 제거된 플레이어 */ }
+  });
+  gpsYouTubePrimaryPlayer = null;
+  gpsYouTubeComparePlayer = null;
+  gpsYouTubeVideoId = '';
+  ['gps-youtube-player', 'gps-youtube-compare-player'].forEach(id => {
+    const element = document.getElementById(id);
+    if (element?.tagName === 'IFRAME') element.remove();
+  });
+  ensureYouTubeMount('gps-youtube-player', '.gps-gopro-primary-slot');
+  ensureYouTubeMount('gps-youtube-compare-player', '.gps-gopro-compare-slot');
+}
+
 function getCsvGpsClockRange() {
   let first = null;
   let last = null;
@@ -389,8 +531,27 @@ function matchGoProToCsv(creationDate, duration) {
 }
 
 function syncOneGoProVideo(video, targetTime, force, rate) {
-  if (!video || !Number.isFinite(video.duration)) return;
   const videoTime = targetTime - gpsGoProTelemetryStartSec;
+  if (gpsGoProSourceType === 'youtube') {
+    const player = video === gpsGoProCompareVideo ? gpsYouTubeComparePlayer : gpsYouTubePrimaryPlayer;
+    const duration = Number(player?.getDuration?.());
+    if (!player || !Number.isFinite(duration) || duration <= 0) return;
+    if (videoTime < 0 || videoTime > duration) {
+      player.pauseVideo?.();
+      return;
+    }
+    const currentTime = Number(player.getCurrentTime?.());
+    const drift = currentTime - videoTime;
+    if (force || !gpsPlaybackActive || !Number.isFinite(currentTime) || Math.abs(drift) > 1.0) {
+      player.seekTo?.(videoTime, true);
+    }
+    player.setPlaybackRate?.(rate);
+    const state = player.getPlayerState?.();
+    if (gpsPlaybackActive && state !== window.YT?.PlayerState?.PLAYING) player.playVideo?.();
+    if (!gpsPlaybackActive && state === window.YT?.PlayerState?.PLAYING) player.pauseVideo?.();
+    return;
+  }
+  if (!video || !Number.isFinite(video.duration)) return;
   if (videoTime < 0 || videoTime > video.duration) {
     video.pause();
     return;
@@ -422,7 +583,8 @@ function updateGoProComparisonLayout() {
   });
   if (!pair) {
     if (gpsGoProPrimaryLabel) gpsGoProPrimaryLabel.textContent = '';
-    gpsGoProCompareVideo?.pause();
+    if (gpsGoProSourceType === 'youtube') gpsYouTubeComparePlayer?.pauseVideo?.();
+    else gpsGoProCompareVideo?.pause();
     return;
   }
   const primary = gpsLapResults[pair.primaryIndex];
@@ -463,7 +625,8 @@ function syncGoProVideo(targetTime, force = false) {
     setGoProSlotSpeed(gpsGoProCompareSpeed, gpsSpeedAtTelemetryTime(compareTime));
   } else {
     syncOneGoProVideo(gpsGoProVideo, targetTime, force, rate);
-    gpsGoProCompareVideo?.pause();
+    if (gpsGoProSourceType === 'youtube') gpsYouTubeComparePlayer?.pauseVideo?.();
+    else gpsGoProCompareVideo?.pause();
   }
 }
 
@@ -476,18 +639,28 @@ function getGoProTargetTelemetryTime(cursorTime) {
 }
 
 function closeGoProVideo() {
-  gpsGoProVideo?.pause();
-  gpsGoProCompareVideo?.pause();
+  if (gpsGoProSourceType === 'youtube') {
+    gpsYouTubePrimaryPlayer?.pauseVideo?.();
+    gpsYouTubeComparePlayer?.pauseVideo?.();
+  } else {
+    gpsGoProVideo?.pause();
+    gpsGoProCompareVideo?.pause();
+  }
   if (gpsGoProVideo) gpsGoProVideo.removeAttribute('src');
   if (gpsGoProCompareVideo) gpsGoProCompareVideo.removeAttribute('src');
   if (gpsGoProObjectUrl) URL.revokeObjectURL(gpsGoProObjectUrl);
+  destroyYouTubePlayers();
   gpsGoProObjectUrl = '';
+  gpsGoProSourceType = '';
   gpsGoProMatched = false;
   gpsGoProCompareLapIndex = -1;
   gpsGoProTelemetryStartSec = NaN;
   const stage = gpsGoProPanel?.closest('.gps-map-stage');
   stage?.classList.remove('gps-video-loaded');
-  if (gpsGoProPanel) gpsGoProPanel.hidden = true;
+  if (gpsGoProPanel) {
+    gpsGoProPanel.hidden = true;
+    gpsGoProPanel.classList.remove('youtube-source');
+  }
   if (gpsGoProFile) gpsGoProFile.value = '';
   setTimeout(() => {
     gpsMap?.invalidateSize();
@@ -2416,12 +2589,110 @@ gpsFullscreenTimeline?.addEventListener('input', event => {
   updateGpsCursorAtTime(targetTime);
 });
 
+function closeYouTubeDialog() {
+  if (gpsYouTubeDialog?.open) gpsYouTubeDialog.close();
+}
+
+function showYouTubeError(message) {
+  gpsGoProMatched = false;
+  gpsGoProSourceType = '';
+  destroyYouTubePlayers();
+  gpsGoProPanel?.classList.remove('youtube-source');
+  gpsGoProPanel?.closest('.gps-map-stage')?.classList.remove('gps-video-loaded');
+  if (gpsGoProPanel) gpsGoProPanel.hidden = false;
+  if (gpsGoProStatus) {
+    gpsGoProStatus.textContent = message;
+    gpsGoProStatus.className = 'error';
+  }
+}
+
+async function connectYouTubeVideo(rawUrl) {
+  const videoId = extractYouTubeVideoId(rawUrl);
+  if (!videoId || !/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+    throw new Error('올바른 YouTube 영상 링크를 입력하세요.');
+  }
+  if (!globalData.length) throw new Error('먼저 CSV를 열어주세요.');
+
+  setGpsPlayback(false);
+  closeGoProVideo();
+  gpsGoProSourceType = 'youtube';
+  gpsYouTubeVideoId = videoId;
+  gpsGoProPanel.hidden = false;
+  gpsGoProPanel.classList.add('youtube-source');
+  gpsGoProStatus.textContent = 'YouTube 제목과 영상 길이를 확인하는 중…';
+  gpsGoProStatus.className = '';
+
+  await loadYouTubeIframeApi();
+  const primaryMount = ensureYouTubeMount('gps-youtube-player', '.gps-gopro-primary-slot');
+  const compareMount = ensureYouTubeMount('gps-youtube-compare-player', '.gps-gopro-compare-slot');
+  [gpsYouTubePrimaryPlayer, gpsYouTubeComparePlayer] = await Promise.all([
+    createYouTubePlayer(primaryMount, videoId),
+    createYouTubePlayer(compareMount, videoId)
+  ]);
+  const metadata = await waitForYouTubeMetadata(gpsYouTubePrimaryPlayer);
+  if (!(metadata.duration > 0)) throw new Error('YouTube 영상 길이를 확인하지 못했습니다. 처리가 끝난 뒤 다시 시도하세요.');
+  if (!metadata.title) throw new Error('YouTube 영상 제목을 읽지 못했습니다. 영상 공개 상태를 일부 공개로 설정하세요.');
+
+  const creationDate = parseYouTubeKstStartDate(metadata.title);
+  if (!creationDate) {
+    throw new Error('제목에서 시작 시각을 찾지 못했습니다. 예: NS26F_2026-08-11_15-13-24.000_KST_GX014229');
+  }
+  const match = matchGoProToCsv(creationDate, metadata.duration);
+  if (!match?.matched) {
+    const videoRange = match
+      ? `${formatGpsClock(match.videoStart)}~${formatGpsClock(match.videoStart + metadata.duration)} KST`
+      : '시간 확인 불가';
+    const csvRange = match?.range
+      ? `${formatGpsClock(match.range.first.clock)}~${formatGpsClock(match.range.last.clock)} KST`
+      : '시간 확인 불가';
+    throw new Error(`시간이 겹치지 않아 연결할 수 없습니다. 영상 ${videoRange} · CSV ${csvRange}`);
+  }
+
+  gpsGoProTelemetryStartSec = match.telemetryStart;
+  gpsGoProMatched = true;
+  gpsGoProPanel.closest('.gps-map-stage')?.classList.add('gps-video-loaded');
+  updateGoProComparisonLayout();
+  gpsGoProStatus.textContent = `YouTube · 영상 시작 ${formatGpsClock(match.videoStartClock)} KST · CSV와 ${formatKoreanDuration(match.overlap)} 겹침 · 자동 동기화 완료`;
+  gpsGoProStatus.className = 'success';
+  window.localStorage?.setItem('nssur-youtube-url', rawUrl);
+  syncGoProVideo(Number(scrollBar.value) || 0, true);
+  window.setTimeout(() => {
+    gpsMap?.invalidateSize();
+    refitGpsMapToCurrentLapView();
+  }, 100);
+}
+
+gpsYouTubeOpen?.addEventListener('click', () => {
+  const savedUrl = window.localStorage?.getItem('nssur-youtube-url') || '';
+  if (gpsYouTubeUrl && !gpsYouTubeUrl.value) gpsYouTubeUrl.value = savedUrl;
+  if (typeof gpsYouTubeDialog?.showModal === 'function') gpsYouTubeDialog.showModal();
+  else gpsYouTubeDialog?.setAttribute('open', '');
+  window.setTimeout(() => gpsYouTubeUrl?.focus(), 0);
+});
+gpsYouTubeCancel?.addEventListener('click', closeYouTubeDialog);
+gpsYouTubeCancelBottom?.addEventListener('click', closeYouTubeDialog);
+gpsYouTubeDialog?.addEventListener('click', event => {
+  if (event.target === gpsYouTubeDialog) closeYouTubeDialog();
+});
+gpsYouTubeForm?.addEventListener('submit', async event => {
+  event.preventDefault();
+  const rawUrl = gpsYouTubeUrl?.value.trim() || '';
+  closeYouTubeDialog();
+  try {
+    await connectYouTubeVideo(rawUrl);
+  } catch (error) {
+    showYouTubeError(error.message || 'YouTube 영상을 연결하지 못했습니다.');
+  }
+});
+
 gpsGoProClose?.addEventListener('click', closeGoProVideo);
 gpsGoProFile?.addEventListener('change', async event => {
   const file = event.target.files?.[0];
   if (!file) return;
   setGpsPlayback(false);
   closeGoProVideo();
+  gpsGoProSourceType = 'local';
+  gpsGoProPanel?.classList.remove('youtube-source');
   gpsGoProFile.value = '';
   if (!globalData.length) {
     gpsGoProPanel.hidden = false;
