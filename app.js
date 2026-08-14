@@ -155,6 +155,8 @@ const gpsGoProOpen = document.querySelector('.gps-gopro-open');
 const gpsGoProPanel = document.getElementById('gps-gopro-panel');
 const gpsGoProVideo = document.getElementById('gps-gopro-video');
 const gpsGoProCompareVideo = document.getElementById('gps-gopro-compare-video');
+const gpsGoProPrimaryAudio = document.getElementById('gps-gopro-primary-audio');
+const gpsGoProCompareAudio = document.getElementById('gps-gopro-compare-audio');
 const gpsGoProPrimaryLabel = document.getElementById('gps-gopro-primary-label');
 const gpsGoProCompareLabel = document.getElementById('gps-gopro-compare-label');
 const gpsGoProPrimarySpeed = document.getElementById('gps-gopro-primary-speed');
@@ -320,6 +322,7 @@ let gpsYouTubeApiPromise = null;
 let gpsYouTubePrimaryPlayer = null;
 let gpsYouTubeComparePlayer = null;
 let gpsYouTubeVideoId = '';
+let gpsGoProAudioSlot = '';
 const gpsYouTubeLastSeekAt = new WeakMap();
 
 function getVisibleYouTubePlayers() {
@@ -694,9 +697,11 @@ function updateGoProComparisonLayout() {
   const pair = getGoProLapPair();
   gpsGoProPanel?.classList.toggle('comparing', Boolean(pair));
   if (!pair) {
+    if (gpsGoProAudioSlot === 'compare') gpsGoProAudioSlot = 'primary';
     if (gpsGoProPrimaryLabel) gpsGoProPrimaryLabel.textContent = '';
     if (gpsGoProSourceType === 'youtube') gpsYouTubeComparePlayer?.pauseVideo?.();
     else gpsGoProCompareVideo?.pause();
+    applyGoProAudioSelection();
     return;
   }
   const primary = gpsLapResults[pair.primaryIndex];
@@ -709,6 +714,7 @@ function updateGoProComparisonLayout() {
     gpsGoProCompareLabel.textContent = `비교 · LAP ${compare.number} · +${(compare.duration - primary.duration).toFixed(3)}초`;
     gpsGoProCompareLabel.parentElement?.style.setProperty('--lap-color', GPS_LAP_COLORS[pair.compareIndex % GPS_LAP_COLORS.length]);
   }
+  applyGoProAudioSelection();
 }
 
 function gpsSpeedAtTelemetryTime(targetTime) {
@@ -718,6 +724,26 @@ function gpsSpeedAtTelemetryTime(targetTime) {
 
 function setGoProSlotSpeed(element, speed) {
   if (element?.firstChild) element.firstChild.nodeValue = `${speed.toFixed(1)} `;
+}
+
+function applyGoProAudioSelection() {
+  const primaryEnabled = gpsGoProAudioSlot === 'primary';
+  const compareEnabled = gpsGoProAudioSlot === 'compare' && Boolean(getGoProLapPair());
+  if (gpsGoProVideo) gpsGoProVideo.muted = !primaryEnabled;
+  if (gpsGoProCompareVideo) gpsGoProCompareVideo.muted = !compareEnabled;
+  if (primaryEnabled) gpsYouTubePrimaryPlayer?.unMute?.();
+  else gpsYouTubePrimaryPlayer?.mute?.();
+  if (compareEnabled) gpsYouTubeComparePlayer?.unMute?.();
+  else gpsYouTubeComparePlayer?.mute?.();
+  gpsGoProPrimaryAudio?.setAttribute('aria-pressed', String(primaryEnabled));
+  gpsGoProCompareAudio?.setAttribute('aria-pressed', String(compareEnabled));
+  gpsGoProPrimaryAudio?.setAttribute('aria-label', primaryEnabled ? '기준 영상 소리 끄기' : '기준 영상 소리 켜기');
+  gpsGoProCompareAudio?.setAttribute('aria-label', compareEnabled ? '비교 영상 소리 끄기' : '비교 영상 소리 켜기');
+}
+
+function toggleGoProAudio(slot) {
+  gpsGoProAudioSlot = gpsGoProAudioSlot === slot ? '' : slot;
+  applyGoProAudioSelection();
 }
 
 function syncGoProVideo(targetTime, force = false) {
@@ -768,6 +794,8 @@ function closeGoProVideo() {
   if (gpsGoProObjectUrl) URL.revokeObjectURL(gpsGoProObjectUrl);
   destroyYouTubePlayers();
   gpsGoProObjectUrl = '';
+  gpsGoProAudioSlot = '';
+  applyGoProAudioSelection();
   gpsGoProSourceType = '';
   gpsGoProMatched = false;
   gpsGoProCompareLapIndex = -1;
@@ -2925,6 +2953,8 @@ gpsYouTubeOpen?.addEventListener('click', () => {
   else gpsYouTubeDialog?.setAttribute('open', '');
   window.setTimeout(() => gpsYouTubeUrl?.focus(), 0);
 });
+gpsGoProPrimaryAudio?.addEventListener('click', () => toggleGoProAudio('primary'));
+gpsGoProCompareAudio?.addEventListener('click', () => toggleGoProAudio('compare'));
 gpsYouTubeUrlClear?.addEventListener('click', () => {
   if (gpsYouTubeUrl) gpsYouTubeUrl.value = '';
   window.localStorage?.removeItem('nssur-youtube-url');
