@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260815-8">
+  <link rel="stylesheet" href="style.css?v=20260815-9">
 </head>
 <body>
 
@@ -309,9 +309,9 @@
               </label>
               <span id="gps-lap-toolbar-status">지도에서 라인 양 끝을 차례로 선택하십시오.</span>
               <div class="gps-fullscreen-playback">
-                <label class="gps-gopro-open" for="gps-gopro-file">🎥 GoPro MP4</label>
-                <input id="gps-gopro-file" type="file" accept="video/mp4,.mp4" hidden>
-                <button id="gps-youtube-open" class="gps-youtube-open" type="button">▶ YouTube</button>
+                <label class="gps-gopro-open disabled" for="gps-gopro-file" aria-disabled="true">🎥 GoPro MP4</label>
+                <input id="gps-gopro-file" type="file" accept="video/mp4,.mp4" hidden disabled>
+                <button id="gps-youtube-open" class="gps-youtube-open" type="button" aria-disabled="true">▶ YouTube</button>
                 <button id="gps-fullscreen-play-toggle" type="button">▶ 재생</button>
                 <select id="gps-fullscreen-play-rate" aria-label="전체화면 재생 속도">
                   <option value="0.5">0.5×</option>
@@ -808,6 +808,6 @@
   <script src="filters.js?v=20260812-1"></script>
   <script src="steering.js?v=20260812-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
-  <script src="app.js?v=20260815-8"></script>
+  <script src="app.js?v=20260815-9"></script>
 </body>
 </html>

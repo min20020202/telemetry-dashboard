@@ -150,6 +150,7 @@ const gpsFullscreenSpeedValue = document.getElementById('gps-fullscreen-speed-va
 const gpsFullscreenDetailToggle = document.getElementById('gps-fullscreen-detail-toggle');
 const gpsFullscreenDetail = document.getElementById('gps-fullscreen-detail');
 const gpsGoProFile = document.getElementById('gps-gopro-file');
+const gpsGoProOpen = document.querySelector('.gps-gopro-open');
 const gpsGoProPanel = document.getElementById('gps-gopro-panel');
 const gpsGoProVideo = document.getElementById('gps-gopro-video');
 const gpsGoProCompareVideo = document.getElementById('gps-gopro-compare-video');
@@ -1507,6 +1508,21 @@ function renderGpsLapResults(crossings, laps) {
   }).join('');
 }
 
+function updateGpsVideoControlAvailability() {
+  const enabled = gpsFinishPoints.length === 2;
+  if (gpsGoProFile) gpsGoProFile.disabled = !enabled;
+  gpsGoProOpen?.classList.toggle('disabled', !enabled);
+  gpsGoProOpen?.setAttribute('aria-disabled', String(!enabled));
+  gpsYouTubeOpen?.setAttribute('aria-disabled', String(!enabled));
+}
+
+function requireGpsFinishLineForVideo(event) {
+  if (gpsFinishPoints.length === 2) return true;
+  event?.preventDefault();
+  setGpsLapStatus('영상 동기화를 사용하려면 먼저 피니시 라인을 설정하십시오.', 'warn');
+  return false;
+}
+
 function crossingElapsedSeconds(previous, current) {
   if (Number.isFinite(previous.gpsTime) && Number.isFinite(current.gpsTime)) {
     const gpsElapsed = current.gpsTime - previous.gpsTime;
@@ -1619,6 +1635,8 @@ function calculateGpsLaps() {
 function clearGpsLapAnalysis() {
   gpsLapSelectionActive = false;
   gpsFinishPoints = [];
+  if (gpsGoProSourceType || gpsGoProMatched) closeGoProVideo();
+  closeYouTubeDialog();
   gpsLapResults = [];
   gpsSelectedLapIndex = -1;
   gpsSelectedLapIndices = [];
@@ -1653,6 +1671,7 @@ function clearGpsLapAnalysis() {
   if (gpsLapFixSummary) gpsLapFixSummary.textContent = '피니시 라인을 설정하지 않았습니다.';
   if (gpsLapList) gpsLapList.innerHTML = '<div class="gps-lap-empty">지도에서 피니시 라인의 양 끝을 클릭하면 자동으로 랩을 계산합니다.</div>';
   setGpsLapStatus('지도에서 라인 양 끝을 차례로 선택하십시오.');
+  updateGpsVideoControlAvailability();
 }
 
 function beginGpsFinishLineSelection() {
@@ -1684,6 +1703,7 @@ function handleGpsLapMapClick(event) {
   gpsFinishPreviewLine = null;
   drawGpsFinishLine();
   calculateGpsLaps();
+  updateGpsVideoControlAvailability();
 }
 
 // Leaflet Map Initialization
@@ -2798,12 +2818,14 @@ async function connectYouTubeVideo(rawUrl) {
 }
 
 gpsYouTubeOpen?.addEventListener('click', () => {
+  if (!requireGpsFinishLineForVideo()) return;
   const savedUrl = window.localStorage?.getItem('nssur-youtube-url') || '';
   if (gpsYouTubeUrl && !gpsYouTubeUrl.value) gpsYouTubeUrl.value = savedUrl;
   if (typeof gpsYouTubeDialog?.showModal === 'function') gpsYouTubeDialog.showModal();
   else gpsYouTubeDialog?.setAttribute('open', '');
   window.setTimeout(() => gpsYouTubeUrl?.focus(), 0);
 });
+gpsGoProOpen?.addEventListener('click', event => requireGpsFinishLineForVideo(event));
 gpsYouTubeCancel?.addEventListener('click', closeYouTubeDialog);
 gpsYouTubeCancelBottom?.addEventListener('click', closeYouTubeDialog);
 gpsYouTubeDialog?.addEventListener('click', event => {
