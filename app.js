@@ -1375,6 +1375,33 @@ function clearGpsCompareMarkers() {
   if (gpsCursorMarker) gpsCursorMarker.setOpacity(1);
 }
 
+function getGpsLapPositionAtTime(lap, targetTime) {
+  if (targetTime <= lap.startTime) return { lat: lap.startLat, lon: lap.startLon };
+  if (targetTime >= lap.endTime) return { lat: lap.endLat, lon: lap.endLon };
+
+  let low = 0;
+  let high = gpsLapPoints.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (gpsLapPoints[middle].time < targetTime) low = middle + 1;
+    else high = middle;
+  }
+
+  const previous = low > 0 && gpsLapPoints[low - 1].time > lap.startTime
+    ? gpsLapPoints[low - 1]
+    : { lat: lap.startLat, lon: lap.startLon, time: lap.startTime };
+  const next = low < gpsLapPoints.length && gpsLapPoints[low].time < lap.endTime
+    ? gpsLapPoints[low]
+    : { lat: lap.endLat, lon: lap.endLon, time: lap.endTime };
+  const elapsed = next.time - previous.time;
+  if (!(elapsed > 0) || elapsed > 10) return { lat: previous.lat, lon: previous.lon };
+  const ratio = Math.max(0, Math.min(1, (targetTime - previous.time) / elapsed));
+  return {
+    lat: previous.lat + (next.lat - previous.lat) * ratio,
+    lon: previous.lon + (next.lon - previous.lon) * ratio
+  };
+}
+
 function updateGpsCompareMarkers(relativeTime) {
   if (gpsSelectedLapIndices.length < 2 || !gpsMap) return;
   if (gpsCursorMarker) gpsCursorMarker.setOpacity(0);
@@ -1384,8 +1411,7 @@ function updateGpsCompareMarkers(relativeTime) {
   gpsSelectedLapIndices.forEach((lapIndex, markerIndex) => {
     const lap = gpsLapResults[lapIndex];
     const absoluteTime = lap.startTime + Math.min(relativeTime, lap.duration);
-    const globalIndex = findGlobalIndexAtTime(absoluteTime);
-    const position = getInterpolatedGpsPosition(absoluteTime, globalIndex);
+    const position = getGpsLapPositionAtTime(lap, absoluteTime);
     if (!position) return;
     let marker = gpsCompareMarkers[markerIndex];
     if (!marker) {
