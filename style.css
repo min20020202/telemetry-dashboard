@@ -2085,7 +2085,30 @@ body {
 }
 
 #gps-fullscreen-play-rate { width: 64px; }
-#gps-fullscreen-timeline { min-width: 0; width: 100%; accent-color: var(--accent-orange); }
+#gps-fullscreen-timeline {
+  min-width: 0;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--accent-orange) 0 var(--timeline-progress, 0%), var(--border-color) var(--timeline-progress, 0%) 100%);
+  appearance: none;
+  -webkit-appearance: none;
+}
+#gps-fullscreen-timeline::-webkit-slider-runnable-track { height: 8px; border-radius: 999px; background: transparent; }
+#gps-fullscreen-timeline::-webkit-slider-thumb {
+  width: 20px;
+  height: 20px;
+  margin-top: -6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.24);
+  appearance: none;
+  -webkit-appearance: none;
+}
+#gps-fullscreen-timeline::-moz-range-track { height: 8px; border: 0; border-radius: 999px; background: transparent; }
+#gps-fullscreen-timeline::-moz-range-progress { height: 8px; border-radius: 999px; background: var(--accent-orange); }
+#gps-fullscreen-timeline::-moz-range-thumb { width: 20px; height: 20px; border: 1px solid #cbd5e1; border-radius: 50%; background: #fff; }
 #gps-fullscreen-play-time { color: var(--accent-orange); font: 700 10px var(--font-mono); text-align: right; }
 
 .gps-position-cursor {
@@ -2714,14 +2737,17 @@ body.dark-theme .help-video-output button { border-color: #475569; background: #
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.48);
   overflow: hidden;
 }
-.gps-map-stage.gps-video-loaded > #gps-map .leaflet-control-container { display: none; }
-.gps-map-stage.gps-video-loaded > #gps-map {
+.gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded > #gps-map .leaflet-control-container,
+.gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded > #gps-map .leaflet-control-container { display: none; }
+.gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded > #gps-map,
+.gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded > #gps-map {
   border: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
   pointer-events: none;
 }
-.gps-map-stage.gps-video-loaded > #gps-map .leaflet-tile-pane { display: none; }
+.gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded > #gps-map .leaflet-tile-pane,
+.gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded > #gps-map .leaflet-tile-pane { display: none; }
 .gps-map-card.gps-map-fullscreen-fallback .gps-map-stage.gps-video-loaded.gps-detail-open,
 .gps-map-card.is-gps-fullscreen .gps-map-stage.gps-video-loaded.gps-detail-open {
   display: grid;

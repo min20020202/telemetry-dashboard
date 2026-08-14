@@ -956,7 +956,10 @@ function updateGpsCursorScale() {
 
 function updateGpsCursorLapColor(targetTime) {
   const marker = gpsCursorMarker?.getElement()?.querySelector('.gps-position-cursor');
-  const lapIndex = gpsLapResults.findIndex(lap => targetTime >= lap.startTime && targetTime <= lap.endTime);
+  const selectedSingleLap = gpsSelectedLapIndices.length === 1 ? gpsSelectedLapIndices[0] : -1;
+  const lapIndex = selectedSingleLap >= 0
+    ? selectedSingleLap
+    : gpsLapResults.findIndex(lap => targetTime >= lap.startTime && targetTime <= lap.endTime);
   const color = lapIndex >= 0 ? GPS_LAP_COLORS[lapIndex % GPS_LAP_COLORS.length] : '#00bfe8';
   if (marker) marker.style.setProperty('--gps-cursor-color', color);
   if (gpsFullscreenLapTimes) {
@@ -1059,9 +1062,23 @@ function syncGpsTimelineRange(minTime, maxTime, value) {
     gpsFullscreenTimeline.max = scrollBar.max;
     gpsFullscreenTimeline.step = scrollBar.step;
     gpsFullscreenTimeline.value = scrollBar.value;
+    updateGpsFullscreenTimelineVisual();
   }
   updateGpsDetailChartRange(minTime, maxTime);
   return safeValue;
+}
+
+function updateGpsFullscreenTimelineVisual() {
+  if (!gpsFullscreenTimeline) return;
+  const min = Number(gpsFullscreenTimeline.min) || 0;
+  const max = Number(gpsFullscreenTimeline.max) || 0;
+  const value = Number(gpsFullscreenTimeline.value) || min;
+  const ratio = max > min ? Math.max(0, Math.min(1, (value - min) / (max - min))) : 0;
+  const width = gpsFullscreenTimeline.clientWidth;
+  const progress = width > 20
+    ? `${(10 + ratio * (width - 20)).toFixed(2)}px`
+    : `${(ratio * 100).toFixed(4)}%`;
+  gpsFullscreenTimeline.style.setProperty('--timeline-progress', progress);
 }
 
 const gpsDetailCursorPlugin = {
@@ -1814,7 +1831,11 @@ function setGpsAppFullscreen(active) {
   gpsMapFullscreen.textContent = active ? '✕ 전체화면 종료' : '⛶ 전체화면';
   if (active) refreshGpsFullscreenOverlays();
   else closeGpsFullscreenDetail();
-  setTimeout(() => gpsMap?.invalidateSize(), 80);
+  setTimeout(() => {
+    gpsMap?.invalidateSize();
+    refitGpsMapToCurrentLapView();
+    updateGpsFullscreenTimelineVisual();
+  }, 80);
 }
 
 gpsMapFullscreen?.addEventListener('click', () => {
@@ -1835,7 +1856,11 @@ document.addEventListener('fullscreenchange', () => {
   if (!active) closeGpsFullscreenDetail();
   if (gpsMapFullscreen) gpsMapFullscreen.textContent = active ? '✕ 전체화면 종료' : '⛶ 전체화면';
   if (active) refreshGpsFullscreenOverlays();
-  setTimeout(() => gpsMap?.invalidateSize(), 80);
+  setTimeout(() => {
+    gpsMap?.invalidateSize();
+    refitGpsMapToCurrentLapView();
+    updateGpsFullscreenTimelineVisual();
+  }, 80);
 });
 gpsLapList?.addEventListener('click', event => {
   const summary = event.target.closest('summary');
@@ -2539,7 +2564,10 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
   if (gpsSelectedLapIndices.length > 1) {
     scrollBar.value = clampedTime.toFixed(2);
     if (gpsPlayTime) gpsPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
-    if (gpsFullscreenTimeline) gpsFullscreenTimeline.value = clampedTime.toFixed(2);
+    if (gpsFullscreenTimeline) {
+      gpsFullscreenTimeline.value = clampedTime.toFixed(2);
+      updateGpsFullscreenTimelineVisual();
+    }
     const primaryLap = gpsLapResults[gpsSelectedLapIndices[0]];
     const primaryTime = primaryLap.startTime + Math.min(clampedTime, primaryLap.duration);
     const primaryIndex = findGlobalIndexAtTime(primaryTime);
@@ -2571,7 +2599,10 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
   const row = globalIndex >= 0 ? globalData[globalIndex] : activeSampledData[currentCursorIndex];
   scrollBar.value = clampedTime.toFixed(2);
   if (gpsPlayTime) gpsPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
-  if (gpsFullscreenTimeline) gpsFullscreenTimeline.value = clampedTime.toFixed(2);
+  if (gpsFullscreenTimeline) {
+    gpsFullscreenTimeline.value = clampedTime.toFixed(2);
+    updateGpsFullscreenTimelineVisual();
+  }
   if (gpsFullscreenPlayTime) gpsFullscreenPlayTime.textContent = `${formatGpsClock(gpsClockAtTelemetryTime(clampedTime, globalIndex))} KST`;
   if (row) {
     const displayRow = getFilteredImuRowAtTime(row, clampedTime, globalIndex);
@@ -2612,9 +2643,10 @@ function setGpsPlayback(shouldPlay) {
   const minTime = Number(scrollBar.min) || 0;
   const maxTime = Number(scrollBar.max) || totalDurationSec;
   const videoLapPair = gpsGoProMatched ? getGoProLapPair() : null;
+  const selectedSingleLap = gpsSelectedLapIndices.length === 1 ? gpsLapResults[gpsSelectedLapIndices[0]] : null;
   const playbackEndTime = videoLapPair
     ? Math.min(maxTime, Math.max(gpsLapResults[videoLapPair.primaryIndex].duration, gpsLapResults[videoLapPair.compareIndex].duration))
-    : maxTime;
+    : selectedSingleLap ? Math.min(maxTime, selectedSingleLap.endTime) : maxTime;
   gpsPlaybackCursorSec = Number(scrollBar.value);
   if (!Number.isFinite(gpsPlaybackCursorSec) || gpsPlaybackCursorSec >= playbackEndTime - 0.01) {
     gpsPlaybackCursorSec = minTime;
@@ -2670,7 +2702,9 @@ gpsFullscreenTimeline?.addEventListener('input', event => {
   setGpsPlayback(false);
   gpsPlaybackCursorSec = targetTime;
   updateGpsCursorAtTime(targetTime);
+  updateGpsFullscreenTimelineVisual();
 });
+window.addEventListener('resize', updateGpsFullscreenTimelineVisual);
 
 function closeYouTubeDialog() {
   if (gpsYouTubeDialog?.open) gpsYouTubeDialog.close();
