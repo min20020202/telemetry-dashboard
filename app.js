@@ -2938,7 +2938,7 @@ async function connectYouTubeVideo(rawUrl) {
   gpsGoProStatus.textContent = `YouTube · 영상 시작 ${formatGpsClock(match.videoStartClock)} KST · CSV와 ${formatKoreanDuration(match.overlap)} 겹침 · 자동 동기화 완료`;
   gpsGoProStatus.className = 'success';
   window.localStorage?.setItem('nssur-youtube-url', rawUrl);
-  syncGoProVideo(Number(scrollBar.value) || 0, true);
+  setGpsPlayback(true);
   window.setTimeout(() => {
     gpsMap?.invalidateSize();
     refitGpsMapToCurrentLapView();
@@ -3056,7 +3056,7 @@ gpsGoProFile?.addEventListener('change', async event => {
     updateGoProComparisonLayout();
     gpsGoProStatus.textContent = `영상 시작 ${formatGpsClock(match.videoStartClock)} KST · CSV와 ${formatKoreanDuration(match.overlap)} 겹침 · 자동 동기화 완료`;
     gpsGoProStatus.className = 'success';
-    syncGoProVideo(Number(scrollBar.value) || 0, true);
+    setGpsPlayback(true);
     setTimeout(() => {
       gpsMap?.invalidateSize();
       refitGpsMapToCurrentLapView();
