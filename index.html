@@ -303,6 +303,8 @@
             <div class="gps-lap-toolbar">
               <button id="gps-lap-set-line" type="button">🏁 피니시 라인 설정</button>
               <button id="gps-lap-clear" type="button" disabled>초기화</button>
+              <button id="gps-checkpoint-add" type="button" disabled>＋ 체크포인트</button>
+              <button id="gps-checkpoint-clear" type="button" disabled>체크포인트 삭제</button>
               <label>최소 랩
                 <input id="gps-lap-min-time" type="number" min="5" max="600" step="1" value="20">
                 <span>초</span>
@@ -453,6 +455,17 @@
             <div id="gps-lap-list" class="gps-lap-list">
               <div class="gps-lap-empty">지도에서 피니시 라인의 양 끝을 클릭하면 자동으로 랩을 계산합니다.</div>
             </div>
+          </div>
+
+          <div id="gps-sector-card" class="motec-chart-card gps-sector-card" hidden>
+            <div class="gps-sector-head">
+              <div>
+                <div class="gps-metric-label">Checkpoint Comparison</div>
+                <small>랩별 구간 기록 · 통과 속도 · 제동 및 가속 시점</small>
+              </div>
+              <strong id="gps-checkpoint-count">0 CP</strong>
+            </div>
+            <div id="gps-sector-table" class="gps-sector-table"></div>
           </div>
 
           <div class="motec-chart-card imu-g-card">
@@ -821,6 +834,6 @@
   <script src="filters.js?v=20260812-1"></script>
   <script src="steering.js?v=20260812-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
-  <script src="app.js?v=20260815-18"></script>
+  <script src="app.js?v=20260815-19"></script>
 </body>
 </html>

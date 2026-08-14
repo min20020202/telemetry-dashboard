@@ -132,6 +132,11 @@ const gpsPlayTime = document.getElementById('gps-play-time');
 const gpsImuLpf = document.getElementById('gps-imu-lpf');
 const gpsLapSetLine = document.getElementById('gps-lap-set-line');
 const gpsLapClear = document.getElementById('gps-lap-clear');
+const gpsCheckpointAdd = document.getElementById('gps-checkpoint-add');
+const gpsCheckpointClear = document.getElementById('gps-checkpoint-clear');
+const gpsCheckpointCount = document.getElementById('gps-checkpoint-count');
+const gpsSectorCard = document.getElementById('gps-sector-card');
+const gpsSectorTable = document.getElementById('gps-sector-table');
 const gpsLapMinTime = document.getElementById('gps-lap-min-time');
 const gpsLapToolbarStatus = document.getElementById('gps-lap-toolbar-status');
 const gpsLapFixSummary = document.getElementById('gps-lap-fix-summary');
@@ -296,6 +301,12 @@ let gpsLapRouteLayer = null;
 let gpsFinishPoints = [];
 let gpsFinishPreviewLine = null;
 let gpsFinishMarkers = [];
+let gpsCheckpointLayer = null;
+let gpsCheckpointDraftLayer = null;
+let gpsCheckpointPreviewLine = null;
+let gpsCheckpointSelectionActive = false;
+let gpsCheckpointDraft = [];
+let gpsCheckpoints = [];
 let gpsLapPoints = [];
 let gpsLapSelectionActive = false;
 let gpsLapResults = [];
@@ -1025,6 +1036,140 @@ function updateGpsFinishPreview(event) {
   gpsFinishPreviewLine.setLatLngs([[first.lat, first.lon], [event.latlng.lat, event.latlng.lng]]);
 }
 
+function findGpsLineCrossings(linePoints, minimumSpeed = 1) {
+  if (!Array.isArray(linePoints) || linePoints.length !== 2) return [];
+  const origin = {
+    lat: (linePoints[0].lat + linePoints[1].lat) * 0.5,
+    lon: (linePoints[0].lon + linePoints[1].lon) * 0.5
+  };
+  const a = latLonToLocalMeters(linePoints[0], origin);
+  const b = latLonToLocalMeters(linePoints[1], origin);
+  const line = { x: b.x - a.x, y: b.y - a.y };
+  const lineLengthSq = line.x * line.x + line.y * line.y;
+  if (lineLengthSq < 4) return [];
+  const crossings = [];
+  for (let index = 1; index < gpsLapPoints.length; index += 1) {
+    const previous = gpsLapPoints[index - 1];
+    const current = gpsLapPoints[index];
+    const elapsed = current.time - previous.time;
+    if (!(elapsed > 0 && elapsed <= 2)) continue;
+    const p = latLonToLocalMeters(previous, origin);
+    const q = latLonToLocalMeters(current, origin);
+    const sidePrevious = cross2(line, { x: p.x - a.x, y: p.y - a.y });
+    const sideCurrent = cross2(line, { x: q.x - a.x, y: q.y - a.y });
+    if (sidePrevious === 0 || sideCurrent === 0 || sidePrevious * sideCurrent >= 0) continue;
+    const fraction = sidePrevious / (sidePrevious - sideCurrent);
+    const intersection = { x: p.x + (q.x - p.x) * fraction, y: p.y + (q.y - p.y) * fraction };
+    const lineRatio = ((intersection.x - a.x) * line.x + (intersection.y - a.y) * line.y) / lineLengthSq;
+    if (fraction < 0 || fraction > 1 || lineRatio < 0 || lineRatio > 1) continue;
+    const speed = previous.speed + (current.speed - previous.speed) * fraction;
+    if (speed < minimumSpeed) continue;
+    crossings.push({
+      time: previous.time + elapsed * fraction,
+      speed,
+      lat: previous.lat + (current.lat - previous.lat) * fraction,
+      lon: previous.lon + (current.lon - previous.lon) * fraction
+    });
+  }
+  return crossings;
+}
+
+function drawGpsCheckpoints() {
+  gpsCheckpointLayer?.clearLayers();
+  gpsCheckpoints.forEach((checkpoint, index) => {
+    const color = '#06b6d4';
+    L.polyline(checkpoint.map(point => [point.lat, point.lon]), {
+      color,
+      weight: 4,
+      opacity: 0.95,
+      interactive: false
+    }).addTo(gpsCheckpointLayer);
+    const middle = {
+      lat: (checkpoint[0].lat + checkpoint[1].lat) * 0.5,
+      lon: (checkpoint[0].lon + checkpoint[1].lon) * 0.5
+    };
+    L.marker([middle.lat, middle.lon], {
+      interactive: false,
+      icon: L.divIcon({ className: '', html: `<div class="gps-checkpoint-label">CP${index + 1}</div>`, iconSize: [36, 18], iconAnchor: [18, 9] })
+    }).addTo(gpsCheckpointLayer);
+  });
+  if (gpsCheckpointCount) gpsCheckpointCount.textContent = `${gpsCheckpoints.length} CP`;
+  if (gpsCheckpointClear) gpsCheckpointClear.disabled = !gpsCheckpoints.length;
+}
+
+function clearGpsCheckpoints() {
+  gpsCheckpointSelectionActive = false;
+  gpsCheckpointDraft = [];
+  gpsCheckpoints = [];
+  if (gpsCheckpointPreviewLine && gpsMap) gpsMap.removeLayer(gpsCheckpointPreviewLine);
+  gpsCheckpointPreviewLine = null;
+  gpsCheckpointLayer?.clearLayers();
+  gpsCheckpointDraftLayer?.clearLayers();
+  gpsCheckpointAdd?.classList.remove('active');
+  if (gpsCheckpointAdd) gpsCheckpointAdd.disabled = true;
+  if (gpsCheckpointClear) gpsCheckpointClear.disabled = true;
+  if (gpsCheckpointCount) gpsCheckpointCount.textContent = '0 CP';
+  if (gpsSectorCard) gpsSectorCard.hidden = true;
+  if (gpsSectorTable) gpsSectorTable.innerHTML = '';
+}
+
+function beginGpsCheckpointSelection() {
+  if (gpsFinishPoints.length !== 2 || !gpsLapResults.length) {
+    setGpsLapStatus('먼저 피니시 라인을 설정해 랩을 계산하십시오.', 'warn');
+    return;
+  }
+  setGpsPlayback(false);
+  gpsLapSelectionActive = false;
+  gpsCheckpointSelectionActive = true;
+  gpsCheckpointDraft = [];
+  gpsCheckpointDraftLayer?.clearLayers();
+  gpsCheckpointAdd?.classList.add('active');
+  gpsMap?.getContainer().classList.add('gps-lap-selecting');
+  setGpsLapStatus(`CP${gpsCheckpoints.length + 1}의 첫 번째 끝점을 클릭하십시오.`, 'warn');
+}
+
+function cancelGpsCheckpointSelection() {
+  if (!gpsCheckpointSelectionActive) return false;
+  gpsCheckpointSelectionActive = false;
+  gpsCheckpointDraft = [];
+  if (gpsCheckpointPreviewLine && gpsMap) gpsMap.removeLayer(gpsCheckpointPreviewLine);
+  gpsCheckpointPreviewLine = null;
+  gpsCheckpointDraftLayer?.clearLayers();
+  gpsCheckpointAdd?.classList.remove('active');
+  gpsMap?.getContainer().classList.remove('gps-lap-selecting');
+  setGpsLapStatus('체크포인트 설정을 취소했습니다.');
+  return true;
+}
+
+function handleGpsCheckpointMapClick(event) {
+  if (!gpsCheckpointSelectionActive) return;
+  gpsCheckpointDraft.push({ lat: event.latlng.lat, lon: event.latlng.lng });
+  if (gpsCheckpointDraft.length === 1) {
+    const first = gpsCheckpointDraft[0];
+    L.circleMarker([first.lat, first.lon], { radius: 5, color: '#fff', weight: 2, fillColor: '#06b6d4', fillOpacity: 1, interactive: false }).addTo(gpsCheckpointDraftLayer);
+    gpsCheckpointPreviewLine = L.polyline([[first.lat, first.lon], [first.lat, first.lon]], { color: '#06b6d4', weight: 3, dashArray: '6 5', interactive: false }).addTo(gpsMap);
+    setGpsLapStatus(`CP${gpsCheckpoints.length + 1}의 반대쪽 끝점을 클릭하십시오. Esc로 취소할 수 있습니다.`, 'warn');
+    return;
+  }
+  gpsCheckpoints.push(gpsCheckpointDraft.slice(0, 2));
+  gpsCheckpointSelectionActive = false;
+  gpsCheckpointDraft = [];
+  if (gpsCheckpointPreviewLine && gpsMap) gpsMap.removeLayer(gpsCheckpointPreviewLine);
+  gpsCheckpointPreviewLine = null;
+  gpsCheckpointDraftLayer?.clearLayers();
+  gpsCheckpointAdd?.classList.remove('active');
+  gpsMap?.getContainer().classList.remove('gps-lap-selecting');
+  drawGpsCheckpoints();
+  renderGpsSectorComparison();
+  setGpsLapStatus(`CP${gpsCheckpoints.length} 추가 완료 · 다음 체크포인트는 주행 순서대로 추가하십시오.`, 'ok');
+}
+
+function updateGpsCheckpointPreview(event) {
+  if (!gpsCheckpointSelectionActive || gpsCheckpointDraft.length !== 1 || !gpsCheckpointPreviewLine) return;
+  const first = gpsCheckpointDraft[0];
+  gpsCheckpointPreviewLine.setLatLngs([[first.lat, first.lon], [event.latlng.lat, event.latlng.lng]]);
+}
+
 function updateGpsCursorScale() {
   if (!gpsMap) return;
   const zoom = gpsMap.getZoom();
@@ -1546,10 +1691,12 @@ function selectGpsLapView(index) {
     }
   }
   if (gpsCursorMarker) gpsCursorMarker.setZIndexOffset(10000);
+  if (gpsCheckpoints.length) renderGpsSectorComparison();
 }
 
 function renderGpsLapResults(crossings, laps) {
   gpsLapResults = laps;
+  if (gpsCheckpointAdd) gpsCheckpointAdd.disabled = !laps.length;
   gpsSelectedLapIndex = -1;
   gpsSelectedLapIndices = [];
   gpsGoProCompareLapIndex = -1;
@@ -1613,6 +1760,100 @@ function renderGpsLapResults(crossings, laps) {
       </div>
     </details>`;
   }).join('');
+  if (gpsCheckpointAdd) gpsCheckpointAdd.disabled = !laps.length;
+  if (gpsCheckpoints.length) renderGpsSectorComparison();
+}
+
+function getGpsSectorMetrics(startTime, endTime, exitSpeed) {
+  const startIndex = Math.max(0, findGlobalIndexAtTime(startTime));
+  const endIndex = Math.max(startIndex, findGlobalIndexAtTime(endTime));
+  let minimumSpeed = Infinity;
+  let minimumIndex = startIndex;
+  let brakeTime = NaN;
+  for (let index = startIndex; index <= endIndex; index += 1) {
+    const row = globalData[index];
+    const speed = Number(row?.gps_speed_kmh) || 0;
+    if (speed < minimumSpeed) {
+      minimumSpeed = speed;
+      minimumIndex = index;
+    }
+    if (!Number.isFinite(brakeTime) && getCalibratedBrake(row?.front_brake_raw) >= 5) brakeTime = row.time_sec;
+  }
+  let throttleTime = NaN;
+  for (let index = minimumIndex; index <= endIndex; index += 1) {
+    const row = globalData[index];
+    if ((Number(row?.decoded_tps) || 0) >= 20) {
+      throttleTime = row.time_sec;
+      break;
+    }
+  }
+  return {
+    duration: endTime - startTime,
+    exitSpeed: Number(exitSpeed) || 0,
+    minimumSpeed: Number.isFinite(minimumSpeed) ? minimumSpeed : 0,
+    brakeOffset: Number.isFinite(brakeTime) ? brakeTime - startTime : NaN,
+    throttleOffset: Number.isFinite(throttleTime) ? throttleTime - startTime : NaN
+  };
+}
+
+function renderGpsSectorComparison() {
+  if (!gpsSectorCard || !gpsSectorTable) return;
+  if (!gpsCheckpoints.length || !gpsLapResults.length) {
+    gpsSectorCard.hidden = true;
+    gpsSectorTable.innerHTML = '';
+    return;
+  }
+  const checkpointCrossings = gpsCheckpoints.map(checkpoint => findGpsLineCrossings(checkpoint, 3));
+  const lapIndexes = gpsSelectedLapIndices.length
+    ? gpsSelectedLapIndices
+    : gpsLapResults.map((_, index) => index);
+  const sectors = gpsCheckpoints.map((_, checkpointIndex) => ({ name: `S${checkpointIndex + 1} → CP${checkpointIndex + 1}`, rows: [] }));
+  sectors.push({ name: `S${gpsCheckpoints.length + 1} → FINISH`, rows: [] });
+
+  lapIndexes.forEach(lapIndex => {
+    const lap = gpsLapResults[lapIndex];
+    let sectorStart = lap.startTime;
+    let valid = true;
+    checkpointCrossings.forEach((crossings, checkpointIndex) => {
+      if (!valid) return;
+      const crossing = crossings.find(item => item.time > sectorStart + 0.05 && item.time < lap.endTime - 0.05);
+      if (!crossing) {
+        sectors[checkpointIndex].rows.push({ lapIndex, missing: true });
+        valid = false;
+        return;
+      }
+      sectors[checkpointIndex].rows.push({ lapIndex, ...getGpsSectorMetrics(sectorStart, crossing.time, crossing.speed) });
+      sectorStart = crossing.time;
+    });
+    if (valid) {
+      sectors[sectors.length - 1].rows.push({
+        lapIndex,
+        ...getGpsSectorMetrics(sectorStart, lap.endTime, gpsSpeedAtTelemetryTime(lap.endTime))
+      });
+    } else {
+      sectors[sectors.length - 1].rows.push({ lapIndex, missing: true });
+    }
+  });
+
+  gpsSectorTable.innerHTML = sectors.map(sector => {
+    const validRows = sector.rows.filter(row => !row.missing);
+    const bestDuration = validRows.length ? Math.min(...validRows.map(row => row.duration)) : NaN;
+    const rows = sector.rows.map(row => {
+      const lap = gpsLapResults[row.lapIndex];
+      if (row.missing) return `<tr><td style="--lap-color:${GPS_LAP_COLORS[row.lapIndex % GPS_LAP_COLORS.length]}"><i class="gps-lap-color-dot"></i>LAP ${lap.number}</td><td colspan="5">통과 기록 없음</td></tr>`;
+      const bestClass = Math.abs(row.duration - bestDuration) < 0.0005 ? ' class="best-sector"' : '';
+      return `<tr${bestClass}>
+        <td style="--lap-color:${GPS_LAP_COLORS[row.lapIndex % GPS_LAP_COLORS.length]}"><i class="gps-lap-color-dot"></i>LAP ${lap.number}</td>
+        <td>${row.duration.toFixed(3)} s</td>
+        <td>${row.exitSpeed.toFixed(1)} km/h</td>
+        <td>${row.minimumSpeed.toFixed(1)} km/h</td>
+        <td>${Number.isFinite(row.brakeOffset) ? `+${row.brakeOffset.toFixed(2)} s` : '—'}</td>
+        <td>${Number.isFinite(row.throttleOffset) ? `+${row.throttleOffset.toFixed(2)} s` : '—'}</td>
+      </tr>`;
+    }).join('');
+    return `<section class="gps-sector-group"><h4>${sector.name}</h4><table><thead><tr><th>LAP</th><th>구간 기록</th><th>통과 속도</th><th>최저속도</th><th>브레이크 ≥5%</th><th>가속 ≥20%</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+  }).join('');
+  gpsSectorCard.hidden = false;
 }
 
 function updateGpsVideoControlAvailability() {
@@ -1746,6 +1987,7 @@ function calculateGpsLaps() {
 function clearGpsLapAnalysis() {
   gpsLapSelectionActive = false;
   gpsFinishPoints = [];
+  clearGpsCheckpoints();
   if (gpsGoProSourceType || gpsGoProMatched) closeGoProVideo();
   closeYouTubeDialog();
   gpsLapResults = [];
@@ -1916,13 +2158,23 @@ function initGpsMap() {
   gpsFinishEndpointLayer = L.layerGroup().addTo(gpsMap);
   gpsLapRouteLayer = L.layerGroup().addTo(gpsMap);
   gpsLapCrossingLayer = L.layerGroup().addTo(gpsMap);
+  gpsCheckpointLayer = L.layerGroup().addTo(gpsMap);
+  gpsCheckpointDraftLayer = L.layerGroup().addTo(gpsMap);
   gpsMap.on('click', handleGpsLapMapClick);
+  gpsMap.on('click', handleGpsCheckpointMapClick);
   gpsMap.on('mousemove', updateGpsFinishPreview);
+  gpsMap.on('mousemove', updateGpsCheckpointPreview);
   gpsMap.on('zoom', updateGpsCursorScale);
 }
 
 gpsLapSetLine?.addEventListener('click', beginGpsFinishLineSelection);
 gpsLapClear?.addEventListener('click', clearGpsLapAnalysis);
+gpsCheckpointAdd?.addEventListener('click', beginGpsCheckpointSelection);
+gpsCheckpointClear?.addEventListener('click', () => {
+  clearGpsCheckpoints();
+  if (gpsLapResults.length && gpsCheckpointAdd) gpsCheckpointAdd.disabled = false;
+  setGpsLapStatus('체크포인트를 모두 삭제했습니다.');
+});
 gpsLapMinTime?.addEventListener('change', () => {
   const clamped = Math.max(5, Math.min(600, Number(gpsLapMinTime.value) || 20));
   gpsLapMinTime.value = String(clamped);
@@ -1986,6 +2238,10 @@ gpsMapFullscreen?.addEventListener('click', () => {
 
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape') return;
+  if (cancelGpsCheckpointSelection()) {
+    event.preventDefault();
+    return;
+  }
   if (cancelGpsFinishLineSelection()) {
     event.preventDefault();
     return;
