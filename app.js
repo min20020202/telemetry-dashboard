@@ -137,6 +137,7 @@ const gpsLapToolbarStatus = document.getElementById('gps-lap-toolbar-status');
 const gpsLapFixSummary = document.getElementById('gps-lap-fix-summary');
 const gpsLapCount = document.getElementById('gps-lap-count');
 const gpsLapBestTime = document.getElementById('gps-lap-best-time');
+const gpsLapAverageDistance = document.getElementById('gps-lap-average-distance');
 const gpsLapList = document.getElementById('gps-lap-list');
 const gpsImuLpfFrequency = document.getElementById('gps-imu-lpf-frequency');
 const gpsMapFullscreen = document.getElementById('gps-map-fullscreen');
@@ -834,6 +835,30 @@ function distanceMeters(a, b) {
   return Math.hypot(pb.x - pa.x, pb.y - pa.y);
 }
 
+function formatGpsLapDistance(distance) {
+  return Number.isFinite(distance) ? `${distance.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m` : '--.- m';
+}
+
+function calculateGpsLapDistance(lap) {
+  const points = [
+    { lat: lap.startLat, lon: lap.startLon, time: lap.startTime },
+    ...gpsLapPoints.filter(point => point.time > lap.startTime && point.time < lap.endTime),
+    { lat: lap.endLat, lon: lap.endLon, time: lap.endTime }
+  ];
+  let total = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const elapsed = current.time - previous.time;
+    const segment = distanceMeters(previous, current);
+    if (!(elapsed > 0) || !Number.isFinite(segment)) continue;
+    // GPS 점프와 장시간 수신 공백은 거리 합계에서 제외합니다.
+    if (elapsed > 3 || segment / elapsed > 120) continue;
+    total += segment;
+  }
+  return total > 0 ? total : NaN;
+}
+
 function buildGpsLapPoints(data) {
   const points = [];
   let lastFixCounter = null;
@@ -996,7 +1021,7 @@ function renderFullscreenLapTimes(laps, best) {
     <button type="button" class="gps-fs-lap-all${gpsSelectedLapIndices.length === 0 ? ' selected' : ''}" data-lap-panel-view="all">전체 랩 보기</button>
     <div class="gps-fs-lap-list">${laps.map((lap, index) => `
       <button type="button" class="${index === bestIndex ? 'best ' : ''}${gpsSelectedLapIndices.includes(index) ? 'selected' : ''}" data-lap-time-row="${index}" data-lap-panel-view="${index}" style="--lap-color:${GPS_LAP_COLORS[index % GPS_LAP_COLORS.length]}">
-        <span><i></i>LAP ${lap.number}${index === bestIndex ? '<b class="gps-best-star">★</b>' : ''}</span><strong>${formatLapTime(lap.duration)}</strong>
+        <span><i></i>LAP ${lap.number}${index === bestIndex ? '<b class="gps-best-star">★</b>' : ''}</span><strong>${formatLapTime(lap.duration)}<small>${formatGpsLapDistance(lap.distanceMeters)}</small></strong>
       </button>`).join('')}</div>` : '';
   updateGoProComparisonLayout();
 }
@@ -1452,8 +1477,13 @@ function renderGpsLapResults(crossings, laps) {
   clearGpsCompareMarkers();
   if (gpsLapCount) gpsLapCount.textContent = `${laps.length} LAPS`;
   const best = laps.length ? Math.min(...laps.map(lap => lap.duration)) : NaN;
+  const lapDistances = laps.map(lap => lap.distanceMeters).filter(Number.isFinite);
+  const averageDistance = lapDistances.length
+    ? lapDistances.reduce((sum, distance) => sum + distance, 0) / lapDistances.length
+    : NaN;
   renderFullscreenLapTimes(laps, best);
   if (gpsLapBestTime) gpsLapBestTime.textContent = formatLapTime(best);
+  if (gpsLapAverageDistance) gpsLapAverageDistance.textContent = formatGpsLapDistance(averageDistance);
   if (gpsLapFixSummary) {
     const timeBasis = laps.length && laps.every(lap => lap.timeBasis === 'gps') ? 'GPS 시각 기준' : '로거 경과시간 기준';
     gpsLapFixSummary.textContent = `${gpsLapPoints.length.toLocaleString()} GPS fixes · ${crossings.length}회 통과 · ${timeBasis}`;
@@ -1490,12 +1520,13 @@ function renderGpsLapResults(crossings, laps) {
     return `<details class="gps-lap-row${isBest ? ' best' : ''}">
       <summary>
         <span><i class="gps-lap-color-dot" style="--lap-color:${GPS_LAP_COLORS[(lap.number - 1) % GPS_LAP_COLORS.length]}"></i>LAP ${lap.number}</span>
-        <span class="lap-time">${formatLapTime(lap.duration)}</span>
+        <span class="lap-time">${formatLapTime(lap.duration)}<small>${formatGpsLapDistance(lap.distanceMeters)}</small></span>
         <span class="lap-delta">${isBest ? 'BEST' : `+${delta.toFixed(3)}`}</span>
       </summary>
       <div class="gps-lap-detail">
         <span>CSV 구간 <strong>${lap.startTime.toFixed(2)}s → ${lap.endTime.toFixed(2)}s</strong></span>
         <span>GPS 시각 <strong>${formatGpsClock(lap.startGpsTime)} → ${formatGpsClock(lap.endGpsTime)}</strong></span>
+        <span>GPS 주행거리 <strong>${formatGpsLapDistance(lap.distanceMeters)}</strong></span>
         <div class="gps-lap-jump-buttons">
           <button type="button" data-lap-time="${lap.startTime}">시작 지점으로 이동</button>
           <button type="button" data-lap-time="${lap.endTime}">종료 지점으로 이동</button>
@@ -1625,6 +1656,10 @@ function calculateGpsLaps() {
     });
   }
 
+  laps.forEach(lap => {
+    lap.distanceMeters = calculateGpsLapDistance(lap);
+  });
+
   renderGpsLapResults(crossings, laps);
   setGpsLapStatus(laps.length ? `${laps.length}개 랩 계산 완료 · 통과 시각 선형 보간 적용` : '첫 통과만 검출되어 완성된 랩이 없습니다.', laps.length ? 'ok' : 'warn');
 }
@@ -1665,6 +1700,7 @@ function clearGpsLapAnalysis() {
   if (gpsMap) gpsMap.getContainer().classList.remove('gps-lap-selecting');
   if (gpsLapCount) gpsLapCount.textContent = '0 LAPS';
   if (gpsLapBestTime) gpsLapBestTime.textContent = '--:--.---';
+  if (gpsLapAverageDistance) gpsLapAverageDistance.textContent = '--.- m';
   if (gpsLapFixSummary) gpsLapFixSummary.textContent = '피니시 라인을 설정하지 않았습니다.';
   if (gpsLapList) gpsLapList.innerHTML = '<div class="gps-lap-empty">지도에서 피니시 라인의 양 끝을 클릭하면 자동으로 랩을 계산합니다.</div>';
   setGpsLapStatus('지도에서 라인 양 끝을 차례로 선택하십시오.');
