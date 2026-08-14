@@ -137,6 +137,10 @@ const gpsCheckpointClear = document.getElementById('gps-checkpoint-clear');
 const gpsCheckpointCount = document.getElementById('gps-checkpoint-count');
 const gpsSectorCard = document.getElementById('gps-sector-card');
 const gpsSectorTable = document.getElementById('gps-sector-table');
+const gpsSectorToggle = document.getElementById('gps-sector-toggle');
+const gpsSectorOverlay = document.getElementById('gps-sector-overlay');
+const gpsSectorOverlayTable = document.getElementById('gps-sector-overlay-table');
+const gpsSectorOverlayClose = document.getElementById('gps-sector-overlay-close');
 const gpsLapMinTime = document.getElementById('gps-lap-min-time');
 const gpsLapToolbarStatus = document.getElementById('gps-lap-toolbar-status');
 const gpsLapFixSummary = document.getElementById('gps-lap-fix-summary');
@@ -1095,6 +1099,7 @@ function drawGpsCheckpoints() {
   });
   if (gpsCheckpointCount) gpsCheckpointCount.textContent = `${gpsCheckpoints.length} CP`;
   if (gpsCheckpointClear) gpsCheckpointClear.disabled = !gpsCheckpoints.length;
+  if (gpsSectorToggle) gpsSectorToggle.disabled = !gpsCheckpoints.length;
 }
 
 function clearGpsCheckpoints() {
@@ -1108,9 +1113,12 @@ function clearGpsCheckpoints() {
   gpsCheckpointAdd?.classList.remove('active');
   if (gpsCheckpointAdd) gpsCheckpointAdd.disabled = true;
   if (gpsCheckpointClear) gpsCheckpointClear.disabled = true;
+  if (gpsSectorToggle) gpsSectorToggle.disabled = true;
   if (gpsCheckpointCount) gpsCheckpointCount.textContent = '0 CP';
   if (gpsSectorCard) gpsSectorCard.hidden = true;
   if (gpsSectorTable) gpsSectorTable.innerHTML = '';
+  if (gpsSectorOverlayTable) gpsSectorOverlayTable.innerHTML = '';
+  if (gpsSectorOverlay) gpsSectorOverlay.hidden = true;
 }
 
 function beginGpsCheckpointSelection() {
@@ -1835,7 +1843,7 @@ function renderGpsSectorComparison() {
     }
   });
 
-  gpsSectorTable.innerHTML = sectors.map(sector => {
+  const comparisonHtml = sectors.map(sector => {
     const validRows = sector.rows.filter(row => !row.missing);
     const bestDuration = validRows.length ? Math.min(...validRows.map(row => row.duration)) : NaN;
     const rows = sector.rows.map(row => {
@@ -1853,7 +1861,25 @@ function renderGpsSectorComparison() {
     }).join('');
     return `<section class="gps-sector-group"><h4>${sector.name}</h4><table><thead><tr><th>LAP</th><th>구간 기록</th><th>통과 속도</th><th>최저속도</th><th>브레이크 ≥5%</th><th>가속 ≥20%</th></tr></thead><tbody>${rows}</tbody></table></section>`;
   }).join('');
+  gpsSectorTable.innerHTML = comparisonHtml;
+  if (gpsSectorOverlayTable) gpsSectorOverlayTable.innerHTML = comparisonHtml;
   gpsSectorCard.hidden = false;
+}
+
+function closeGpsSectorOverlay() {
+  if (gpsSectorOverlay) gpsSectorOverlay.hidden = true;
+  gpsSectorToggle?.classList.remove('active');
+}
+
+function toggleGpsSectorOverlay() {
+  if (!gpsCheckpoints.length) return;
+  const shouldOpen = Boolean(gpsSectorOverlay?.hidden);
+  if (shouldOpen) {
+    closeGpsFullscreenDetail();
+    renderGpsSectorComparison();
+  }
+  if (gpsSectorOverlay) gpsSectorOverlay.hidden = !shouldOpen;
+  gpsSectorToggle?.classList.toggle('active', shouldOpen);
 }
 
 function updateGpsVideoControlAvailability() {
@@ -2170,6 +2196,8 @@ function initGpsMap() {
 gpsLapSetLine?.addEventListener('click', beginGpsFinishLineSelection);
 gpsLapClear?.addEventListener('click', clearGpsLapAnalysis);
 gpsCheckpointAdd?.addEventListener('click', beginGpsCheckpointSelection);
+gpsSectorToggle?.addEventListener('click', toggleGpsSectorOverlay);
+gpsSectorOverlayClose?.addEventListener('click', closeGpsSectorOverlay);
 gpsCheckpointClear?.addEventListener('click', () => {
   clearGpsCheckpoints();
   if (gpsLapResults.length && gpsCheckpointAdd) gpsCheckpointAdd.disabled = false;
@@ -2198,6 +2226,7 @@ gpsFullscreenLapTimes?.addEventListener('click', event => {
 gpsFullscreenDetailToggle?.addEventListener('click', () => {
   const stage = gpsFullscreenDetailToggle.closest('.gps-map-stage');
   const open = !gpsFullscreenDetail.classList.contains('open');
+  if (open) closeGpsSectorOverlay();
   gpsFullscreenDetail.classList.toggle('open', open);
   stage?.classList.toggle('gps-detail-open', open);
   gpsFullscreenDetailToggle.textContent = open ? '상세정보 닫기 ›' : '상세정보 ›';
@@ -2243,6 +2272,11 @@ document.addEventListener('keydown', event => {
     return;
   }
   if (cancelGpsFinishLineSelection()) {
+    event.preventDefault();
+    return;
+  }
+  if (gpsSectorOverlay && !gpsSectorOverlay.hidden) {
+    closeGpsSectorOverlay();
     event.preventDefault();
     return;
   }
