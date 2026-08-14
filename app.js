@@ -575,7 +575,7 @@ function matchGoProToCsv(creationDate, duration) {
   };
 }
 
-function syncOneGoProVideo(video, targetTime, force, rate) {
+function syncOneGoProVideo(video, targetTime, force, rate, holdAtFinish = false) {
   const videoTime = targetTime - gpsGoProTelemetryStartSec;
   if (gpsGoProSourceType === 'youtube') {
     const player = video === gpsGoProCompareVideo ? gpsYouTubeComparePlayer : gpsYouTubePrimaryPlayer;
@@ -592,8 +592,13 @@ function syncOneGoProVideo(video, targetTime, force, rate) {
     }
     player.setPlaybackRate?.(rate);
     const state = player.getPlayerState?.();
-    if (gpsPlaybackActive && state !== window.YT?.PlayerState?.PLAYING) player.playVideo?.();
-    if (!gpsPlaybackActive && state === window.YT?.PlayerState?.PLAYING) player.pauseVideo?.();
+    if (holdAtFinish) {
+      if (force || !Number.isFinite(currentTime) || Math.abs(drift) > 0.08) player.seekTo?.(videoTime, true);
+      player.pauseVideo?.();
+    } else {
+      if (gpsPlaybackActive && state !== window.YT?.PlayerState?.PLAYING) player.playVideo?.();
+      if (!gpsPlaybackActive && state === window.YT?.PlayerState?.PLAYING) player.pauseVideo?.();
+    }
     return;
   }
   if (!video || !Number.isFinite(video.duration)) return;
@@ -602,12 +607,15 @@ function syncOneGoProVideo(video, targetTime, force, rate) {
     return;
   }
   const drift = video.currentTime - videoTime;
-  if (force || !gpsPlaybackActive || Math.abs(drift) > 1.0) {
+  if (force || !gpsPlaybackActive || Math.abs(drift) > 1.0 || (holdAtFinish && Math.abs(drift) > 0.03)) {
     video.currentTime = videoTime;
   }
   video.playbackRate = rate;
-  if (gpsPlaybackActive && video.paused) video.play().catch(() => {});
-  if (!gpsPlaybackActive && !video.paused) video.pause();
+  if (holdAtFinish) video.pause();
+  else {
+    if (gpsPlaybackActive && video.paused) video.play().catch(() => {});
+    if (!gpsPlaybackActive && !video.paused) video.pause();
+  }
 }
 
 function getGoProLapPair() {
@@ -664,11 +672,16 @@ function syncGoProVideo(targetTime, force = false) {
     const compare = gpsLapResults[pair.compareIndex];
     const primaryTime = primary.startTime + Math.min(relativeTime, primary.duration);
     const compareTime = compare.startTime + Math.min(relativeTime, compare.duration);
-    syncOneGoProVideo(gpsGoProVideo, primaryTime, force, rate);
-    syncOneGoProVideo(gpsGoProCompareVideo, compareTime, force, rate);
+    const primaryArrived = relativeTime >= primary.duration;
+    const compareArrived = relativeTime >= compare.duration;
+    syncOneGoProVideo(gpsGoProVideo, primaryTime, force, rate, primaryArrived);
+    syncOneGoProVideo(gpsGoProCompareVideo, compareTime, force, rate, compareArrived);
+    gpsGoProPanel?.classList.toggle('primary-arrived', primaryArrived);
+    gpsGoProPanel?.classList.toggle('compare-arrived', compareArrived);
     setGoProSlotSpeed(gpsGoProPrimarySpeed, gpsSpeedAtTelemetryTime(primaryTime));
     setGoProSlotSpeed(gpsGoProCompareSpeed, gpsSpeedAtTelemetryTime(compareTime));
   } else {
+    gpsGoProPanel?.classList.remove('primary-arrived', 'compare-arrived');
     syncOneGoProVideo(gpsGoProVideo, targetTime, force, rate);
     if (gpsGoProSourceType === 'youtube') gpsYouTubeComparePlayer?.pauseVideo?.();
     else gpsGoProCompareVideo?.pause();
@@ -704,7 +717,7 @@ function closeGoProVideo() {
   stage?.classList.remove('gps-video-loaded');
   if (gpsGoProPanel) {
     gpsGoProPanel.hidden = true;
-    gpsGoProPanel.classList.remove('youtube-source');
+    gpsGoProPanel.classList.remove('youtube-source', 'primary-arrived', 'compare-arrived');
   }
   if (gpsGoProFile) gpsGoProFile.value = '';
   setTimeout(() => {
@@ -2598,8 +2611,12 @@ function setGpsPlayback(shouldPlay) {
 
   const minTime = Number(scrollBar.min) || 0;
   const maxTime = Number(scrollBar.max) || totalDurationSec;
+  const videoLapPair = gpsGoProMatched ? getGoProLapPair() : null;
+  const playbackEndTime = videoLapPair
+    ? Math.min(maxTime, Math.max(gpsLapResults[videoLapPair.primaryIndex].duration, gpsLapResults[videoLapPair.compareIndex].duration))
+    : maxTime;
   gpsPlaybackCursorSec = Number(scrollBar.value);
-  if (!Number.isFinite(gpsPlaybackCursorSec) || gpsPlaybackCursorSec >= maxTime - 0.01) {
+  if (!Number.isFinite(gpsPlaybackCursorSec) || gpsPlaybackCursorSec >= playbackEndTime - 0.01) {
     gpsPlaybackCursorSec = minTime;
     updateGpsCursorAtTime(gpsPlaybackCursorSec);
   }
@@ -2624,8 +2641,8 @@ function setGpsPlayback(shouldPlay) {
 
     const rate = Number(gpsPlayRate ? gpsPlayRate.value : 1) || 1;
     gpsPlaybackCursorSec += (elapsedMs / 1000) * rate;
-    if (gpsPlaybackCursorSec >= maxTime) {
-      updateGpsCursorAtTime(maxTime);
+    if (gpsPlaybackCursorSec >= playbackEndTime) {
+      updateGpsCursorAtTime(playbackEndTime);
       setGpsPlayback(false);
       return;
     }
