@@ -2554,6 +2554,22 @@ body.gps-map-fullscreen-open { overflow: hidden; }
 .gps-gopro-panel output { display: block; padding: 7px 9px; color: #cbd5e1; font: 700 9px/1.35 var(--font-mono); }
 .gps-gopro-panel output.success { color: #34d399; }
 .gps-gopro-panel output.error { color: #fb7185; }
+.gps-gopro-panel.youtube-buffering::before {
+  content: 'YouTube 버퍼링 중 · 텔레메트리 대기';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1300;
+  padding: 9px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.88);
+  color: #fff;
+  font: 900 11px var(--font-mono);
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
 .gps-map-stage.gps-detail-open > .gps-gopro-panel {
   right: calc(var(--gps-detail-width) + 8px);
   bottom: 8px;

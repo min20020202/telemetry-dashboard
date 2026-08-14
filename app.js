@@ -319,6 +319,24 @@ let gpsYouTubeApiPromise = null;
 let gpsYouTubePrimaryPlayer = null;
 let gpsYouTubeComparePlayer = null;
 let gpsYouTubeVideoId = '';
+const gpsYouTubeLastSeekAt = new WeakMap();
+
+function getVisibleYouTubePlayers() {
+  const players = [gpsYouTubePrimaryPlayer];
+  if (getGoProLapPair()) players.push(gpsYouTubeComparePlayer);
+  return players.filter(Boolean);
+}
+
+function isYouTubeBuffering() {
+  if (gpsGoProSourceType !== 'youtube') return false;
+  const bufferingState = window.YT?.PlayerState?.BUFFERING;
+  return getVisibleYouTubePlayers().some(player => player.getPlayerState?.() === bufferingState);
+}
+
+function refreshYouTubeBufferingState() {
+  const buffering = isYouTubeBuffering();
+  gpsGoProPanel?.classList.toggle('youtube-buffering', buffering);
+}
 
 async function readMp4AtomHeader(file, offset) {
   if (offset + 8 > file.size) return null;
@@ -507,6 +525,7 @@ function createYouTubePlayer(mount, videoId) {
               (!gpsPlaybackActive || gpsGoProSourceType !== 'youtube')) {
             event.target.pauseVideo?.();
           }
+          requestAnimationFrame(refreshYouTubeBufferingState);
         },
         onError: event => {
           if (!settled) reject(new Error(`YouTube 영상을 재생할 수 없습니다. 오류 코드 ${event.data}`));
@@ -536,6 +555,7 @@ function destroyYouTubePlayers() {
   gpsYouTubePrimaryPlayer = null;
   gpsYouTubeComparePlayer = null;
   gpsYouTubeVideoId = '';
+  gpsGoProPanel?.classList.remove('youtube-buffering');
   ['gps-youtube-player', 'gps-youtube-compare-player'].forEach(id => {
     const element = document.getElementById(id);
     if (element?.tagName === 'IFRAME') element.remove();
@@ -595,8 +615,12 @@ function syncOneGoProVideo(video, targetTime, force, rate, holdAtFinish = false)
     }
     const currentTime = Number(player.getCurrentTime?.());
     const drift = currentTime - videoTime;
-    if (force || !gpsPlaybackActive || !Number.isFinite(currentTime) || Math.abs(drift) > 0.35) {
+    const now = performance.now();
+    const lastSeekAt = gpsYouTubeLastSeekAt.get(player) || 0;
+    const needsDriftCorrection = Math.abs(drift) > 0.75 && now - lastSeekAt > 750;
+    if (force || !gpsPlaybackActive || !Number.isFinite(currentTime) || needsDriftCorrection) {
       player.seekTo?.(videoTime, true);
+      gpsYouTubeLastSeekAt.set(player, now);
     }
     player.setPlaybackRate?.(rate);
     const state = player.getPlayerState?.();
@@ -604,7 +628,13 @@ function syncOneGoProVideo(video, targetTime, force, rate, holdAtFinish = false)
       if (force || !Number.isFinite(currentTime) || Math.abs(drift) > 0.08) player.seekTo?.(videoTime, true);
       player.pauseVideo?.();
     } else {
-      if (gpsPlaybackActive && state !== window.YT?.PlayerState?.PLAYING) player.playVideo?.();
+      const canStart = [
+        window.YT?.PlayerState?.UNSTARTED,
+        window.YT?.PlayerState?.ENDED,
+        window.YT?.PlayerState?.PAUSED,
+        window.YT?.PlayerState?.CUED
+      ].includes(state);
+      if (gpsPlaybackActive && canStart) player.playVideo?.();
       if (!gpsPlaybackActive) player.pauseVideo?.();
     }
     return;
@@ -722,7 +752,7 @@ function closeGoProVideo() {
   stage?.classList.remove('gps-video-loaded');
   if (gpsGoProPanel) {
     gpsGoProPanel.hidden = true;
-    gpsGoProPanel.classList.remove('youtube-source', 'primary-arrived', 'compare-arrived');
+    gpsGoProPanel.classList.remove('youtube-source', 'youtube-buffering', 'primary-arrived', 'compare-arrived');
   }
   if (gpsGoProFile) gpsGoProFile.value = '';
   setTimeout(() => {
@@ -2713,6 +2743,14 @@ function setGpsPlayback(shouldPlay) {
   const playbackStep = timestamp => {
     if (!gpsPlaybackActive) return;
     if (gpsPlaybackLastTimestamp === null) {
+      gpsPlaybackLastTimestamp = timestamp;
+      gpsPlaybackFrame = requestAnimationFrame(playbackStep);
+      return;
+    }
+
+    // YouTube가 새 구간을 버퍼링하는 동안 텔레메트리 커서도 함께 기다립니다.
+    // 버퍼링이 끝난 뒤 경과시간이 한꺼번에 더해지지 않도록 기준 시각을 갱신합니다.
+    if (isYouTubeBuffering()) {
       gpsPlaybackLastTimestamp = timestamp;
       gpsPlaybackFrame = requestAnimationFrame(playbackStep);
       return;
