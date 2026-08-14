@@ -1909,7 +1909,7 @@ body {
 .gps-map-card.gps-map-fullscreen-fallback .gps-fullscreen-playback {
   order: 10;
   display: grid;
-  grid-template-columns: auto auto auto minmax(180px, 1fr) 112px;
+  grid-template-columns: auto auto auto auto minmax(180px, 1fr) 112px;
   align-items: center;
   gap: 8px;
   width: 100%;
@@ -1930,7 +1930,8 @@ body {
   color: var(--accent-orange);
 }
 
-#gps-fullscreen-timeline { width: 100%; accent-color: var(--accent-orange); }
+#gps-fullscreen-play-rate { width: 64px; }
+#gps-fullscreen-timeline { min-width: 0; width: 100%; accent-color: var(--accent-orange); }
 #gps-fullscreen-play-time { color: var(--accent-orange); font: 700 10px var(--font-mono); text-align: right; }
 
 .gps-position-cursor {
