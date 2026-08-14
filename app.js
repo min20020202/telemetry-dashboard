@@ -1075,8 +1075,8 @@ function updateGpsFullscreenTimelineVisual() {
   const value = Number(gpsFullscreenTimeline.value) || min;
   const ratio = max > min ? Math.max(0, Math.min(1, (value - min) / (max - min))) : 0;
   const width = gpsFullscreenTimeline.clientWidth;
-  const progress = width > 20
-    ? `${(10 + ratio * (width - 20)).toFixed(2)}px`
+  const progress = width > 30
+    ? `${(15 + ratio * (width - 30)).toFixed(2)}px`
     : `${(ratio * 100).toFixed(4)}%`;
   gpsFullscreenTimeline.style.setProperty('--timeline-progress', progress);
 }
@@ -2637,16 +2637,25 @@ function setGpsPlayback(shouldPlay) {
   if (!gpsPlaybackActive) {
     const cursorTime = Number(scrollBar?.value) || gpsPlaybackCursorSec;
     syncGoProVideo(getGoProTargetTelemetryTime(cursorTime), true);
+    requestAnimationFrame(updateGpsFullscreenTimelineVisual);
     return;
   }
 
-  const minTime = Number(scrollBar.min) || 0;
-  const maxTime = Number(scrollBar.max) || totalDurationSec;
+  let minTime = Number(scrollBar.min) || 0;
+  let maxTime = Number(scrollBar.max) || totalDurationSec;
   const videoLapPair = gpsGoProMatched ? getGoProLapPair() : null;
   const selectedSingleLap = gpsSelectedLapIndices.length === 1 ? gpsLapResults[gpsSelectedLapIndices[0]] : null;
-  const playbackEndTime = videoLapPair
-    ? Math.min(maxTime, Math.max(gpsLapResults[videoLapPair.primaryIndex].duration, gpsLapResults[videoLapPair.compareIndex].duration))
-    : selectedSingleLap ? Math.min(maxTime, selectedSingleLap.endTime) : maxTime;
+  if (videoLapPair) {
+    const longerVideoLapDuration = Math.max(
+      gpsLapResults[videoLapPair.primaryIndex].duration,
+      gpsLapResults[videoLapPair.compareIndex].duration
+    );
+    const currentValue = Number(scrollBar.value) || 0;
+    syncGpsTimelineRange(0, longerVideoLapDuration, Math.min(currentValue, longerVideoLapDuration));
+    minTime = 0;
+    maxTime = longerVideoLapDuration;
+  }
+  const playbackEndTime = selectedSingleLap ? Math.min(maxTime, selectedSingleLap.endTime) : maxTime;
   gpsPlaybackCursorSec = Number(scrollBar.value);
   if (!Number.isFinite(gpsPlaybackCursorSec) || gpsPlaybackCursorSec >= playbackEndTime - 0.01) {
     gpsPlaybackCursorSec = minTime;

@@ -2096,11 +2096,11 @@ body {
 }
 #gps-fullscreen-timeline::-webkit-slider-runnable-track { height: 8px; border-radius: 999px; background: transparent; }
 #gps-fullscreen-timeline::-webkit-slider-thumb {
-  width: 20px;
-  height: 20px;
-  margin-top: -6px;
+  width: 30px;
+  height: 18px;
+  margin-top: -5px;
   border: 1px solid #cbd5e1;
-  border-radius: 50%;
+  border-radius: 999px;
   background: #fff;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.24);
   appearance: none;
@@ -2108,7 +2108,7 @@ body {
 }
 #gps-fullscreen-timeline::-moz-range-track { height: 8px; border: 0; border-radius: 999px; background: transparent; }
 #gps-fullscreen-timeline::-moz-range-progress { height: 8px; border-radius: 999px; background: var(--accent-orange); }
-#gps-fullscreen-timeline::-moz-range-thumb { width: 20px; height: 20px; border: 1px solid #cbd5e1; border-radius: 50%; background: #fff; }
+#gps-fullscreen-timeline::-moz-range-thumb { width: 30px; height: 18px; border: 1px solid #cbd5e1; border-radius: 999px; background: #fff; }
 #gps-fullscreen-play-time { color: var(--accent-orange); font: 700 10px var(--font-mono); text-align: right; }
 
 .gps-position-cursor {
