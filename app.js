@@ -96,6 +96,8 @@ const tabTemperature = document.getElementById('tab-temperature');
 const pageTemperature = document.getElementById('page-temperature');
 const tabRealtime = document.getElementById('tab-realtime');
 const pageRealtime = document.getElementById('page-realtime');
+const tabHelp = document.getElementById('tab-help');
+const pageHelp = document.getElementById('page-help');
 const timelineNavigator = document.querySelector('.timeline-navigator');
 
 // Temperature DOMs (Page 4)
@@ -1911,8 +1913,16 @@ if (tabTemperature) {
 if (tabRealtime) {
   tabRealtime.addEventListener('click', () => switchTab('realtime'));
 }
+if (tabHelp) {
+  tabHelp.addEventListener('click', () => switchTab('help'));
+}
 
-// Keyboard shortcuts: number row and numeric keypad 1–4 switch pages.
+pageHelp?.addEventListener('click', event => {
+  const button = event.target.closest('[data-help-tab]');
+  if (button) switchTab(button.dataset.helpTab);
+});
+
+// Keyboard shortcuts: number row and numeric keypad 1–6 switch pages.
 document.addEventListener('keydown', (event) => {
   const target = event.target;
   const isTyping = target instanceof HTMLInputElement ||
@@ -1932,7 +1942,9 @@ document.addEventListener('keydown', (event) => {
     Digit4: 'temperature',
     Numpad4: 'temperature',
     Digit5: 'realtime',
-    Numpad5: 'realtime'
+    Numpad5: 'realtime',
+    Digit6: 'help',
+    Numpad6: 'help'
   };
   const mode = pageByKey[event.code];
   if (!mode) return;
@@ -1950,18 +1962,29 @@ function switchTab(mode) {
   if (tabGps) tabGps.classList.remove('active');
   if (tabTemperature) tabTemperature.classList.remove('active');
   if (tabRealtime) tabRealtime.classList.remove('active');
+  if (tabHelp) tabHelp.classList.remove('active');
 
   pageGeneral.classList.remove('active');
   pageDiagnostics.classList.remove('active');
   if (pageGps) pageGps.classList.remove('active');
   if (pageTemperature) pageTemperature.classList.remove('active');
   if (pageRealtime) pageRealtime.classList.remove('active');
+  if (pageHelp) pageHelp.classList.remove('active');
 
   clearAllDomCursors();
 
-  // 실시간 페이지는 로그 재생용 타임라인이 필요 없으므로 숨깁니다.
+  // 실시간과 도움말 페이지는 로그 재생용 타임라인이 필요 없으므로 숨깁니다.
   if (timelineNavigator) {
-    timelineNavigator.style.display = (mode === 'realtime') ? 'none' : '';
+    timelineNavigator.style.display = (mode === 'realtime' || mode === 'help') ? 'none' : '';
+  }
+
+  if (mode === 'help') {
+    if (tabHelp) tabHelp.classList.add('active');
+    if (pageHelp) {
+      pageHelp.classList.add('active');
+      pageHelp.scrollTop = 0;
+    }
+    return;
   }
 
   if (mode === 'realtime') {
