@@ -135,7 +135,6 @@ const gpsLapClear = document.getElementById('gps-lap-clear');
 const gpsCheckpointAdd = document.getElementById('gps-checkpoint-add');
 const gpsCheckpointClear = document.getElementById('gps-checkpoint-clear');
 const gpsCheckpointCount = document.getElementById('gps-checkpoint-count');
-const gpsCornerToggle = document.getElementById('gps-corner-toggle');
 const gpsSectorCard = document.getElementById('gps-sector-card');
 const gpsSectorTable = document.getElementById('gps-sector-table');
 const gpsSectorToggle = document.getElementById('gps-sector-toggle');
@@ -312,9 +311,6 @@ let gpsCheckpointPreviewLine = null;
 let gpsCheckpointSelectionActive = false;
 let gpsCheckpointDraft = [];
 let gpsCheckpoints = [];
-let gpsCornerLayer = null;
-let gpsDetectedCorners = [];
-let gpsCornersVisible = true;
 let gpsLapPoints = [];
 let gpsLapSelectionActive = false;
 let gpsLapResults = [];
@@ -1123,72 +1119,6 @@ function restoreGpsFixedLines() {
   updateGpsVideoControlAvailability();
   setGpsLapStatus(`고정 피니시라인과 체크포인트 ${gpsCheckpoints.length}개를 불러왔습니다.`, 'ok');
   return true;
-}
-
-function angleDifferenceDegrees(a, b) {
-  let value = (b - a) * 180 / Math.PI;
-  while (value > 180) value -= 360;
-  while (value < -180) value += 360;
-  return value;
-}
-
-function detectGpsCorners() {
-  gpsDetectedCorners = [];
-  gpsCornerLayer?.clearLayers();
-  if (!gpsLapResults.length) {
-    if (gpsCornerToggle) gpsCornerToggle.disabled = true;
-    return;
-  }
-  const referenceLap = gpsLapResults.reduce((best, lap) => !best || lap.duration < best.duration ? lap : best, null);
-  const points = gpsLapPoints.filter(point => point.time >= referenceLap.startTime && point.time <= referenceLap.endTime);
-  if (points.length < 12) return;
-  const cumulative = [0];
-  for (let i = 1; i < points.length; i += 1) cumulative.push(cumulative[i - 1] + distanceMeters(points[i - 1], points[i]));
-  const turn = new Array(points.length).fill(0);
-  for (let i = 3; i < points.length - 3; i += 1) {
-    const before = Math.atan2(points[i].lat - points[i - 3].lat, (points[i].lon - points[i - 3].lon) * Math.cos(points[i].lat * Math.PI / 180));
-    const after = Math.atan2(points[i + 3].lat - points[i].lat, (points[i + 3].lon - points[i].lon) * Math.cos(points[i].lat * Math.PI / 180));
-    turn[i] = angleDifferenceDegrees(before, after);
-  }
-  const candidates = [];
-  let start = -1;
-  for (let i = 3; i < points.length - 3; i += 1) {
-    const active = Math.abs(turn[i]) >= 7;
-    if (active && start < 0) start = i;
-    const gapEnded = start >= 0 && (!active && cumulative[i] - cumulative[Math.max(start, i - 3)] > 10);
-    if (start >= 0 && (gapEnded || i === points.length - 4)) {
-      const end = active ? i : Math.max(start, i - 1);
-      const length = cumulative[end] - cumulative[start];
-      const totalTurn = turn.slice(start, end + 1).reduce((sum, value) => sum + value, 0);
-      if (length >= 8 && Math.abs(totalTurn) >= 18) candidates.push({ start, end, totalTurn });
-      start = -1;
-    }
-  }
-  // Close gaps between parts of one continuous corner, while keeping opposite S-bends separate.
-  candidates.forEach(candidate => {
-    const previous = gpsDetectedCorners[gpsDetectedCorners.length - 1];
-    if (previous && Math.sign(previous.totalTurn) === Math.sign(candidate.totalTurn) && cumulative[candidate.start] - cumulative[previous.end] < 18) {
-      previous.end = candidate.end;
-      previous.totalTurn += candidate.totalTurn;
-    } else gpsDetectedCorners.push({ ...candidate });
-  });
-  gpsDetectedCorners.forEach((corner, index) => {
-    const slice = points.slice(corner.start, corner.end + 1);
-    const apexOffset = slice.reduce((best, point, offset) => point.speed < slice[best].speed ? offset : best, 0);
-    const apex = slice[apexOffset];
-    const color = corner.totalTurn >= 0 ? '#06b6d4' : '#a855f7';
-    L.polyline(slice.map(point => [point.lat, point.lon]), { color, weight: 9, opacity: 0.68, interactive: false }).addTo(gpsCornerLayer);
-    L.marker([apex.lat, apex.lon], {
-      interactive: false,
-      icon: L.divIcon({ className: '', html: `<div class="gps-corner-label">T${index + 1}<small>${corner.totalTurn >= 0 ? 'L' : 'R'}</small></div>`, iconSize: [42, 24], iconAnchor: [21, 12] })
-    }).addTo(gpsCornerLayer);
-  });
-  if (gpsCornerToggle) {
-    gpsCornerToggle.disabled = !gpsDetectedCorners.length;
-    gpsCornerToggle.textContent = `코너 ${gpsDetectedCorners.length}개`;
-    gpsCornerToggle.classList.toggle('active', gpsCornersVisible);
-  }
-  if (!gpsCornersVisible && gpsCornerLayer && gpsMap.hasLayer(gpsCornerLayer)) gpsMap.removeLayer(gpsCornerLayer);
 }
 
 function drawGpsCheckpoints() {
@@ -2127,7 +2057,6 @@ function calculateGpsLaps() {
   });
 
   renderGpsLapResults(crossings, laps);
-  detectGpsCorners();
   setGpsLapStatus(laps.length ? `${laps.length}개 랩 계산 완료 · 통과 시각 선형 보간 적용` : '첫 통과만 검출되어 완성된 랩이 없습니다.', laps.length ? 'ok' : 'warn');
 }
 
@@ -2135,13 +2064,6 @@ function clearGpsLapAnalysis(removeSaved = false) {
   gpsLapSelectionActive = false;
   gpsFinishPoints = [];
   clearGpsCheckpoints();
-  gpsDetectedCorners = [];
-  gpsCornerLayer?.clearLayers();
-  if (gpsCornerToggle) {
-    gpsCornerToggle.disabled = true;
-    gpsCornerToggle.textContent = '코너 표시';
-    gpsCornerToggle.classList.remove('active');
-  }
   if (gpsGoProSourceType || gpsGoProMatched) closeGoProVideo();
   closeYouTubeDialog();
   gpsLapResults = [];
@@ -2316,7 +2238,6 @@ function initGpsMap() {
   gpsLapCrossingLayer = L.layerGroup().addTo(gpsMap);
   gpsCheckpointLayer = L.layerGroup().addTo(gpsMap);
   gpsCheckpointDraftLayer = L.layerGroup().addTo(gpsMap);
-  gpsCornerLayer = L.layerGroup().addTo(gpsMap);
   gpsMap.on('click', handleGpsLapMapClick);
   gpsMap.on('click', handleGpsCheckpointMapClick);
   gpsMap.on('mousemove', updateGpsFinishPreview);
@@ -2329,13 +2250,6 @@ gpsLapClear?.addEventListener('click', () => clearGpsLapAnalysis(true));
 gpsCheckpointAdd?.addEventListener('click', beginGpsCheckpointSelection);
 gpsSectorToggle?.addEventListener('click', toggleGpsSectorOverlay);
 gpsSectorOverlayClose?.addEventListener('click', closeGpsSectorOverlay);
-gpsCornerToggle?.addEventListener('click', () => {
-  if (!gpsDetectedCorners.length || !gpsCornerLayer) return;
-  gpsCornersVisible = !gpsCornersVisible;
-  if (gpsCornersVisible) gpsCornerLayer.addTo(gpsMap);
-  else gpsMap.removeLayer(gpsCornerLayer);
-  gpsCornerToggle.classList.toggle('active', gpsCornersVisible);
-});
 gpsCheckpointClear?.addEventListener('click', () => {
   clearGpsCheckpoints(true);
   if (gpsLapResults.length && gpsCheckpointAdd) gpsCheckpointAdd.disabled = false;
