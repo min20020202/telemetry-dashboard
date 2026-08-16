@@ -322,6 +322,7 @@ let gpsDetailCharts = [];
 let gpsDetailSourceData = null;
 const GPS_LAP_COLORS = ['#00e5ff', '#ff3d9a', '#76ff03', '#ffca28', '#7c4dff', '#ff6d00', '#00e676', '#40c4ff'];
 const GPS_FIXED_LINES_STORAGE_KEY = 'nssur_gps_fixed_lines_v1';
+const GPS_FIXED_LINES_INITIAL_PASSWORD = '0000';
 const CSV_GPS_UTC_OFFSET_SEC = 9 * 3600; // Logger gps_time is stored as Korea Standard Time (UTC+9).
 
 // GPS + IMU synchronized playback state.
@@ -1094,6 +1095,20 @@ function removeSavedGpsFixedLines() {
   try { localStorage.removeItem(GPS_FIXED_LINES_STORAGE_KEY); } catch (error) { /* ignore */ }
 }
 
+function verifyGpsFixedLinesPassword(actionLabel = '고정선을 변경') {
+  const entered = window.prompt(`${actionLabel}하려면 4자리 비밀번호를 입력하십시오.`, '');
+  if (entered === null) return false;
+  if (!/^\d{4}$/.test(entered)) {
+    setGpsLapStatus('비밀번호는 숫자 4자리로 입력하십시오.', 'warn');
+    return false;
+  }
+  if (entered !== GPS_FIXED_LINES_INITIAL_PASSWORD) {
+    setGpsLapStatus('비밀번호가 올바르지 않습니다.', 'warn');
+    return false;
+  }
+  return true;
+}
+
 function restoreGpsFixedLines() {
   if (gpsLapPoints.length < 2) return false;
   let saved;
@@ -1141,7 +1156,7 @@ function drawGpsCheckpoints() {
     }).addTo(gpsCheckpointLayer);
   });
   if (gpsCheckpointCount) gpsCheckpointCount.textContent = `${gpsCheckpoints.length} CP`;
-  if (gpsCheckpointClear) gpsCheckpointClear.disabled = !gpsCheckpoints.length;
+  if (gpsCheckpointClear) gpsCheckpointClear.disabled = gpsFinishPoints.length !== 2 && !gpsCheckpoints.length;
   if (gpsCheckpointAdd) gpsCheckpointAdd.disabled = !gpsLapResults.length || gpsCheckpoints.length >= 2;
   if (gpsSectorToggle) gpsSectorToggle.disabled = !gpsCheckpoints.length;
 }
@@ -2110,6 +2125,7 @@ function beginGpsFinishLineSelection() {
     setGpsLapStatus('먼저 GPS 데이터가 포함된 CSV를 불러오십시오.', 'warn');
     return;
   }
+  if (gpsFinishPoints.length === 2 && !verifyGpsFixedLinesPassword('피니시 라인을 다시 설정')) return;
   clearGpsLapAnalysis(true);
   gpsLapSelectionActive = true;
   gpsLapSetLine?.classList.add('active');
@@ -2148,6 +2164,7 @@ function handleGpsLapMapClick(event) {
   if (gpsFinishPreviewLine) gpsMap.removeLayer(gpsFinishPreviewLine);
   gpsFinishPreviewLine = null;
   drawGpsFinishLine();
+  if (gpsCheckpointClear) gpsCheckpointClear.disabled = false;
   saveGpsFixedLines();
   calculateGpsLaps();
   updateGpsVideoControlAvailability();
@@ -2251,10 +2268,10 @@ gpsCheckpointAdd?.addEventListener('click', beginGpsCheckpointSelection);
 gpsSectorToggle?.addEventListener('click', toggleGpsSectorOverlay);
 gpsSectorOverlayClose?.addEventListener('click', closeGpsSectorOverlay);
 gpsCheckpointClear?.addEventListener('click', () => {
-  clearGpsCheckpoints(true);
-  if (gpsLapResults.length && gpsCheckpointAdd) gpsCheckpointAdd.disabled = false;
-  saveGpsFixedLines();
-  setGpsLapStatus('고정 체크포인트를 모두 삭제했습니다.');
+  if (!verifyGpsFixedLinesPassword('피니시라인과 체크포인트를 초기화')) return;
+  if (!window.confirm('피니시라인과 체크포인트 2개를 모두 삭제하시겠습니까?')) return;
+  clearGpsLapAnalysis(true);
+  setGpsLapStatus('피니시라인과 체크포인트를 모두 초기화했습니다.');
 });
 gpsLapMinTime?.addEventListener('change', () => {
   const clamped = Math.max(5, Math.min(600, Number(gpsLapMinTime.value) || 20));
