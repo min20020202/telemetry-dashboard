@@ -2807,14 +2807,15 @@ function updateColumnCursorLine(lineId, chart, index) {
     return;
   }
 
-  const meta = chart.getDatasetMeta(0);
-  if (!meta || meta.hidden) {
+  const targetTime = Number(activeSampledData[index]?.time_sec);
+  const xScale = chart.scales?.x;
+  if (!Number.isFinite(targetTime) || !xScale) {
     lineEl.style.display = 'none';
     return;
   }
 
-  const point = meta.data[index];
-  if (point && !isNaN(point.x)) {
+  const pointX = xScale.getPixelForValue(targetTime);
+  if (Number.isFinite(pointX)) {
     const canvas = chart.canvas;
     const container = lineEl.parentElement;
     
@@ -2825,11 +2826,24 @@ function updateColumnCursorLine(lineId, chart, index) {
     const relativeLeft = (rectCanvas.left - rectContainer.left) - borderLeft;
 
     // Center the 2px-wide cursor line on point.x (subtract 1px for half-width)
-    lineEl.style.left = (relativeLeft + point.x - 1) + 'px';
+    lineEl.style.left = (relativeLeft + pointX - 1) + 'px';
     lineEl.style.display = 'block';
   } else {
     lineEl.style.display = 'none';
   }
+}
+
+function nearestDatasetPointIndex(data, targetTime) {
+  if (!Array.isArray(data) || !data.length || !Number.isFinite(targetTime)) return -1;
+  let lo = 0;
+  let hi = data.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (Number(data[mid]?.x) < targetTime) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo > 0 && Math.abs(Number(data[lo - 1]?.x) - targetTime) <= Math.abs(Number(data[lo]?.x) - targetTime)) return lo - 1;
+  return lo;
 }
 
 // HIGH-PERFORMANCE: Places bright circles directly on the intersection points of the chart lines
@@ -2851,11 +2865,14 @@ function drawCssIntersectionDots(index, chartSubset = null) {
     const existingDots = holder.querySelectorAll('.visual-cursor-dot');
     existingDots.forEach(dot => dot.style.display = 'none');
 
+    const targetTime = Number(activeSampledData[index]?.time_sec);
     chart.data.datasets.forEach((dataset, datasetIndex) => {
       const meta = chart.getDatasetMeta(datasetIndex);
       if (!meta.hidden) {
-        // 호버 포인트 매핑 시 현재 X축 구간 내 인덱스 역산으로 올바르게 보정
-        const point = meta.data[index];
+        // Datasets may use different visible-range resolutions. Match each dot
+        // by timestamp instead of assuming every dataset shares one index.
+        const pointIndex = nearestDatasetPointIndex(dataset.data, targetTime);
+        const point = meta.data[pointIndex];
         if (point && !isNaN(point.x) && !isNaN(point.y)) {
           let dot = holder.querySelector(`.visual-cursor-dot-ds-${datasetIndex}`);
           if (!dot) {
@@ -4146,12 +4163,13 @@ function refreshVisibleImuSeries(startTime, endTime, updateNow = true) {
   const times = indices.map(index => globalData[index].time_sec);
 
   const charts = [
-    [chartImuAccel, ['imu_ax', 'imu_ay']],
-    [chartImuGyro, ['imu_gx', 'imu_gy', 'imu_gz']]
+    [chartSteering, [[1, 'imu_gz'], [2, 'imu_ay']]],
+    [chartImuAccel, [[0, 'imu_ax'], [1, 'imu_ay']]],
+    [chartImuGyro, [[0, 'imu_gx'], [1, 'imu_gy'], [2, 'imu_gz']]]
   ];
-  charts.forEach(([chart, keys]) => {
+  charts.forEach(([chart, datasets]) => {
     if (!chart) return;
-    keys.forEach((key, datasetIndex) => {
+    datasets.forEach(([datasetIndex, key]) => {
       if (chart.data.datasets[datasetIndex]) {
         chart.data.datasets[datasetIndex].data = channelSeries(key, indices, times);
       }
@@ -4219,11 +4237,12 @@ function syncHover(activeChart, chartEvent) {
     }
     const points = lastActiveChart.getElementsAtEventForMode(lastChartEvent, 'index', { intersect: false }, true);
     if (points && points.length) {
-      const index = points[0].index;
-      currentCursorIndex = index;
-      const row = activeSampledData[index];
+      const dataset = lastActiveChart.data.datasets[points[0].datasetIndex];
+      const targetTime = Number(dataset?.data?.[points[0].index]?.x);
+      currentCursorIndex = Number.isFinite(targetTime) ? findSampleIndexAtTime(targetTime) : points[0].index;
+      const row = activeSampledData[currentCursorIndex];
       if (row) {
-        drawCssIntersectionDots(index);
+        drawCssIntersectionDots(currentCursorIndex);
         updateNumericDisplays(row);
       }
     }
