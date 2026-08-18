@@ -1085,7 +1085,7 @@ function saveGpsFixedLines() {
   try {
     localStorage.setItem(GPS_FIXED_LINES_STORAGE_KEY, JSON.stringify({
       finish: gpsFinishPoints,
-      checkpoints: gpsCheckpoints.slice(0, 2),
+      checkpoints: gpsCheckpoints,
       savedAt: new Date().toISOString()
     }));
   } catch (error) { /* local storage may be unavailable */ }
@@ -1125,7 +1125,7 @@ function restoreGpsFixedLines() {
   }
   gpsFinishPoints = saved.finish.map(point => ({ lat: Number(point.lat), lon: Number(point.lon) }));
   gpsCheckpoints = Array.isArray(saved.checkpoints)
-    ? saved.checkpoints.slice(0, 2).filter(line => Array.isArray(line) && line.length === 2)
+    ? saved.checkpoints.filter(line => Array.isArray(line) && line.length === 2)
     : [];
   drawGpsFinishLine();
   drawGpsCheckpoints();
@@ -1157,7 +1157,7 @@ function drawGpsCheckpoints() {
   });
   if (gpsCheckpointCount) gpsCheckpointCount.textContent = `${gpsCheckpoints.length} CP`;
   if (gpsCheckpointClear) gpsCheckpointClear.disabled = gpsFinishPoints.length !== 2 && !gpsCheckpoints.length;
-  if (gpsCheckpointAdd) gpsCheckpointAdd.disabled = !gpsLapResults.length || gpsCheckpoints.length >= 2;
+  if (gpsCheckpointAdd) gpsCheckpointAdd.disabled = !gpsLapResults.length;
   if (gpsSectorToggle) gpsSectorToggle.disabled = !gpsCheckpoints.length;
 }
 
@@ -1184,10 +1184,6 @@ function clearGpsCheckpoints(removeSaved = false) {
 function beginGpsCheckpointSelection() {
   if (gpsFinishPoints.length !== 2 || !gpsLapResults.length) {
     setGpsLapStatus('먼저 피니시 라인을 설정해 랩을 계산하십시오.', 'warn');
-    return;
-  }
-  if (gpsCheckpoints.length >= 2) {
-    setGpsLapStatus('고정 체크포인트는 최대 2개입니다. 변경하려면 체크포인트 삭제 후 다시 지정하십시오.', 'warn');
     return;
   }
   setGpsPlayback(false);
@@ -1234,7 +1230,7 @@ function handleGpsCheckpointMapClick(event) {
   drawGpsCheckpoints();
   saveGpsFixedLines();
   renderGpsSectorComparison();
-  setGpsLapStatus(gpsCheckpoints.length === 2 ? '고정 체크포인트 2개 저장 완료' : 'CP1 저장 완료 · CP2를 주행 순서대로 추가하십시오.', 'ok');
+  setGpsLapStatus(`CP${gpsCheckpoints.length} 저장 완료 · 다음 체크포인트는 주행 순서대로 추가하십시오.`, 'ok');
 }
 
 function updateGpsCheckpointPreview(event) {
@@ -1769,7 +1765,7 @@ function selectGpsLapView(index) {
 
 function renderGpsLapResults(crossings, laps) {
   gpsLapResults = laps;
-  if (gpsCheckpointAdd) gpsCheckpointAdd.disabled = !laps.length || gpsCheckpoints.length >= 2;
+  if (gpsCheckpointAdd) gpsCheckpointAdd.disabled = !laps.length;
   gpsSelectedLapIndex = -1;
   gpsSelectedLapIndices = [];
   gpsGoProCompareLapIndex = -1;
@@ -1833,7 +1829,7 @@ function renderGpsLapResults(crossings, laps) {
       </div>
     </details>`;
   }).join('');
-  if (gpsCheckpointAdd) gpsCheckpointAdd.disabled = !laps.length || gpsCheckpoints.length >= 2;
+  if (gpsCheckpointAdd) gpsCheckpointAdd.disabled = !laps.length;
   if (gpsCheckpoints.length) renderGpsSectorComparison();
 }
 
@@ -2269,7 +2265,7 @@ gpsSectorToggle?.addEventListener('click', toggleGpsSectorOverlay);
 gpsSectorOverlayClose?.addEventListener('click', closeGpsSectorOverlay);
 gpsCheckpointClear?.addEventListener('click', () => {
   if (!verifyGpsFixedLinesPassword('피니시라인과 체크포인트를 초기화')) return;
-  if (!window.confirm('피니시라인과 체크포인트 2개를 모두 삭제하시겠습니까?')) return;
+  if (!window.confirm(`피니시라인과 체크포인트 ${gpsCheckpoints.length}개를 모두 삭제하시겠습니까?`)) return;
   clearGpsLapAnalysis(true);
   setGpsLapStatus('피니시라인과 체크포인트를 모두 초기화했습니다.');
 });
