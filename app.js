@@ -4456,7 +4456,10 @@ function renderMotecCharts(data) {
     color: (context) => (context.value === 0 ? '#ff2d55' : gridColor),
     lineWidth: 1
   };
-  optionsSteering.scales.yYaw = { position: 'right', display: false, grid: { display: false } };
+  // Keep yaw zero fixed at the vertical center. Without symmetric limits Chart.js
+  // auto-fits the visible yaw samples after every timeline zoom, which makes the
+  // apparent zero position drift even though the underlying values are unchanged.
+  optionsSteering.scales.yYaw = { position: 'right', min: -100, max: 100, display: false, grid: { display: false } };
   optionsSteering.scales.yLat = { position: 'right', min: -2.5, max: 2.5, display: false, grid: { display: false } };
   chartSteering = new Chart(ctxSteering, {
     type: 'line',
