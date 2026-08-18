@@ -1142,8 +1142,8 @@ function drawGpsCheckpoints() {
     const color = '#06b6d4';
     L.polyline(checkpoint.map(point => [point.lat, point.lon]), {
       color,
-      weight: 4,
-      opacity: 0.95,
+      weight: 3,
+      opacity: 0.72,
       interactive: false
     }).addTo(gpsCheckpointLayer);
     const middle = {
