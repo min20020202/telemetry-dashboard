@@ -328,6 +328,7 @@ let gpsSelectedLapIndices = [];
 let gpsCompareMarkers = [];
 let gpsHandlingEventsData = [];
 let gpsHandlingVisible = true;
+let gpsHandlingSteeringRatio = 12;
 let gpsDetailCharts = [];
 let gpsDetailSourceData = null;
 const GPS_LAP_COLORS = ['#00e5ff', '#ff3d9a', '#76ff03', '#ffca28', '#7c4dff', '#ff6d00', '#00e676', '#40c4ff'];
@@ -1457,15 +1458,18 @@ function analyzeGpsHandlingBalance() {
 }
 
 function renderGpsHandlingAnalysis(steeringRatio) {
-  const under = gpsHandlingEventsData.filter(event => event.type === 'under');
-  const over = gpsHandlingEventsData.filter(event => event.type === 'over');
+  gpsHandlingSteeringRatio = Number.isFinite(steeringRatio) ? steeringRatio : gpsHandlingSteeringRatio;
+  const visibleEvents = gpsHandlingEventsData.filter(event => event.lapIndex >= 0 &&
+    (!gpsSelectedLapIndices.length || gpsSelectedLapIndices.includes(event.lapIndex)));
+  const under = visibleEvents.filter(event => event.type === 'under');
+  const over = visibleEvents.filter(event => event.type === 'over');
   if (gpsUndersteerCount) gpsUndersteerCount.textContent = String(under.length);
   if (gpsOversteerCount) gpsOversteerCount.textContent = String(over.length);
-  if (gpsHandlingCalibration) gpsHandlingCalibration.textContent = `자동 조향비 ${steeringRatio.toFixed(1)}:1`;
+  if (gpsHandlingCalibration) gpsHandlingCalibration.textContent = `자동 조향비 ${gpsHandlingSteeringRatio.toFixed(1)}:1`;
   if (gpsHandlingCard) gpsHandlingCard.hidden = false;
   if (gpsHandlingToggle) gpsHandlingToggle.disabled = false;
   gpsHandlingToggle?.classList.toggle('active', gpsHandlingVisible);
-  const ordered = [...gpsHandlingEventsData].sort((a, b) => b.maxSeverity - a.maxSeverity).slice(0, 20);
+  const ordered = [...visibleEvents].sort((a, b) => b.maxSeverity - a.maxSeverity).slice(0, 20);
   if (gpsHandlingEvents) gpsHandlingEvents.innerHTML = ordered.length ? ordered.map(event => {
     const lap = event.lapIndex >= 0 ? `LAP ${gpsLapResults[event.lapIndex].number}` : '랩 외';
     const label = event.type === 'under' ? '언더스티어' : '오버스티어';
@@ -1478,7 +1482,8 @@ function renderGpsHandlingAnalysis(steeringRatio) {
 function drawGpsHandlingEvents() {
   gpsHandlingLayer?.clearLayers();
   if (!gpsHandlingVisible || !gpsHandlingLayer) return;
-  gpsHandlingEventsData.forEach(event => {
+  gpsHandlingEventsData.filter(event => event.lapIndex >= 0 &&
+    (!gpsSelectedLapIndices.length || gpsSelectedLapIndices.includes(event.lapIndex))).forEach(event => {
     const coords = gpsLapPoints.filter(point => point.time >= event.startTime && point.time <= event.endTime).map(point => [point.lat, point.lon]);
     if (event.position && coords.length < 2) {
       L.circleMarker([event.position.lat, event.position.lon], { radius: 7, color: '#fff', weight: 2, fillColor: event.type === 'under' ? '#2563eb' : '#ef4444', fillOpacity: 0.92, interactive: false }).addTo(gpsHandlingLayer);
@@ -1902,6 +1907,7 @@ function selectGpsLapView(index) {
   }
   if (gpsCursorMarker) gpsCursorMarker.setZIndexOffset(10000);
   if (gpsCheckpoints.length) renderGpsSectorComparison();
+  renderGpsHandlingAnalysis(gpsHandlingSteeringRatio);
 }
 
 function renderGpsLapResults(crossings, laps) {
