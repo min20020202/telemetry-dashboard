@@ -4074,9 +4074,8 @@ function applyZoomRange(start, end) {
     scrollBar.disabled = maxScroll <= 0.01;
   }
 
-  // 확대된 IMU 구간은 필터 적용본의 원본 해상도로 다시 구성합니다. 그래야
-  // 100 Hz 필터 커서와 화면의 필터 곡선이 같은 좌표를 가리킵니다.
-  refreshVisibleImuSeries(cleanStart, cleanEnd, false);
+  // Rebuild all visible channels at their measured source resolution.
+  refreshVisibleSensorSeries(cleanStart, cleanEnd, false);
 
   // 11개 Chart.js 인스턴스의 X축 범위만 갱신 (CPU 오버헤드 99% 해제!)
   const targetCharts = [
@@ -4132,12 +4131,19 @@ function downsampleIndices(len, limit) {
   return idx;
 }
 
-// Rebuild only the visible IMU series from the full-resolution filtered
-// channels. A single 4,500-point sample of an entire long run can omit a peak;
-// after zooming that made the exact filtered cursor appear away from the line.
-function refreshVisibleImuSeries(startTime, endTime, updateNow = true) {
-  if (!globalData.length || typeof channelSeries !== 'function') return;
+// Effective sensor rates measured from 김도현1.csv using each source's own
+// timestamp/counter (not by counting the logger's repeated 100 Hz rows).
+const CHANNEL_SOURCE_HZ = {
+  fl_speed: 100, rl_speed: 100, rr_speed: 100,
+  steering: 100, brake: 100,
+  sus_fl: 100, sus_fr: 100, sus_rl: 100, sus_rr: 100,
+  imu_ax: 50, imu_ay: 50, imu_gx: 50, imu_gy: 50, imu_gz: 50,
+  rpm: 25, gear: 25, throttle: 25,
+  water: 25, oil: 25, iat: 25, ecu: 25
+};
+const MAX_VISIBLE_SENSOR_POINTS = 4500;
 
+function visibleSensorIndices(startTime, endTime, sourceHz) {
   let lo = 0;
   let hi = globalData.length - 1;
   while (lo < hi) {
@@ -4146,7 +4152,6 @@ function refreshVisibleImuSeries(startTime, endTime, updateNow = true) {
     else hi = mid;
   }
   const first = Math.max(0, lo - 1);
-
   lo = first;
   hi = globalData.length - 1;
   while (lo < hi) {
@@ -4155,21 +4160,41 @@ function refreshVisibleImuSeries(startTime, endTime, updateNow = true) {
     else lo = mid;
   }
   const last = Math.min(globalData.length - 1, lo + 1);
-  const count = Math.max(1, last - first + 1);
-  const step = Math.max(1, Math.ceil(count / 4500));
-  const indices = [];
-  for (let i = first; i <= last; i += step) indices.push(i);
+  const duration = Math.max(0.01, endTime - startTime);
+  const sourceInterval = 1 / Math.max(1, sourceHz);
+  const displayInterval = Math.max(sourceInterval, duration / Math.max(1, MAX_VISIBLE_SENSOR_POINTS - 1));
+  const indices = [first];
+  let nextTime = Number(globalData[first].time_sec) + displayInterval;
+  for (let index = first + 1; index < last; index += 1) {
+    const time = Number(globalData[index].time_sec);
+    if (time + 1e-9 < nextTime) continue;
+    indices.push(index);
+    nextTime = time + displayInterval;
+  }
   if (indices[indices.length - 1] !== last) indices.push(last);
-  const times = indices.map(index => globalData[index].time_sec);
+  return indices;
+}
 
+// Rebuild every visible chart channel at its measured source resolution.
+// Short windows retain every sensor update; long windows are capped per
+// dataset so the dashboard remains responsive.
+function refreshVisibleSensorSeries(startTime, endTime, updateNow = true) {
+  if (!globalData.length || typeof channelSeries !== 'function') return;
   const charts = [
-    [chartSteering, [[1, 'imu_gz'], [2, 'imu_ay']]],
-    [chartImuAccel, [[0, 'imu_ax'], [1, 'imu_ay']]],
-    [chartImuGyro, [[0, 'imu_gx'], [1, 'imu_gy'], [2, 'imu_gz']]]
+    chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
+    diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
+    chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
   ];
-  charts.forEach(([chart, datasets]) => {
+  const indexCache = new Map();
+  charts.forEach(chart => {
     if (!chart) return;
-    datasets.forEach(([datasetIndex, key]) => {
+    const keys = typeof CHART_CHANNELS !== 'undefined' ? CHART_CHANNELS[chart.canvas.id] : null;
+    if (!keys) return;
+    keys.forEach((key, datasetIndex) => {
+      const hz = CHANNEL_SOURCE_HZ[key] || 100;
+      if (!indexCache.has(hz)) indexCache.set(hz, visibleSensorIndices(startTime, endTime, hz));
+      const indices = indexCache.get(hz);
+      const times = indices.map(index => globalData[index].time_sec);
       if (chart.data.datasets[datasetIndex]) {
         chart.data.datasets[datasetIndex].data = channelSeries(key, indices, times);
       }
@@ -4209,7 +4234,7 @@ function refreshChartsAfterFilter() {
     });
     chart.update('none');
   });
-  refreshVisibleImuSeries(currentStartSec, currentEndSec);
+  refreshVisibleSensorSeries(currentStartSec, currentEndSec);
 
   if (typeof refreshFilterBadges === 'function') refreshFilterBadges();
 
