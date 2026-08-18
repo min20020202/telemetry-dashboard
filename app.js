@@ -36,6 +36,7 @@ let limitEndSec = 0;
 let activeSampledData = [];
 let currentCursorIndex = 0;
 let preciseCursorTimeSec = 0;
+let numericCursorGlobalIndex = 0;
 
 // 화면용 다운샘플 인덱스 (전체 globalData 기준 위치) 및 그 시각값.
 // 노이즈 필터는 100Hz 원본 전체에 먼저 적용된 뒤 이 인덱스로 추출됩니다.
@@ -3710,8 +3711,8 @@ scrollBar.addEventListener('change', handleTimelineScrollDrag);
 // 커서 위치의 채널 값을 읽습니다. 노이즈 필터가 걸려 있으면 필터 적용값을
 // 반환해서 그래프와 숫자 표시가 항상 같은 값을 가리키도록 합니다.
 function cursorChannelValue(key, fallback) {
-  if (typeof channelValueAt === 'function' && sampleIndices.length) {
-    const v = channelValueAt(key, sampleIndices[currentCursorIndex]);
+  if (typeof channelValueAt === 'function' && globalData.length) {
+    const v = channelValueAt(key, numericCursorGlobalIndex);
     if (v !== null && Number.isFinite(v)) return v;
   }
   return fallback;
@@ -3720,6 +3721,13 @@ function cursorChannelValue(key, fallback) {
 // Numeric labels updates helper
 function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverride = null) {
   const displayTime = Number.isFinite(displayTimeOverride) ? displayTimeOverride : row.time_sec;
+  // 그래프의 센서별 해상도와 무관하게 숫자는 커서가 가리키는 원본 100 Hz
+  // CSV 행을 사용합니다. 기존 4,500점 화면 샘플 인덱스를 사용하면 확대 시
+  // 선은 움직이는데 숫자가 여러 프레임 동안 멈춰 보였습니다.
+  const sourceTime = Number(row?.time_sec);
+  if (Number.isFinite(sourceTime) && globalData.length) {
+    numericCursorGlobalIndex = findGlobalIndexAtTime(sourceTime);
+  }
   if (currentTimeVal) {
     let timeText = displayTime.toFixed(2) + 's';
     if (row.gps_time && row.gps_time.trim() !== "" && row.gps_time !== "00:00:00.00") {
@@ -4406,8 +4414,9 @@ function refreshChartsAfterFilter() {
 
   if (typeof refreshFilterBadges === 'function') refreshFilterBadges();
 
-  const row = activeSampledData[currentCursorIndex];
-  if (row) updateNumericDisplays(row);
+  const exactIndex = globalData.length ? findGlobalIndexAtTime(preciseCursorTimeSec) : -1;
+  const row = exactIndex >= 0 ? globalData[exactIndex] : activeSampledData[currentCursorIndex];
+  if (row) updateNumericDisplays(row, null, preciseCursorTimeSec);
   drawCssIntersectionDots(currentCursorIndex);
 }
 
@@ -4438,10 +4447,11 @@ function syncHover(activeChart, chartEvent) {
       const targetTime = xScale.getValueForPixel(clampedX);
       preciseCursorTimeSec = targetTime;
       currentCursorIndex = findSampleIndexAtTime(targetTime);
-      const row = activeSampledData[currentCursorIndex];
+      const globalIndex = findGlobalIndexAtTime(targetTime);
+      const row = globalIndex >= 0 ? globalData[globalIndex] : activeSampledData[currentCursorIndex];
       if (row) {
         drawCssIntersectionDots(currentCursorIndex, null, targetTime);
-        updateNumericDisplays(row);
+        updateNumericDisplays(row, null, targetTime);
       }
     }
     hoverSyncPending = false;
@@ -5050,7 +5060,7 @@ function moveChartCursorByKeyboard(direction, event) {
   const globalIndex = findGlobalIndexAtTime(targetTime);
   const row = globalIndex >= 0 ? globalData[globalIndex] : activeSampledData[currentCursorIndex];
   drawCssIntersectionDots(currentCursorIndex, null, targetTime);
-  if (row) updateNumericDisplays(row);
+  if (row) updateNumericDisplays(row, null, targetTime);
 }
 
 window.addEventListener('keyup', (e) => {
