@@ -142,6 +142,12 @@ const gpsSectorToggle = document.getElementById('gps-sector-toggle');
 const gpsSectorOverlay = document.getElementById('gps-sector-overlay');
 const gpsSectorOverlayTable = document.getElementById('gps-sector-overlay-table');
 const gpsSectorOverlayClose = document.getElementById('gps-sector-overlay-close');
+const gpsHandlingToggle = document.getElementById('gps-handling-toggle');
+const gpsHandlingCard = document.getElementById('gps-handling-card');
+const gpsHandlingEvents = document.getElementById('gps-handling-events');
+const gpsHandlingCalibration = document.getElementById('gps-handling-calibration');
+const gpsUndersteerCount = document.getElementById('gps-understeer-count');
+const gpsOversteerCount = document.getElementById('gps-oversteer-count');
 const gpsLapMinTime = document.getElementById('gps-lap-min-time');
 const gpsLapToolbarStatus = document.getElementById('gps-lap-toolbar-status');
 const gpsLapFixSummary = document.getElementById('gps-lap-fix-summary');
@@ -303,6 +309,7 @@ let gpsFinishLine = null;
 let gpsFinishEndpointLayer = null;
 let gpsLapCrossingLayer = null;
 let gpsLapRouteLayer = null;
+let gpsHandlingLayer = null;
 let gpsFinishPoints = [];
 let gpsFinishPreviewLine = null;
 let gpsFinishMarkers = [];
@@ -319,6 +326,8 @@ let gpsLapRouteLines = [];
 let gpsSelectedLapIndex = -1;
 let gpsSelectedLapIndices = [];
 let gpsCompareMarkers = [];
+let gpsHandlingEventsData = [];
+let gpsHandlingVisible = true;
 let gpsDetailCharts = [];
 let gpsDetailSourceData = null;
 const GPS_LAP_COLORS = ['#00e5ff', '#ff3d9a', '#76ff03', '#ffca28', '#7c4dff', '#ff6d00', '#00e676', '#40c4ff'];
@@ -1348,6 +1357,137 @@ function drawGpsLapRoutes(laps) {
   if (gpsCursorMarker) gpsCursorMarker.setZIndexOffset(10000);
 }
 
+function median(values) {
+  const clean = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!clean.length) return NaN;
+  const middle = Math.floor(clean.length / 2);
+  return clean.length % 2 ? clean[middle] : (clean[middle - 1] + clean[middle]) * 0.5;
+}
+
+function gpsPositionAtTelemetryTime(time) {
+  if (!gpsLapPoints.length) return null;
+  let low = 0, high = gpsLapPoints.length - 1;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (gpsLapPoints[middle].time < time) low = middle + 1;
+    else high = middle;
+  }
+  const next = gpsLapPoints[low];
+  const previous = gpsLapPoints[Math.max(0, low - 1)];
+  if (!next || !previous || next.time - previous.time > 2) return next || previous || null;
+  const ratio = Math.max(0, Math.min(1, (time - previous.time) / Math.max(0.001, next.time - previous.time)));
+  return { lat: previous.lat + (next.lat - previous.lat) * ratio, lon: previous.lon + (next.lon - previous.lon) * ratio };
+}
+
+function analyzeGpsHandlingBalance() {
+  gpsHandlingEventsData = [];
+  gpsHandlingLayer?.clearLayers();
+  if (!gpsLapResults.length || !globalData.length) {
+    if (gpsHandlingCard) gpsHandlingCard.hidden = true;
+    if (gpsHandlingToggle) gpsHandlingToggle.disabled = true;
+    return;
+  }
+
+  // 차량 제원이 없어도 작동하도록 정상 코너의 조향/Yaw 관계에서 유효 조향비를 자동 추정합니다.
+  const wheelbaseM = 1.60;
+  const candidates = [];
+  let signSum = 0;
+  for (let index = 0; index < globalData.length; index += 5) {
+    const row = globalData[index];
+    const speed = Number(row.gps_speed_kmh) / 3.6;
+    const steering = getCalibratedSteering(row.steering_raw);
+    const yaw = Number(row.imu_gyro_z_dps);
+    const lateral = Number(row.imu_accel_y_g);
+    if (speed < 7 || Math.abs(steering) < 8 || Math.abs(yaw) < 3 || Math.abs(lateral) < 0.12) continue;
+    signSum += Math.sign(steering * yaw);
+    const roadAngleDeg = Math.abs(Math.atan((yaw * Math.PI / 180) * wheelbaseM / speed) * 180 / Math.PI);
+    const ratio = Math.abs(steering) / Math.max(0.15, roadAngleDeg);
+    if (ratio >= 3 && ratio <= 35) candidates.push(ratio);
+  }
+  const yawSign = signSum < 0 ? -1 : 1;
+  const steeringRatio = Math.max(4, Math.min(30, median(candidates) || 12));
+  const samples = [];
+  let smoothYaw = 0;
+  let smoothLat = 0;
+  globalData.forEach((row, index) => {
+    const time = Number(row.time_sec);
+    const speedKmh = Number(row.gps_speed_kmh) || 0;
+    const speed = speedKmh / 3.6;
+    const steering = getCalibratedSteering(row.steering_raw);
+    const measuredYaw = (Number(row.imu_gyro_z_dps) || 0) * yawSign;
+    const lateral = Number(row.imu_accel_y_g) || 0;
+    smoothYaw += 0.08 * (measuredYaw - smoothYaw);
+    smoothLat += 0.08 * (lateral - smoothLat);
+    if (index % 2) return;
+    const roadAngle = (steering / steeringRatio) * Math.PI / 180;
+    const expectedYaw = speed > 0 ? (speed / wheelbaseM) * Math.tan(roadAngle) * 180 / Math.PI : 0;
+    const cornering = speedKmh >= 20 && Math.abs(steering) >= 8 && Math.abs(smoothLat) >= 0.14 && Math.abs(expectedYaw) >= 3;
+    const response = cornering ? Math.abs(smoothYaw) / Math.max(3, Math.abs(expectedYaw)) : 1;
+    const counterSteer = cornering && Math.sign(steering) !== Math.sign(smoothYaw) && Math.abs(smoothYaw) > 7;
+    let type = 'neutral';
+    let severity = 0;
+    if (cornering && response < 0.72) { type = 'under'; severity = (0.72 - response) / 0.42; }
+    if (cornering && (response > 1.32 || counterSteer)) { type = 'over'; severity = counterSteer ? Math.max(0.75, (response - 1) / 0.8) : (response - 1.32) / 0.68; }
+    samples.push({ time, type, severity: Math.max(0, Math.min(1, severity)), speedKmh, steering, yaw: smoothYaw, lateral: smoothLat, throttle: Number(row.decoded_tps) || 0, brake: getCalibratedBrake(row.front_brake_raw) });
+  });
+
+  let active = null;
+  const finishEvent = event => {
+    if (!event || event.endTime - event.startTime < 0.22) return;
+    event.duration = event.endTime - event.startTime;
+    event.confidence = Math.round(Math.min(98, 55 + event.duration * 22 + event.maxSeverity * 25));
+    gpsHandlingEventsData.push(event);
+  };
+  samples.forEach(sample => {
+    if (sample.type === 'neutral') { finishEvent(active); active = null; return; }
+    if (!active || active.type !== sample.type || sample.time - active.endTime > 0.12) {
+      finishEvent(active);
+      active = { type: sample.type, startTime: sample.time, endTime: sample.time, maxSeverity: sample.severity, peak: sample };
+    } else {
+      active.endTime = sample.time;
+      if (sample.severity > active.maxSeverity) { active.maxSeverity = sample.severity; active.peak = sample; }
+    }
+  });
+  finishEvent(active);
+  gpsHandlingEventsData.forEach(event => {
+    event.lapIndex = gpsLapResults.findIndex(lap => event.peak.time >= lap.startTime && event.peak.time <= lap.endTime);
+    event.position = gpsPositionAtTelemetryTime(event.peak.time);
+  });
+  renderGpsHandlingAnalysis(steeringRatio);
+}
+
+function renderGpsHandlingAnalysis(steeringRatio) {
+  const under = gpsHandlingEventsData.filter(event => event.type === 'under');
+  const over = gpsHandlingEventsData.filter(event => event.type === 'over');
+  if (gpsUndersteerCount) gpsUndersteerCount.textContent = String(under.length);
+  if (gpsOversteerCount) gpsOversteerCount.textContent = String(over.length);
+  if (gpsHandlingCalibration) gpsHandlingCalibration.textContent = `자동 조향비 ${steeringRatio.toFixed(1)}:1`;
+  if (gpsHandlingCard) gpsHandlingCard.hidden = false;
+  if (gpsHandlingToggle) gpsHandlingToggle.disabled = false;
+  gpsHandlingToggle?.classList.toggle('active', gpsHandlingVisible);
+  const ordered = [...gpsHandlingEventsData].sort((a, b) => b.maxSeverity - a.maxSeverity).slice(0, 20);
+  if (gpsHandlingEvents) gpsHandlingEvents.innerHTML = ordered.length ? ordered.map(event => {
+    const lap = event.lapIndex >= 0 ? `LAP ${gpsLapResults[event.lapIndex].number}` : '랩 외';
+    const label = event.type === 'under' ? '언더스티어' : '오버스티어';
+    const phase = event.peak.brake >= 5 ? '제동 중' : event.peak.throttle >= 35 ? '가속 중' : '코너 중간';
+    return `<button type="button" class="${event.type}" data-handling-time="${event.peak.time.toFixed(3)}"><b>${label}</b><span>${lap} · ${event.peak.speedKmh.toFixed(1)} km/h</span><small>${phase} · ${event.duration.toFixed(2)}초 · 신뢰도 ${event.confidence}%</small></button>`;
+  }).join('') : '<div class="gps-handling-empty">조건을 충족한 오버/언더스티어 구간이 없습니다.</div>';
+  drawGpsHandlingEvents();
+}
+
+function drawGpsHandlingEvents() {
+  gpsHandlingLayer?.clearLayers();
+  if (!gpsHandlingVisible || !gpsHandlingLayer) return;
+  gpsHandlingEventsData.forEach(event => {
+    const coords = gpsLapPoints.filter(point => point.time >= event.startTime && point.time <= event.endTime).map(point => [point.lat, point.lon]);
+    if (event.position && coords.length < 2) {
+      L.circleMarker([event.position.lat, event.position.lon], { radius: 7, color: '#fff', weight: 2, fillColor: event.type === 'under' ? '#2563eb' : '#ef4444', fillOpacity: 0.92, interactive: false }).addTo(gpsHandlingLayer);
+      return;
+    }
+    L.polyline(coords, { color: event.type === 'under' ? '#2563eb' : '#ef4444', weight: 9, opacity: 0.88, interactive: false }).addTo(gpsHandlingLayer);
+  });
+}
+
 function syncGpsTimelineRange(minTime, maxTime, value) {
   const safeValue = Math.max(minTime, Math.min(maxTime, Number(value) || minTime));
   scrollBar.min = minTime.toFixed(2);
@@ -1799,6 +1939,7 @@ function renderGpsLapResults(crossings, laps) {
     });
   }
   drawGpsLapRoutes(laps);
+  analyzeGpsHandlingBalance();
   updateGpsCursorLapColor(Number(scrollBar?.value));
   if (tabGps?.classList.contains('active') && activeSampledData.length) {
     syncGpsTimelineRange(currentStartSec, currentEndSec, scrollBar.value);
@@ -2079,6 +2220,10 @@ function clearGpsLapAnalysis(removeSaved = false) {
   if (gpsGoProSourceType || gpsGoProMatched) closeGoProVideo();
   closeYouTubeDialog();
   gpsLapResults = [];
+  gpsHandlingEventsData = [];
+  gpsHandlingLayer?.clearLayers();
+  if (gpsHandlingCard) gpsHandlingCard.hidden = true;
+  if (gpsHandlingToggle) gpsHandlingToggle.disabled = true;
   gpsSelectedLapIndex = -1;
   gpsSelectedLapIndices = [];
   gpsLapRouteLines = [];
@@ -2249,6 +2394,7 @@ function initGpsMap() {
   }).addTo(gpsMap);
   gpsFinishEndpointLayer = L.layerGroup().addTo(gpsMap);
   gpsLapRouteLayer = L.layerGroup().addTo(gpsMap);
+  gpsHandlingLayer = L.layerGroup().addTo(gpsMap);
   gpsLapCrossingLayer = L.layerGroup().addTo(gpsMap);
   gpsCheckpointLayer = L.layerGroup().addTo(gpsMap);
   gpsCheckpointDraftLayer = L.layerGroup().addTo(gpsMap);
@@ -2264,6 +2410,20 @@ gpsLapClear?.addEventListener('click', () => clearGpsLapAnalysis(true));
 gpsCheckpointAdd?.addEventListener('click', beginGpsCheckpointSelection);
 gpsSectorToggle?.addEventListener('click', toggleGpsSectorOverlay);
 gpsSectorOverlayClose?.addEventListener('click', closeGpsSectorOverlay);
+gpsHandlingToggle?.addEventListener('click', () => {
+  gpsHandlingVisible = !gpsHandlingVisible;
+  gpsHandlingToggle.classList.toggle('active', gpsHandlingVisible);
+  drawGpsHandlingEvents();
+});
+gpsHandlingEvents?.addEventListener('click', event => {
+  const button = event.target.closest('[data-handling-time]');
+  if (!button) return;
+  setGpsPlayback(false);
+  const time = Number(button.dataset.handlingTime);
+  updateGpsCursorAtTime(time);
+  const handlingEvent = gpsHandlingEventsData.find(item => Math.abs(item.peak.time - time) < 0.01);
+  if (handlingEvent?.position) gpsMap?.panTo([handlingEvent.position.lat, handlingEvent.position.lon]);
+});
 gpsCheckpointClear?.addEventListener('click', () => {
   if (!verifyGpsFixedLinesPassword('피니시라인과 체크포인트를 초기화')) return;
   if (!window.confirm(`피니시라인과 체크포인트 ${gpsCheckpoints.length}개를 모두 삭제하시겠습니까?`)) return;

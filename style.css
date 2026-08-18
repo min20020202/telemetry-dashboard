@@ -2955,6 +2955,23 @@ body.dark-theme .help-video-output button { border-color: #475569; background: #
 }
 
 .gps-sector-card { flex: none; max-height: 300px; padding: 11px; overflow: hidden; }
+.gps-handling-card { flex: none; max-height: 330px; padding: 11px; overflow: hidden; }
+.gps-handling-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+.gps-handling-head small { display:block; margin-top:3px; color:var(--text-secondary); font:600 8px/1.35 var(--font-mono); }
+#gps-handling-calibration { color:#64748b; font:800 9px var(--font-mono); white-space:nowrap; }
+.gps-handling-summary { display:grid; grid-template-columns:1fr auto 1fr; gap:5px; margin:9px 0 7px; font:800 9px var(--font-mono); }
+.gps-handling-summary span { padding:7px 5px; border-radius:6px; text-align:center; }
+.gps-handling-summary .under { color:#2563eb; background:rgba(37,99,235,.1); }
+.gps-handling-summary .neutral { color:#16a34a; background:rgba(22,163,74,.1); }
+.gps-handling-summary .over { color:#ef4444; background:rgba(239,68,68,.1); }
+.gps-handling-events { display:grid; gap:5px; max-height:178px; overflow:auto; }
+.gps-handling-events button { display:grid; grid-template-columns:82px 1fr; align-items:center; padding:7px 8px; border:1px solid var(--border-color); border-left:4px solid; border-radius:6px; background:var(--panel-bg); color:var(--text-primary); font:700 9px var(--font-mono); text-align:left; cursor:pointer; }
+.gps-handling-events button.under { border-left-color:#2563eb; }
+.gps-handling-events button.over { border-left-color:#ef4444; }
+.gps-handling-events button span { text-align:right; }
+.gps-handling-events button small { grid-column:1/-1; margin-top:3px; color:var(--text-secondary); }
+.gps-handling-empty { padding:14px; color:var(--text-secondary); font:700 9px var(--font-mono); text-align:center; }
+.gps-handling-note { margin:6px 0 0; color:var(--text-secondary); font:600 7px/1.35 var(--font-mono); }
 .gps-sector-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .gps-sector-head small { display: block; margin-top: 3px; color: var(--text-secondary); font: 600 8px/1.35 var(--font-mono); }
 #gps-checkpoint-count { color: #06b6d4; font: 800 10px var(--font-mono); white-space: nowrap; }
