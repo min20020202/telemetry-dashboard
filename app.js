@@ -136,6 +136,7 @@ const gpsLapSetLine = document.getElementById('gps-lap-set-line');
 const gpsLapClear = document.getElementById('gps-lap-clear');
 const gpsCheckpointAdd = document.getElementById('gps-checkpoint-add');
 const gpsCheckpointClear = document.getElementById('gps-checkpoint-clear');
+const gpsSharedSettingsCopy = document.getElementById('gps-shared-settings-copy');
 const gpsCheckpointCount = document.getElementById('gps-checkpoint-count');
 const gpsSectorCard = document.getElementById('gps-sector-card');
 const gpsSectorTable = document.getElementById('gps-sector-table');
@@ -1169,6 +1170,7 @@ function drawGpsCheckpoints() {
   });
   if (gpsCheckpointCount) gpsCheckpointCount.textContent = `${gpsCheckpoints.length} CP`;
   if (gpsCheckpointClear) gpsCheckpointClear.disabled = gpsFinishPoints.length !== 2 && !gpsCheckpoints.length;
+  if (gpsSharedSettingsCopy) gpsSharedSettingsCopy.disabled = gpsFinishPoints.length !== 2;
   if (gpsCheckpointAdd) gpsCheckpointAdd.disabled = !gpsLapResults.length;
   if (gpsSectorToggle) gpsSectorToggle.disabled = !gpsCheckpoints.length;
 }
@@ -1184,6 +1186,7 @@ function clearGpsCheckpoints(removeSaved = false) {
   gpsCheckpointAdd?.classList.remove('active');
   if (gpsCheckpointAdd) gpsCheckpointAdd.disabled = true;
   if (gpsCheckpointClear) gpsCheckpointClear.disabled = true;
+  if (gpsSharedSettingsCopy) gpsSharedSettingsCopy.disabled = true;
   if (gpsSectorToggle) gpsSectorToggle.disabled = true;
   if (gpsCheckpointCount) gpsCheckpointCount.textContent = '0 CP';
   if (gpsSectorCard) gpsSectorCard.hidden = true;
@@ -2436,6 +2439,24 @@ gpsCheckpointClear?.addEventListener('click', () => {
   if (!window.confirm(`피니시라인과 체크포인트 ${gpsCheckpoints.length}개를 모두 삭제하시겠습니까?`)) return;
   clearGpsLapAnalysis(true);
   setGpsLapStatus('피니시라인과 체크포인트를 모두 초기화했습니다.');
+});
+gpsSharedSettingsCopy?.addEventListener('click', async () => {
+  if (gpsFinishPoints.length !== 2) return;
+  const settings = JSON.stringify({
+    finish: gpsFinishPoints,
+    checkpoints: gpsCheckpoints,
+    steering: (typeof steeringCal !== 'undefined') ? {
+      zeroRaw: steeringCal.zeroRaw,
+      axisLimit: steeringCal.axisLimit,
+      invert: steeringCal.invert
+    } : null
+  });
+  try {
+    await navigator.clipboard.writeText(settings);
+    setGpsLapStatus('공통 설정이 복사되었습니다. 채팅창에 붙여넣어 보내주십시오.', 'ok');
+  } catch (error) {
+    window.prompt('아래 공통 설정을 복사해 채팅창에 보내주십시오.', settings);
+  }
 });
 gpsLapMinTime?.addEventListener('change', () => {
   const clamped = Math.max(5, Math.min(600, Number(gpsLapMinTime.value) || 20));
