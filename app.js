@@ -35,6 +35,7 @@ let limitEndSec = 0;
 // Active downsampled dataset reference for easy cursor lookup
 let activeSampledData = [];
 let currentCursorIndex = 0;
+let preciseCursorTimeSec = 0;
 
 // 화면용 다운샘플 인덱스 (전체 globalData 기준 위치) 및 그 시각값.
 // 노이즈 필터는 100Hz 원본 전체에 먼저 적용된 뒤 이 인덱스로 추출됩니다.
@@ -2798,7 +2799,7 @@ const handleEnterKeyZoom = (e) => {
 inputStart.addEventListener('keydown', handleEnterKeyZoom);
 inputEnd.addEventListener('keydown', handleEnterKeyZoom);
 
-function updateColumnCursorLine(lineId, chart, index) {
+function updateColumnCursorLine(lineId, chart, index, targetTimeOverride = NaN) {
   const lineEl = document.getElementById(lineId);
   if (!lineEl) return;
 
@@ -2807,7 +2808,7 @@ function updateColumnCursorLine(lineId, chart, index) {
     return;
   }
 
-  const targetTime = Number(activeSampledData[index]?.time_sec);
+  const targetTime = Number.isFinite(targetTimeOverride) ? targetTimeOverride : Number(activeSampledData[index]?.time_sec);
   const xScale = chart.scales?.x;
   if (!Number.isFinite(targetTime) || !xScale) {
     lineEl.style.display = 'none';
@@ -2847,7 +2848,7 @@ function nearestDatasetPointIndex(data, targetTime) {
 }
 
 // HIGH-PERFORMANCE: Places bright circles directly on the intersection points of the chart lines
-function drawCssIntersectionDots(index, chartSubset = null) {
+function drawCssIntersectionDots(index, chartSubset = null, targetTimeOverride = NaN) {
   if (globalData.length === 0 || activeSampledData.length === 0) return;
 
   const targetCharts = chartSubset || [
@@ -2865,7 +2866,7 @@ function drawCssIntersectionDots(index, chartSubset = null) {
     const existingDots = holder.querySelectorAll('.visual-cursor-dot');
     existingDots.forEach(dot => dot.style.display = 'none');
 
-    const targetTime = Number(activeSampledData[index]?.time_sec);
+    const targetTime = Number.isFinite(targetTimeOverride) ? targetTimeOverride : Number(activeSampledData[index]?.time_sec);
     chart.data.datasets.forEach((dataset, datasetIndex) => {
       const meta = chart.getDatasetMeta(datasetIndex);
       if (!meta.hidden) {
@@ -2900,11 +2901,11 @@ function drawCssIntersectionDots(index, chartSubset = null) {
   });
 
   // 세로 관통 커서선 위치 업데이트
-  updateColumnCursorLine('cursor-line-page1-left', chartSpeed, index);
-  updateColumnCursorLine('cursor-line-page1-right', chartSteering, index);
-  updateColumnCursorLine('cursor-line-page2-top', diagChartThrottleBrake, index);
-  updateColumnCursorLine('cursor-line-page2-bot-left', chartFL, index);
-  updateColumnCursorLine('cursor-line-page2-bot-right', chartFR, index);
+  updateColumnCursorLine('cursor-line-page1-left', chartSpeed, index, targetTimeOverride);
+  updateColumnCursorLine('cursor-line-page1-right', chartSteering, index, targetTimeOverride);
+  updateColumnCursorLine('cursor-line-page2-top', diagChartThrottleBrake, index, targetTimeOverride);
+  updateColumnCursorLine('cursor-line-page2-bot-left', chartFL, index, targetTimeOverride);
+  updateColumnCursorLine('cursor-line-page2-bot-right', chartFR, index, targetTimeOverride);
 }
 
 // Panning/Scrolling scrollbar event
@@ -3982,6 +3983,7 @@ function initDataAndDashboard() {
   // 최초 1회 전체 차트 생성 기동
   renderMotecCharts(activeSampledData);
   currentCursorIndex = 0;
+  preciseCursorTimeSec = Number(activeSampledData[0]?.time_sec) || 0;
   if (activeSampledData[0]) updateNumericDisplays(activeSampledData[0]);
 
   // 초기 줌 레인지 적용
@@ -4268,10 +4270,11 @@ function syncHover(activeChart, chartEvent) {
       // once 25/50/100 Hz channels use different point arrays.
       const clampedX = Math.max(chartArea.left, Math.min(chartArea.right, eventX));
       const targetTime = xScale.getValueForPixel(clampedX);
+      preciseCursorTimeSec = targetTime;
       currentCursorIndex = findSampleIndexAtTime(targetTime);
       const row = activeSampledData[currentCursorIndex];
       if (row) {
-        drawCssIntersectionDots(currentCursorIndex);
+        drawCssIntersectionDots(currentCursorIndex, null, targetTime);
         updateNumericDisplays(row);
       }
     }
@@ -4856,6 +4859,34 @@ let arrowRepeatCount = 0;
 let isKeyboardNavigating = false;
 let keyboardNavTimer = null;
 
+function moveChartCursorByKeyboard(direction, event) {
+  if (event.repeat) arrowRepeatCount += 1;
+  else arrowRepeatCount = 0;
+  const baseSeconds = event.shiftKey ? 0.1 : 0.01;
+  const multiplier = event.repeat
+    ? Math.min(60, Math.floor(1 + (arrowRepeatCount * arrowRepeatCount) / 30))
+    : 1;
+  const targetTime = Math.max(0, Math.min(totalDurationSec, preciseCursorTimeSec + direction * baseSeconds * multiplier));
+  preciseCursorTimeSec = targetTime;
+  currentCursorIndex = findSampleIndexAtTime(targetTime);
+
+  const currentSpan = currentEndSec - currentStartSec;
+  if (targetTime < currentStartSec) {
+    const newStart = targetTime;
+    const newEnd = Math.min(totalDurationSec, newStart + currentSpan);
+    applyZoomRange(Math.max(0, newEnd - currentSpan), newEnd);
+  } else if (targetTime > currentEndSec) {
+    const newEnd = targetTime;
+    const newStart = Math.max(0, newEnd - currentSpan);
+    applyZoomRange(newStart, Math.min(totalDurationSec, newStart + currentSpan));
+  }
+
+  const globalIndex = findGlobalIndexAtTime(targetTime);
+  const row = globalIndex >= 0 ? globalData[globalIndex] : activeSampledData[currentCursorIndex];
+  drawCssIntersectionDots(currentCursorIndex, null, targetTime);
+  if (row) updateNumericDisplays(row);
+}
+
 window.addEventListener('keyup', (e) => {
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     arrowRepeatCount = 0;
@@ -4918,63 +4949,17 @@ window.addEventListener('keydown', (e) => {
   // Left/Right Arrow: 커서 미세 이동 (지속 입력 시 가속도 적용 및 뷰포트 자동 스크롤)
   else if (key === 'ArrowLeft') {
     e.preventDefault();
-    let step = 1;
-    if (e.repeat) {
-      arrowRepeatCount++;
-      step = Math.min(60, Math.floor(1 + (arrowRepeatCount * arrowRepeatCount) / 30));
-    } else {
-      arrowRepeatCount = 0;
-    }
-    currentCursorIndex = Math.max(0, currentCursorIndex - step);
-    const row = activeSampledData[currentCursorIndex];
-    if (row) {
-      const targetTime = row.time_sec;
-      const currentSpan = currentEndSec - currentStartSec;
-      if (targetTime < currentStartSec) {
-        let newStart = targetTime;
-        let newEnd = targetTime + currentSpan;
-        if (newEnd > totalDurationSec) {
-          newEnd = totalDurationSec;
-          newStart = Math.max(0, totalDurationSec - currentSpan);
-        }
-        applyZoomRange(newStart, newEnd);
-      }
-      drawCssIntersectionDots(currentCursorIndex);
-      updateNumericDisplays(row);
-    }
+    moveChartCursorByKeyboard(-1, e);
   } else if (key === 'ArrowRight') {
     e.preventDefault();
-    let step = 1;
-    if (e.repeat) {
-      arrowRepeatCount++;
-      step = Math.min(60, Math.floor(1 + (arrowRepeatCount * arrowRepeatCount) / 30));
-    } else {
-      arrowRepeatCount = 0;
-    }
-    currentCursorIndex = Math.min(activeSampledData.length - 1, currentCursorIndex + step);
-    const row = activeSampledData[currentCursorIndex];
-    if (row) {
-      const targetTime = row.time_sec;
-      const currentSpan = currentEndSec - currentStartSec;
-      if (targetTime > currentEndSec) {
-        let newEnd = targetTime;
-        let newStart = targetTime - currentSpan;
-        if (newStart < 0) {
-          newStart = 0;
-          newEnd = Math.min(currentSpan, totalDurationSec);
-        }
-        applyZoomRange(newStart, newEnd);
-      }
-      drawCssIntersectionDots(currentCursorIndex);
-      updateNumericDisplays(row);
-    }
+    moveChartCursorByKeyboard(1, e);
   }
 
   // Up/Down Arrow / I/O: 확대/축소 (현재 활성 커서 시간 기준)
   else if (key === 'ArrowUp' || key.toLowerCase() === 'i') {
     e.preventDefault();
     const currentSpan = currentEndSec - currentStartSec;
-    const targetTime = activeSampledData[currentCursorIndex] ? activeSampledData[currentCursorIndex].time_sec : (currentStartSec + currentEndSec) / 2;
+    const targetTime = Number.isFinite(preciseCursorTimeSec) ? preciseCursorTimeSec : (currentStartSec + currentEndSec) / 2;
     const newSpan = Math.max(2.0, currentSpan * 0.85); // 15% 줌인
     const ratio = currentSpan > 0 ? (targetTime - currentStartSec) / currentSpan : 0.5;
     let newStart = targetTime - (newSpan * ratio);
@@ -4989,10 +4974,11 @@ window.addEventListener('keydown', (e) => {
       newStart = Math.max(0, totalDurationSec - newSpan);
     }
     applyZoomRange(newStart, newEnd);
+    drawCssIntersectionDots(currentCursorIndex, null, targetTime);
   } else if (key === 'ArrowDown' || key.toLowerCase() === 'o') {
     e.preventDefault();
     const currentSpan = currentEndSec - currentStartSec;
-    const targetTime = activeSampledData[currentCursorIndex] ? activeSampledData[currentCursorIndex].time_sec : (currentStartSec + currentEndSec) / 2;
+    const targetTime = Number.isFinite(preciseCursorTimeSec) ? preciseCursorTimeSec : (currentStartSec + currentEndSec) / 2;
     const newSpan = Math.min(totalDurationSec, currentSpan * 1.15); // 15% 줌아웃
     const ratio = currentSpan > 0 ? (targetTime - currentStartSec) / currentSpan : 0.5;
     let newStart = targetTime - (newSpan * ratio);
@@ -5007,5 +4993,6 @@ window.addEventListener('keydown', (e) => {
       newStart = Math.max(0, totalDurationSec - newSpan);
     }
     applyZoomRange(newStart, newEnd);
+    drawCssIntersectionDots(currentCursorIndex, null, targetTime);
   }
 });
