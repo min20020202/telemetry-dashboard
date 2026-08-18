@@ -4376,6 +4376,10 @@ function renderMotecCharts(data) {
     normalized: true, // 고속 인덱싱 최적화
     spanGaps: true,
     interaction: { mode: 'index', intersect: false },
+    // The dashboard draws its own timestamp-synchronised cursor dots. Disable
+    // Chart.js' retained hover marker because its old dataset index can point
+    // somewhere else after visible-range resampling or zooming.
+    elements: { point: { radius: 0, hoverRadius: 0, hitRadius: 8 } },
     layout: { padding: { top: 4, bottom: 4, right: 0, left: 0 } },
     plugins: {
       legend: { display: false },
