@@ -4260,11 +4260,15 @@ function syncHover(activeChart, chartEvent) {
       hoverSyncPending = false;
       return;
     }
-    const points = lastActiveChart.getElementsAtEventForMode(lastChartEvent, 'index', { intersect: false }, true);
-    if (points && points.length) {
-      const dataset = lastActiveChart.data.datasets[points[0].datasetIndex];
-      const targetTime = Number(dataset?.data?.[points[0].index]?.x);
-      currentCursorIndex = Number.isFinite(targetTime) ? findSampleIndexAtTime(targetTime) : points[0].index;
+    const xScale = lastActiveChart.scales?.x;
+    const chartArea = lastActiveChart.chartArea;
+    const eventX = Number(lastChartEvent.x);
+    if (xScale && chartArea && Number.isFinite(eventX)) {
+      // Convert pointer X directly to time. A shared dataset index is invalid
+      // once 25/50/100 Hz channels use different point arrays.
+      const clampedX = Math.max(chartArea.left, Math.min(chartArea.right, eventX));
+      const targetTime = xScale.getValueForPixel(clampedX);
+      currentCursorIndex = findSampleIndexAtTime(targetTime);
       const row = activeSampledData[currentCursorIndex];
       if (row) {
         drawCssIntersectionDots(currentCursorIndex);
@@ -4407,17 +4411,15 @@ function renderMotecCharts(data) {
           (e.chart.canvas.id === 'chart-imu-accel' || e.chart.canvas.id === 'chart-imu-gyro')) {
         return;
       }
-      if (elements && elements.length > 0) {
-        const allCharts = {
-          chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
-          diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
-          chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
-        };
-        for (const [key, chart] of Object.entries(allCharts)) {
-          if (chart && chart.canvas === e.chart.canvas) {
-            syncHover(chart, e);
-            break;
-          }
+      const allCharts = {
+        chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
+        diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
+        chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
+      };
+      for (const chart of Object.values(allCharts)) {
+        if (chart && chart.canvas === e.chart.canvas) {
+          syncHover(chart, e);
+          break;
         }
       }
     }
