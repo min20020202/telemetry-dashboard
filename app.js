@@ -1658,6 +1658,17 @@ function refreshPage4VisibleRange(startTime, endTime) {
     chart.update('none');
   });
   drawPage4Cursor(page4CursorTime);
+  syncPage4Navigator();
+}
+
+function syncPage4Navigator() {
+  if (!(page4RangeEnd > page4RangeStart)) return;
+  const duration = page4RangeEnd - page4RangeStart;
+  if (inputStart) { inputStart.min = '0'; inputStart.max = duration.toFixed(3); inputStart.step = '0.01'; inputStart.value = Math.max(0, page4ViewStart - page4RangeStart).toFixed(3); }
+  if (inputEnd) { inputEnd.min = '0'; inputEnd.max = duration.toFixed(3); inputEnd.step = '0.01'; inputEnd.value = Math.min(duration, page4ViewEnd - page4RangeStart).toFixed(3); }
+  if (scrollBar) { scrollBar.min = '0'; scrollBar.max = duration.toFixed(3); scrollBar.step = '0.01'; scrollBar.value = Math.max(0, page4CursorTime - page4RangeStart).toFixed(3); scrollBar.disabled = false; }
+  if (currentTimeVal) currentTimeVal.textContent = `${Math.max(0, page4CursorTime - page4RangeStart).toFixed(3)}s`;
+  if (lblScrollType) lblScrollType.textContent = '🏁 선택 구간 커서:';
 }
 
 function zoomPage4At(targetTime, factor) {
@@ -1693,6 +1704,7 @@ function updatePage4PlaybackCursor(targetTime) {
   currentCursorIndex = findSampleIndexAtTime(page4CursorTime);
   if (p4PlayTimeline) p4PlayTimeline.value = String(page4CursorTime);
   if (p4PlayTime) p4PlayTime.textContent = `${(page4CursorTime - page4RangeStart).toFixed(3)} s`;
+  if (tabTemperature?.classList.contains('active')) syncPage4Navigator();
   const row = globalData[findGlobalIndexAtTime(page4CursorTime)];
   if (row) updateNumericDisplays(row, null, page4CursorTime);
   drawCssIntersectionDots(currentCursorIndex, page4Charts, page4CursorTime);
@@ -3255,6 +3267,13 @@ document.addEventListener('wheel', (e) => {
 btnApply.addEventListener('click', () => {
   const start = parseFloat(inputStart.value) || 0;
   const end = parseFloat(inputEnd.value) || 10;
+  if (tabTemperature?.classList.contains('active') && page4RangeEnd > page4RangeStart) {
+    const duration = page4RangeEnd - page4RangeStart;
+    const relativeStart = Math.max(0, Math.min(duration, start));
+    const relativeEnd = Math.max(relativeStart + 0.01, Math.min(duration, end));
+    refreshPage4VisibleRange(page4RangeStart + relativeStart, page4RangeStart + relativeEnd);
+    return;
+  }
   
   limitStartSec = Math.max(0, start);
   limitEndSec = Math.min(totalDurationSec, end);
@@ -3266,6 +3285,10 @@ btnApply.addEventListener('click', () => {
 });
 
 btnReset.addEventListener('click', () => {
+  if (tabTemperature?.classList.contains('active') && page4RangeEnd > page4RangeStart) {
+    refreshPage4VisibleRange(page4RangeStart, page4RangeEnd);
+    return;
+  }
   limitStartSec = 0;
   limitEndSec = totalDurationSec;
   applyZoomRange(0, totalDurationSec);
@@ -4003,7 +4026,13 @@ const handleTimelineScrollDrag = (e) => {
     }
     
     // GPS 페이지 활성화 시: 시간 스크러버(Scrubber)로 동작
-    if (tabGps && tabGps.classList.contains('active')) {
+    if (tabTemperature?.classList.contains('active') && page4RangeEnd > page4RangeStart) {
+      const relativeTime = parseFloat(lastDragEvent.target.value);
+      if (!isNaN(relativeTime)) {
+        setPage4Playback(false);
+        updatePage4PlaybackCursor(page4RangeStart + relativeTime);
+      }
+    } else if (tabGps && tabGps.classList.contains('active')) {
       const targetTime = parseFloat(lastDragEvent.target.value);
       if (!isNaN(targetTime)) updateGpsCursorAtTime(targetTime);
     } else {
@@ -4521,6 +4550,10 @@ function initDataAndDashboard() {
 // [초고속 60fps 최적화 개편] 이제 더 이상 차트를 파괴/재생성하지 않고, X축 범위만 변경하여 갱신합니다!
 function applyZoomRange(start, end) {
   if (globalData.length === 0 || activeSampledData.length === 0) return;
+  if (tabTemperature?.classList.contains('active') && page4RangeEnd > page4RangeStart) {
+    syncPage4Navigator();
+    return;
+  }
 
   let cleanStart = Math.max(0, start);
   let cleanEnd = Math.min(totalDurationSec, end);
