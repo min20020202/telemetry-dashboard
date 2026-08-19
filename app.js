@@ -1991,14 +1991,17 @@ function drawPage4TrackMap(targetTime) {
     }
   });
 
-  const meanLatRad = points.reduce((sum, point) => sum + point.lat, 0) / points.length * Math.PI / 180;
+  const getPointLon = p => (p ? Number(p.lon ?? p.lng ?? (Array.isArray(p) ? p[1] : 0)) : 0);
+  const getPointLat = p => (p ? Number(p.lat ?? (Array.isArray(p) ? p[0] : 0)) : 0);
+
+  const meanLatRad = points.reduce((sum, point) => sum + getPointLat(point), 0) / points.length * Math.PI / 180;
   const lonScale = Math.max(0.1, Math.cos(meanLatRad));
-  const xs = allMapPoints.map(point => point.lon * lonScale), ys = allMapPoints.map(point => point.lat);
+  const xs = allMapPoints.map(point => getPointLon(point) * lonScale), ys = allMapPoints.map(point => getPointLat(point));
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
   const mapScale = Math.min((width - 36) / Math.max(1e-9, maxX - minX), (height - 36) / Math.max(1e-9, maxY - minY));
   const contentWidth = (maxX - minX) * mapScale, contentHeight = (maxY - minY) * mapScale;
   const offsetX = (width - contentWidth) / 2, offsetY = (height - contentHeight) / 2;
-  const project = point => ({ x: offsetX + (point.lon * lonScale - minX) * mapScale, y: height - offsetY - (point.lat - minY) * mapScale });
+  const project = point => ({ x: offsetX + (getPointLon(point) * lonScale - minX) * mapScale, y: height - offsetY - (getPointLat(point) - minY) * mapScale });
 
   const boundaries = page4LapBoundaries(page4SelectedLapIndex);
   const startIndex = Number(p4SectorStart?.value) || 0;
@@ -2882,10 +2885,12 @@ function calculateGpsLaps() {
   setGpsLapStatus(laps.length ? `${laps.length}개 랩 계산 완료 · 통과 시각 선형 보간 적용` : '첫 통과만 검출되어 완성된 랩이 없습니다.', laps.length ? 'ok' : 'warn');
 }
 
-function clearGpsLapAnalysis(removeSaved = false) {
+function clearGpsLapAnalysis(removeSaved = false, clearCPs = false) {
   gpsLapSelectionActive = false;
   gpsFinishPoints = [];
-  clearGpsCheckpoints();
+  if (clearCPs) {
+    clearGpsCheckpoints(removeSaved);
+  }
   if (gpsGoProSourceType || gpsGoProMatched) closeGoProVideo();
   closeYouTubeDialog();
   gpsLapResults = [];
@@ -2938,7 +2943,7 @@ function beginGpsFinishLineSelection() {
     return;
   }
   if (gpsFinishPoints.length === 2 && !verifyGpsFixedLinesPassword('피니시 라인을 다시 설정')) return;
-  clearGpsLapAnalysis(true);
+  clearGpsLapAnalysis(false, false);
   gpsLapSelectionActive = true;
   gpsLapSetLine?.classList.add('active');
   gpsMap.getContainer().classList.add('gps-lap-selecting');
