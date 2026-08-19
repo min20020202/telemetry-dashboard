@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260819-6">
+  <link rel="stylesheet" href="style.css?v=20260819-7">
 </head>
 <body>
 
@@ -575,7 +575,7 @@
           <section class="lap-side-card p4-play-card"><label for="p4-lap-select">랩 선택</label><select id="p4-lap-select"><option value="">피니시라인 설정 필요</option></select><div class="p4-play-controls"><button id="p4-play-toggle" type="button">▶ 재생</button><select id="p4-play-rate" aria-label="재생 속도"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></div><input id="p4-play-timeline" type="range" min="0" max="1" step="0.01" value="0"><output id="p4-play-time">0.000 s</output></section>
           <section class="lap-side-card lap-sector-select"><strong>분석 구간</strong><div><label>시작<select id="p4-sector-start"></select></label><span>→</span><label>종료<select id="p4-sector-end"></select></label></div><small id="p4-sector-status">랩 전체 구간</small></section>
           <section class="lap-side-card p4-g-card"><strong>IMU G / STEERING</strong><div class="p4-g-meter"><i></i><i></i><b>↑</b><span id="p4-g-dot"></span></div><div class="p4-g-values"><span>종G <b id="p4-gx">--.--</b></span><span>횡G <b id="p4-gy">--.--</b></span></div><div class="p4-steering-widget"><svg id="p4-steering-wheel" viewBox="0 0 100 100" aria-label="조향 핸들"><circle cx="50" cy="50" r="39"></circle><path d="M50 50 L42 13 M50 50 L88 47 M50 50 L56 88"></path><path class="mark" d="M47 11 L53 11"></path><circle class="hub" cx="50" cy="50" r="8"></circle></svg><span>핸들 <b id="p4-steering-value">--.-°</b></span></div></section>
-          <section class="lap-side-card p4-track-card"><strong>현재 랩 위치</strong><canvas id="p4-track-map"></canvas><small id="p4-track-time">--:--.---</small></section>
+          <section class="lap-side-card p4-track-card"><canvas id="p4-track-map" aria-label="현재 랩 위치"></canvas><small id="p4-track-time">--:--.---</small></section>
         </aside>
       </section>
 
