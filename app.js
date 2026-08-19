@@ -1765,13 +1765,17 @@ function refreshPage4Selectors() {
   refreshPage4SectorOptions();
 }
 
+let page4UserSpecifiedSector = false;
+
 function refreshPage4SectorOptions() {
   if (!p4SectorStart || !p4SectorEnd) return;
   const boundaries = page4LapBoundaries(page4SelectedLapIndex);
   const options = boundaries.map((point, index) => `<option value="${index}">${point.label}</option>`).join('');
-  p4SectorStart.innerHTML = options;
-  p4SectorEnd.innerHTML = options;
-  if (boundaries.length) p4SectorEnd.value = String(boundaries.length - 1);
+  p4SectorStart.innerHTML = `<option value="">구간 선택 (시작)</option>` + options;
+  p4SectorEnd.innerHTML = `<option value="">구간 선택 (종료)</option>` + options;
+  p4SectorStart.value = '';
+  p4SectorEnd.value = '';
+  page4UserSpecifiedSector = false;
   applyPage4Selection();
 }
 
@@ -1779,11 +1783,16 @@ function applyPage4Selection() {
   const boundaries = page4LapBoundaries(page4SelectedLapIndex);
   if (!boundaries.length || !page4Charts.length) return;
   const lap = gpsLapResults[page4SelectedLapIndex];
-  let startIndex = Number(p4SectorStart?.value) || 0;
-  let endIndex = Number(p4SectorEnd?.value);
+
+  const hasStart = Boolean(p4SectorStart && p4SectorStart.value !== '');
+  const hasEnd = Boolean(p4SectorEnd && p4SectorEnd.value !== '');
+  page4UserSpecifiedSector = hasStart || hasEnd;
+
+  let startIndex = hasStart ? Number(p4SectorStart.value) : 0;
+  let endIndex = hasEnd ? Number(p4SectorEnd.value) : boundaries.length - 1;
   if (!Number.isInteger(endIndex) || endIndex >= boundaries.length) endIndex = boundaries.length - 1;
   if (startIndex >= boundaries.length) startIndex = 0;
-  if (endIndex <= startIndex) {
+  if (hasStart && hasEnd && endIndex <= startIndex) {
     endIndex = Math.min(boundaries.length - 1, startIndex + 1);
     if (endIndex <= startIndex) startIndex = Math.max(0, endIndex - 1);
     if (p4SectorStart) p4SectorStart.value = String(startIndex);
@@ -1804,9 +1813,13 @@ function applyPage4Selection() {
   page4ViewStart = startTime;
   page4ViewEnd = page4RangeEnd;
   refreshPage4VisibleRange(startTime, page4RangeEnd);
-  const startLabel = boundaries[startIndex]?.label || 'START';
-  const endLabel = boundaries[endIndex]?.label || 'FINISH';
-  if (p4SectorStatus) p4SectorStatus.textContent = `${startLabel} → ${endLabel} · ${(page4RangeEnd - page4RangeStart).toFixed(3)}초`;
+  const startLabel = hasStart ? (boundaries[startIndex]?.label || 'START') : '전체';
+  const endLabel = hasEnd ? (boundaries[endIndex]?.label || 'FINISH') : '구간';
+  if (p4SectorStatus) {
+    p4SectorStatus.textContent = page4UserSpecifiedSector
+      ? `${startLabel} → ${endLabel} · ${(page4RangeEnd - page4RangeStart).toFixed(3)}초`
+      : `전체 구간 선택 안됨 · ${(page4RangeEnd - page4RangeStart).toFixed(3)}초`;
+  }
   if (p4PlayTimeline) { p4PlayTimeline.min = String(page4RangeStart); p4PlayTimeline.max = String(page4RangeEnd); p4PlayTimeline.step = '0.01'; }
   updatePage4PlaybackCursor(page4RangeStart);
   drawPage4GTrace();
@@ -2025,9 +2038,8 @@ function drawPage4TrackMap(targetTime) {
   const startBound = boundaries[startIndex];
   const endBound = boundaries[endIndex];
 
-  // Show CP numbers in initial state (START -> FINISH). Once a specific CP range is specified, hide all numbers!
-  const isSectorSpecified = (startIndex > 0 || endIndex < boundaries.length - 1);
-  const showBadges = !isSectorSpecified || Boolean(p4SectorDropdownActive);
+  // Show CP numbers in initial unselected state. Once user specifies a sector, hide all CP numbers!
+  const showBadges = !page4UserSpecifiedSector || Boolean(p4SectorDropdownActive);
 
   const activeLabels = new Set();
   if (startBound) activeLabels.add(startBound.label);
