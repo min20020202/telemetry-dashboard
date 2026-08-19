@@ -1523,8 +1523,10 @@ function drawGpsHandlingEvents() {
 
 const PAGE4_CHART_SPECS = [
   { id: 'p4-chart-speed', min: 0, series: [
-    ['GPS Speed', '#f97316', r => Number(r.gps_speed_kmh) || 0],
-    ['FL Wheel', '#2563eb', r => Number(r.fl_speed_kmh) || 0]
+    ['GPS', '#06b6d4', r => Number(r.gps_speed_kmh) || 0],
+    ['FL', '#f97316', r => Number(r.fl_speed_kmh) || 0],
+    ['RL', '#2563eb', r => Number(r.rl_speed_kmh) || 0],
+    ['RR', '#16a34a', r => Number(r.rr_speed_kmh) || 0]
   ]},
   { id: 'p4-chart-rpm-tps', min: 0, series: [
     ['RPM', '#dc2626', r => Number(r.rpm) || 0, 'y'],
@@ -1535,7 +1537,7 @@ const PAGE4_CHART_SPECS = [
     ['TPS', '#16a34a', r => Number(r.decoded_tps) || 0],
     ['Brake', '#ef4444', r => getCalibratedBrake(r.front_brake_raw)]
   ]},
-  { id: 'p4-chart-steering-yaw', min: -250, max: 250, series: [
+  { id: 'p4-chart-steering-yaw', min: -180, max: 180, series: [
     ['Steering', '#db2777', r => getCalibratedSteering(r.steering_raw), 'y'],
     ['Yaw Rate', '#22c55e', r => Number(r.imu_gyro_z_dps) || 0, 'y2', [7, 4], 'imu_gz']
   ], second: [-100, 100]},
@@ -1566,8 +1568,8 @@ function buildPage4WorkspaceCharts(S, makeCommonOptions) {
     const options = makeCommonOptions(spec.min, spec.max);
     options.plugins.legend = { display: false };
     options.scales.x.ticks.display = chartIndex === PAGE4_CHART_SPECS.length - 1;
-    if (spec.second) options.scales.y2 = { position: 'right', min: spec.second[0], max: spec.second[1], display: false, grid: { display: false } };
-    return new Chart(canvas.getContext('2d'), {
+    if (spec.second) options.scales.y2 = { position: 'right', min: spec.second[0], max: spec.second[1], display: true, grid: { display: false }, ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 8 } }, afterFit(axis) { axis.width = 46; } };
+    const chart = new Chart(canvas.getContext('2d'), {
       type: 'line',
       data: { datasets: spec.series.map((series) => ({
         label: series[0], data: activeSampledData.map((row, index) => ({ x: row.time_sec, y: page4SeriesValue(series, row, sampleIndices[index]) })),
@@ -1576,6 +1578,28 @@ function buildPage4WorkspaceCharts(S, makeCommonOptions) {
       })) },
       options
     });
+    const header = canvas.parentElement?.querySelector('header');
+    header?.querySelector('.p4-series-toggles')?.remove();
+    if (header && spec.series.length > 1) {
+      const toggles = document.createElement('div');
+      toggles.className = 'p4-series-toggles';
+      spec.series.forEach((series, datasetIndex) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'active';
+        button.innerHTML = `<i style="background:${series[1]}"></i>${series[0]}`;
+        button.addEventListener('click', () => {
+          const visible = chart.isDatasetVisible(datasetIndex);
+          chart.setDatasetVisibility(datasetIndex, !visible);
+          button.classList.toggle('active', !visible);
+          chart.update('none');
+          drawCssIntersectionDots(currentCursorIndex, page4Charts, page4CursorTime);
+        });
+        toggles.appendChild(button);
+      });
+      header.insertBefore(toggles, header.querySelector('output'));
+    }
+    return chart;
   }).filter(Boolean);
   refreshPage4Selectors();
 }
@@ -1799,7 +1823,7 @@ function updatePage4Widgets(row) {
   const rowIndex = findGlobalIndexAtTime(Number(row.time_sec));
   const yaw = page4SeriesValue(PAGE4_CHART_SPECS[4].series[1], row, rowIndex);
   const gx = page4SeriesValue(PAGE4_CHART_SPECS[5].series[0], row, rowIndex), gy = page4SeriesValue(PAGE4_CHART_SPECS[5].series[1], row, rowIndex);
-  set('p4-speed', `${speed.toFixed(1)} km/h`); set('p4-rpm-tps', `${Math.round(rpm)} rpm · ${tps.toFixed(1)}%`);
+  set('p4-speed', `GPS ${speed.toFixed(1)} · FL ${(Number(row.fl_speed_kmh) || 0).toFixed(1)} · RL ${(Number(row.rl_speed_kmh) || 0).toFixed(1)} · RR ${(Number(row.rr_speed_kmh) || 0).toFixed(1)} km/h`); set('p4-rpm-tps', `${Math.round(rpm)} rpm · ${tps.toFixed(1)}%`);
   set('p4-gear', Number(row.gear) > 0 ? String(Math.round(row.gear)) : 'N'); set('p4-pedals', `T ${tps.toFixed(1)} · B ${brake.toFixed(1)}%`);
   set('p4-steering-yaw', `${steering.toFixed(1)}° · ${yaw.toFixed(1)}°/s`); set('p4-imu', `X ${gx.toFixed(2)} · Y ${gy.toFixed(2)} g`);
   set('p4-temp', `${Math.round(Number(row.water_c) || 0)} · ${Math.round(Number(row.oil_c) || 0)} °C`); set('p4-gx', gx.toFixed(2)); set('p4-gy', gy.toFixed(2));
