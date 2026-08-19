@@ -1754,7 +1754,12 @@ function updatePage4Widgets(row) {
   set('p4-gear', Number(row.gear) > 0 ? String(Math.round(row.gear)) : 'N'); set('p4-pedals', `T ${tps.toFixed(1)} · B ${brake.toFixed(1)}%`);
   set('p4-steering-yaw', `${steering.toFixed(1)}° · ${yaw.toFixed(1)}°/s`); set('p4-imu', `X ${gx.toFixed(2)} · Y ${gy.toFixed(2)} g`);
   set('p4-temp', `${Math.round(Number(row.water_c) || 0)} · ${Math.round(Number(row.oil_c) || 0)} °C`); set('p4-gx', gx.toFixed(2)); set('p4-gy', gy.toFixed(2));
-  if (p4GDot) { p4GDot.style.left = `${50 + Math.max(-2, Math.min(2, gy)) * 22}%`; p4GDot.style.top = `${50 - Math.max(-2, Math.min(2, gx)) * 22}%`; }
+  if (p4GDot) {
+    // Vehicle coordinates: +X is forward and +Y is left. Screen X grows to
+    // the right, therefore lateral G must use the opposite screen direction.
+    p4GDot.style.left = `${50 - Math.max(-2, Math.min(2, gy)) * 22}%`;
+    p4GDot.style.top = `${50 - Math.max(-2, Math.min(2, gx)) * 22}%`;
+  }
   set('p4-steering-value', `${steering >= 0 ? '+' : ''}${steering.toFixed(1)}°`);
   if (p4SteeringWheel) p4SteeringWheel.style.transform = `rotate(${-steering}deg)`;
   drawPage4TrackMap(Number(row.time_sec));
