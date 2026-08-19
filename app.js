@@ -1595,9 +1595,13 @@ function buildPage4WorkspaceCharts(S, makeCommonOptions) {
       const xScale = chart.scales?.x;
       if (!area || !xScale) return;
       const rect = canvas.getBoundingClientRect();
-      const x = Math.max(area.left, Math.min(area.right, event.clientX - rect.left));
+      const rawX = event.clientX - rect.left;
+      const x = Math.max(area.left, Math.min(area.right, rawX));
+      const previousTime = page4CursorTime;
+      const targetTime = xScale.getValueForPixel(x);
       setPage4Playback(false);
-      updatePage4PlaybackCursor(xScale.getValueForPixel(x));
+      keepPage4CursorInView(targetTime, rawX >= area.right ? 1 : (rawX <= area.left ? -1 : Math.sign(targetTime - previousTime)));
+      updatePage4PlaybackCursor(targetTime);
     };
     const previousScrub = canvas._page4ScrubHandlers;
     if (previousScrub) {
@@ -1786,6 +1790,27 @@ function zoomPage4At(targetTime, factor) {
   let end = start + newSpan;
   if (start < page4RangeStart) { start = page4RangeStart; end = start + newSpan; }
   if (end > page4RangeEnd) { end = page4RangeEnd; start = end - newSpan; }
+  refreshPage4VisibleRange(start, end);
+}
+
+function keepPage4CursorInView(targetTime, direction = 0) {
+  const span = page4ViewEnd - page4ViewStart;
+  const fullSpan = page4RangeEnd - page4RangeStart;
+  if (!(span > 0) || !(fullSpan > span + 0.001)) return;
+  const margin = Math.min(span * 0.08, 0.5);
+  let start = page4ViewStart;
+  let end = page4ViewEnd;
+  if (direction > 0 && targetTime >= end - margin) {
+    end = Math.min(page4RangeEnd, targetTime + margin);
+    start = end - span;
+  } else if (direction < 0 && targetTime <= start + margin) {
+    start = Math.max(page4RangeStart, targetTime - margin);
+    end = start + span;
+  } else {
+    return;
+  }
+  if (start < page4RangeStart) { start = page4RangeStart; end = start + span; }
+  if (end > page4RangeEnd) { end = page4RangeEnd; start = end - span; }
   refreshPage4VisibleRange(start, end);
 }
 
@@ -5519,13 +5544,17 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (tabTemperature?.classList.contains('active')) {
       setPage4Playback(false);
-      updatePage4PlaybackCursor(page4CursorTime - (e.shiftKey ? 0.1 : 0.01));
+      const targetTime = Math.max(page4RangeStart, page4CursorTime - (e.shiftKey ? 0.1 : 0.01));
+      keepPage4CursorInView(targetTime, -1);
+      updatePage4PlaybackCursor(targetTime);
     } else moveChartCursorByKeyboard(-1, e);
   } else if (key === 'ArrowRight') {
     e.preventDefault();
     if (tabTemperature?.classList.contains('active')) {
       setPage4Playback(false);
-      updatePage4PlaybackCursor(page4CursorTime + (e.shiftKey ? 0.1 : 0.01));
+      const targetTime = Math.min(page4RangeEnd, page4CursorTime + (e.shiftKey ? 0.1 : 0.01));
+      keepPage4CursorInView(targetTime, 1);
+      updatePage4PlaybackCursor(targetTime);
     } else moveChartCursorByKeyboard(1, e);
   }
 
