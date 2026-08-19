@@ -3515,6 +3515,10 @@ function drawCssIntersectionDots(index, chartSubset = null, targetTimeOverride =
     existingDots.forEach(dot => dot.style.display = 'none');
 
     const targetTime = Number.isFinite(targetTimeOverride) ? targetTimeOverride : Number(activeSampledData[index]?.time_sec);
+    const page4ChartIndex = page4Charts.indexOf(chart);
+    const exactGlobalIndex = page4ChartIndex >= 0 ? findGlobalIndexAtTime(targetTime) : -1;
+    const exactRow = exactGlobalIndex >= 0 ? globalData[exactGlobalIndex] : null;
+    const exactX = chart.scales?.x?.getPixelForValue(targetTime);
     chart.data.datasets.forEach((dataset, datasetIndex) => {
       const meta = chart.getDatasetMeta(datasetIndex);
       if (!meta.hidden) {
@@ -3522,7 +3526,12 @@ function drawCssIntersectionDots(index, chartSubset = null, targetTimeOverride =
         // by timestamp instead of assuming every dataset shares one index.
         const pointIndex = nearestDatasetPointIndex(dataset.data, targetTime);
         const point = meta.data[pointIndex];
-        if (point && !isNaN(point.x) && !isNaN(point.y)) {
+        const page4Series = page4ChartIndex >= 0 ? PAGE4_CHART_SPECS[page4ChartIndex]?.series?.[datasetIndex] : null;
+        const exactValue = page4Series && exactRow ? page4SeriesValue(page4Series, exactRow, exactGlobalIndex) : NaN;
+        const yScale = chart.scales?.[dataset.yAxisID || 'y'];
+        const dotX = Number.isFinite(exactX) ? exactX : point?.x;
+        const dotY = Number.isFinite(exactValue) && yScale ? yScale.getPixelForValue(exactValue) : point?.y;
+        if (point && Number.isFinite(dotX) && Number.isFinite(dotY)) {
           let dot = holder.querySelector(`.visual-cursor-dot-ds-${datasetIndex}`);
           if (!dot) {
             dot = document.createElement('div');
@@ -3541,8 +3550,8 @@ function drawCssIntersectionDots(index, chartSubset = null, targetTimeOverride =
           dot.style.backgroundColor = color;
           dot.style.boxShadow = `0 0 8px ${color}, 0 0 2px #ffffff`;
           dot.style.display = 'block';
-          dot.style.left = point.x + 'px';
-          dot.style.top = point.y + 'px';
+          dot.style.left = `${dotX}px`;
+          dot.style.top = `${dotY}px`;
         }
       }
     });
