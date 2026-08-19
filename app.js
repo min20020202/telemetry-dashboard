@@ -1765,13 +1765,17 @@ function refreshPage4Selectors() {
   refreshPage4SectorOptions();
 }
 
+let page4UserSpecifiedSector = false;
+
 function refreshPage4SectorOptions() {
   if (!p4SectorStart || !p4SectorEnd) return;
   const boundaries = page4LapBoundaries(page4SelectedLapIndex);
   const options = boundaries.map((point, index) => `<option value="${index}">${point.label}</option>`).join('');
-  p4SectorStart.innerHTML = options;
-  p4SectorEnd.innerHTML = options;
-  if (boundaries.length) p4SectorEnd.value = String(boundaries.length - 1);
+  p4SectorStart.innerHTML = `<option value="">구간 선택 (시작)</option>` + options;
+  p4SectorEnd.innerHTML = `<option value="">구간 선택 (종료)</option>` + options;
+  p4SectorStart.value = '';
+  p4SectorEnd.value = '';
+  page4UserSpecifiedSector = false;
   applyPage4Selection();
 }
 
@@ -1779,11 +1783,16 @@ function applyPage4Selection() {
   const boundaries = page4LapBoundaries(page4SelectedLapIndex);
   if (!boundaries.length || !page4Charts.length) return;
   const lap = gpsLapResults[page4SelectedLapIndex];
-  let startIndex = Number(p4SectorStart?.value) || 0;
-  let endIndex = Number(p4SectorEnd?.value);
+
+  const hasStart = Boolean(p4SectorStart && p4SectorStart.value !== '');
+  const hasEnd = Boolean(p4SectorEnd && p4SectorEnd.value !== '');
+  page4UserSpecifiedSector = hasStart || hasEnd;
+
+  let startIndex = hasStart ? Number(p4SectorStart.value) : 0;
+  let endIndex = hasEnd ? Number(p4SectorEnd.value) : boundaries.length - 1;
   if (!Number.isInteger(endIndex) || endIndex >= boundaries.length) endIndex = boundaries.length - 1;
   if (startIndex >= boundaries.length) startIndex = 0;
-  if (endIndex <= startIndex) {
+  if (hasStart && hasEnd && endIndex <= startIndex) {
     endIndex = Math.min(boundaries.length - 1, startIndex + 1);
     if (endIndex <= startIndex) startIndex = Math.max(0, endIndex - 1);
     if (p4SectorStart) p4SectorStart.value = String(startIndex);
@@ -1804,9 +1813,13 @@ function applyPage4Selection() {
   page4ViewStart = startTime;
   page4ViewEnd = page4RangeEnd;
   refreshPage4VisibleRange(startTime, page4RangeEnd);
-  const startLabel = boundaries[startIndex]?.label || 'START';
-  const endLabel = boundaries[endIndex]?.label || 'FINISH';
-  if (p4SectorStatus) p4SectorStatus.textContent = `${startLabel} → ${endLabel} · ${(page4RangeEnd - page4RangeStart).toFixed(3)}초`;
+  const startLabel = hasStart ? (boundaries[startIndex]?.label || 'START') : '전체';
+  const endLabel = hasEnd ? (boundaries[endIndex]?.label || 'FINISH') : '구간';
+  if (p4SectorStatus) {
+    p4SectorStatus.textContent = page4UserSpecifiedSector
+      ? `${startLabel} → ${endLabel} · ${(page4RangeEnd - page4RangeStart).toFixed(3)}초`
+      : `전체 구간 선택 안됨 · ${(page4RangeEnd - page4RangeStart).toFixed(3)}초`;
+  }
   if (p4PlayTimeline) { p4PlayTimeline.min = String(page4RangeStart); p4PlayTimeline.max = String(page4RangeEnd); p4PlayTimeline.step = '0.01'; }
   updatePage4PlaybackCursor(page4RangeStart);
   drawPage4GTrace();
@@ -2045,11 +2058,28 @@ function drawPage4TrackMap(targetTime) {
     }
   }
 
+  // Show CP numbers in initial unselected state. Once user specifies a sector, hide all CP numbers!
+  const showBadges = !page4UserSpecifiedSector || Boolean(p4SectorDropdownActive);
+
+  // Helper for drawing CP number label
+  const drawLabel = (x, y, text, textColor) => {
+    if (!showBadges) return;
+    ctx.save();
+    ctx.font = 'bold 9.5px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 2.5; ctx.strokeStyle = '#0f172a';
+    ctx.strokeText(text, x, y - 9);
+    ctx.fillStyle = textColor;
+    ctx.fillText(text, x, y - 9);
+    ctx.restore();
+  };
+
   // 3. Draw Finish Line
   if (Array.isArray(gpsFinishPoints) && gpsFinishPoints.length === 2) {
     let from = project(gpsFinishPoints[0]);
     let to = project(gpsFinishPoints[1]);
     const isFinishActive = activeLabels.has('FINISH') || activeLabels.has('START');
+    const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
 
     if (isFinishActive) {
       ctx.save();
@@ -2060,11 +2090,13 @@ function drawPage4TrackMap(targetTime) {
 
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+      drawLabel(midX, midY, 'FINISH', '#f87171');
     } else {
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.setLineDash([4, 3]);
       ctx.strokeStyle = 'rgba(239, 68, 68, 0.75)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
       ctx.setLineDash([]);
+      drawLabel(midX, midY, 'FINISH', '#f87171');
     }
   }
 
@@ -2075,6 +2107,7 @@ function drawPage4TrackMap(targetTime) {
     let to = project(checkpoint[1]);
     const label = `CP${index + 1}`;
     const isCpActive = activeLabels.has(label);
+    const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
 
     if (isCpActive) {
       ctx.save();
@@ -2085,9 +2118,11 @@ function drawPage4TrackMap(targetTime) {
 
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+      drawLabel(midX, midY, label, '#38bdf8');
     } else {
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = 'rgba(6, 182, 212, 0.65)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
+      drawLabel(midX, midY, label, '#38bdf8');
     }
   });
 
