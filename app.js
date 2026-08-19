@@ -1933,28 +1933,35 @@ function drawPage4Cursor(targetTime) {
 
 function updatePage4PlaybackCursor(targetTime) {
   if (!globalData.length) return;
-  page4CursorTime = Math.max(page4RangeStart, Math.min(page4RangeEnd, Number(targetTime) || page4RangeStart));
+  const validRange = page4RangeEnd > page4RangeStart;
+  const rangeStart = validRange ? page4RangeStart : 0;
+  const rangeEnd = validRange ? page4RangeEnd : totalDurationSec;
+  page4CursorTime = Math.max(rangeStart, Math.min(rangeEnd, Number(targetTime) || rangeStart));
   preciseCursorTimeSec = page4CursorTime;
   currentCursorIndex = findSampleIndexAtTime(page4CursorTime);
   if (p4PlayTimeline) p4PlayTimeline.value = String(page4CursorTime);
-  if (p4PlayTime) p4PlayTime.textContent = `${(page4CursorTime - page4RangeStart).toFixed(3)} s`;
+  if (p4PlayTime) p4PlayTime.textContent = `${(page4CursorTime - rangeStart).toFixed(3)} s`;
   if (tabTemperature?.classList.contains('active')) syncPage4Navigator();
   const row = globalData[findGlobalIndexAtTime(page4CursorTime)];
   if (row) updateNumericDisplays(row, null, page4CursorTime);
   drawCssIntersectionDots(currentCursorIndex, page4Charts, page4CursorTime);
   drawPage4Cursor(page4CursorTime);
+  drawPage4TrackMap(page4CursorTime);
 }
 
 function setPage4Playback(active) {
   cancelAnimationFrame(page4PlaybackFrame);
   page4PlaybackFrame = 0;
-  page4PlaybackActive = Boolean(active && page4RangeEnd > page4RangeStart);
+  const validRange = page4RangeEnd > page4RangeStart;
+  const rangeStart = validRange ? page4RangeStart : 0;
+  const rangeEnd = validRange ? page4RangeEnd : totalDurationSec;
+  page4PlaybackActive = Boolean(active && rangeEnd > rangeStart);
   page4PlaybackLastStamp = 0;
   if (p4PlayToggle) p4PlayToggle.textContent = page4PlaybackActive ? 'Ⅱ 일시정지' : '▶ 재생';
   if (!page4PlaybackActive) return;
 
-  if (page4CursorTime >= page4RangeEnd - 0.005 || page4CursorTime < page4RangeStart) {
-    updatePage4PlaybackCursor(page4RangeStart);
+  if (page4CursorTime >= rangeEnd - 0.005 || page4CursorTime < rangeStart) {
+    updatePage4PlaybackCursor(rangeStart);
   }
 
   const tick = stamp => {
@@ -1963,8 +1970,8 @@ function setPage4Playback(active) {
       const rate = Number(p4PlayRate?.value) || 1;
       const dt = Math.min(0.1, (stamp - page4PlaybackLastStamp) / 1000) * rate;
       let nextTime = page4CursorTime + dt;
-      if (nextTime >= page4RangeEnd) {
-        nextTime = page4RangeStart;
+      if (nextTime >= rangeEnd) {
+        nextTime = rangeStart;
       }
       updatePage4PlaybackCursor(nextTime);
     }
@@ -2000,7 +2007,7 @@ function drawPage4TrackMap(targetTime) {
   });
 
   const getPointLon = p => (p ? Number(p.lon ?? p.lng ?? (Array.isArray(p) ? p[1] : 0)) : 0);
-  const getPointLat = p => (p ? Number(p.lat ?? (Array.isArray(p) ? p[0] : 0)) : 0);
+  const getPointLat = p => (p ? Number(p.lat ?? p.lat ?? (Array.isArray(p) ? p[0] : 0)) : 0);
 
   const meanLatRad = points.reduce((sum, point) => sum + getPointLat(point), 0) / points.length * Math.PI / 180;
   const lonScale = Math.max(0.1, Math.cos(meanLatRad));
@@ -2064,9 +2071,9 @@ function drawPage4TrackMap(targetTime) {
     const from = project(gpsFinishPoints[0]);
     const to = project(gpsFinishPoints[1]);
     const isFinishActive = activeLabels.has('FINISH') || activeLabels.has('START');
+    const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
 
     if (isFinishActive) {
-      // Glow Effect for Selected Finish Line
       ctx.save();
       ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 14;
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
@@ -2075,25 +2082,13 @@ function drawPage4TrackMap(targetTime) {
 
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+      drawBadge(midX, midY - 12, 'FINISH', '#ef4444', '#450a0a', '#fca5a5');
     } else {
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.setLineDash([5, 3]);
       ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
       ctx.setLineDash([]);
-    }
-
-    if (isFinishActive || p4SectorDropdownActive) {
-      const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
-      if (isFinishActive) {
-        drawBadge(midX, midY - 12, 'FINISH', '#ef4444', '#450a0a', '#fca5a5');
-      } else {
-        ctx.save();
-        ctx.font = 'bold 10px Inter, system-ui, sans-serif';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.lineWidth = 3; ctx.strokeStyle = '#0f172a'; ctx.strokeText('FINISH', midX, midY - 10);
-        ctx.fillStyle = '#f87171'; ctx.fillText('FINISH', midX, midY - 10);
-        ctx.restore();
-      }
+      drawBadge(midX, midY - 12, 'FINISH', '#991b1b', '#18181b', '#fca5a5');
     }
   }
 
@@ -2104,9 +2099,9 @@ function drawPage4TrackMap(targetTime) {
     const to = project(checkpoint[1]);
     const label = `CP${index + 1}`;
     const isCpActive = activeLabels.has(label);
+    const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
 
     if (isCpActive) {
-      // Glow Effect for Active Selected Checkpoint
       ctx.save();
       ctx.shadowColor = '#06b6d4'; ctx.shadowBlur = 14;
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
@@ -2114,21 +2109,12 @@ function drawPage4TrackMap(targetTime) {
       ctx.restore();
 
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
-      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
-
-      const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke();
       drawBadge(midX, midY - 12, label, '#22d3ee', '#083344', '#67e8f9');
     } else {
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
-      ctx.strokeStyle = '#06b6d4'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
-
-      const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
-      ctx.save();
-      ctx.font = 'bold 10px Inter, system-ui, sans-serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.lineWidth = 3; ctx.strokeStyle = '#0f172a'; ctx.strokeText(label, midX, midY - 10);
-      ctx.fillStyle = '#38bdf8'; ctx.fillText(label, midX, midY - 10);
-      ctx.restore();
+      ctx.strokeStyle = '#06b6d4'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke();
+      drawBadge(midX, midY - 12, label, '#0e7490', '#0f172a', '#38bdf8');
     }
   });
 
