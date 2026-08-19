@@ -1780,6 +1780,10 @@ function applyPage4Selection() {
     if (p4SectorStart) p4SectorStart.value = String(startIndex);
     if (p4SectorEnd) p4SectorEnd.value = String(endIndex);
   }
+  if (p4SectorStart) p4SectorStart.blur();
+  if (p4SectorEnd) p4SectorEnd.blur();
+  if (p4LapSelect) p4LapSelect.blur();
+
   const startTime = boundaries[startIndex].time;
   const endTime = boundaries[endIndex].time;
   setPage4Playback(false);
@@ -2079,20 +2083,34 @@ function drawPage4TrackMap(targetTime) {
     if (!Array.isArray(checkpoint) || checkpoint.length !== 2) return;
     const from = project(checkpoint[0]);
     const to = project(checkpoint[1]);
-    ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
-    ctx.strokeStyle = '#06b6d4'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
-
-    const midX = (from.x + to.x) / 2;
-    const midY = (from.y + to.y) / 2;
     const label = `CP${index + 1}`;
-    ctx.font = 'bold 10px Inter, system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#0f172a';
-    ctx.strokeText(label, midX, midY - 8);
-    ctx.fillStyle = '#38bdf8';
-    ctx.fillText(label, midX, midY - 8);
+    const isCpActive = activeLabels.has(label);
+
+    if (isCpActive) {
+      // Glow Effect for Active Selected Checkpoint
+      ctx.save();
+      ctx.shadowColor = '#06b6d4'; ctx.shadowBlur = 14;
+      ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
+      ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.stroke();
+      ctx.restore();
+
+      ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+
+      const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
+      drawBadge(midX, midY - 12, label, '#22d3ee', '#083344', '#67e8f9');
+    } else {
+      ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
+      ctx.strokeStyle = '#06b6d4'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+
+      const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
+      ctx.save();
+      ctx.font = 'bold 10px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3; ctx.strokeStyle = '#0f172a'; ctx.strokeText(label, midX, midY - 10);
+      ctx.fillStyle = '#38bdf8'; ctx.fillText(label, midX, midY - 10);
+      ctx.restore();
+    }
   });
 
   const position = getGpsLapPositionAtTime(lap, Math.max(lap.startTime, Math.min(lap.endTime, targetTime)));
@@ -5695,16 +5713,35 @@ window.addEventListener('keyup', (e) => {
   }
 });
 
-// ==================== [키보드 단축키 지원 (Keyboard Shortcuts)] ====================
 window.addEventListener('keydown', (e) => {
-  // 입력 필드에 포커스가 있을 때는 단축키를 비활성화합니다.
+  const key = e.key;
+
+  // Spacebar pressed: toggle playback if on Page 4 or GPS tab, even if a SELECT dropdown was focused
+  if (key === ' ' || key === 'Spacebar') {
+    if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+      return; // Do not intercept spacebar in text input fields
+    }
+    e.preventDefault();
+    if (document.activeElement && document.activeElement.tagName === 'SELECT') {
+      document.activeElement.blur();
+    }
+    if (globalData.length === 0) return;
+    if (tabTemperature && tabTemperature.classList.contains('active')) {
+      if (!e.repeat) setPage4Playback(!page4PlaybackActive);
+    } else if (tabGps && tabGps.classList.contains('active')) {
+      if (!e.repeat) setGpsPlayback(!gpsPlaybackActive);
+    } else {
+      applyZoomRange(0, totalDurationSec);
+    }
+    return;
+  }
+
+  // 입력 필드 및 셀렉트에 포커스가 있을 때는 나머지 단축키를 비활성화합니다.
   if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'SELECT') {
     return;
   }
 
   if (globalData.length === 0 || activeSampledData.length === 0) return;
-
-  const key = e.key;
 
   // 키보드로 조작하는 순간 마우스 호버로 인한 오버라이드를 차단하고 네이티브 호버 서클을 제거합니다.
   if (key === 'ArrowLeft' || key === 'ArrowRight' || key === 'ArrowUp' || key === 'ArrowDown' || key === ' ' || key === 'Spacebar') {
