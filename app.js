@@ -2025,6 +2025,10 @@ function drawPage4TrackMap(targetTime) {
   const startBound = boundaries[startIndex];
   const endBound = boundaries[endIndex];
 
+  // Show CP numbers in initial state (START -> FINISH). Once a specific CP range is specified, hide all numbers!
+  const isSectorSpecified = (startIndex > 0 || endIndex < boundaries.length - 1);
+  const showBadges = !isSectorSpecified || Boolean(p4SectorDropdownActive);
+
   const activeLabels = new Set();
   if (startBound) activeLabels.add(startBound.label);
   if (endBound) activeLabels.add(endBound.label);
@@ -2045,11 +2049,25 @@ function drawPage4TrackMap(targetTime) {
     }
   }
 
+  // Helper for drawing CP number label
+  const drawLabel = (x, y, text, textColor) => {
+    if (!showBadges) return;
+    ctx.save();
+    ctx.font = 'bold 9.5px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 2.5; ctx.strokeStyle = '#0f172a';
+    ctx.strokeText(text, x, y - 9);
+    ctx.fillStyle = textColor;
+    ctx.fillText(text, x, y - 9);
+    ctx.restore();
+  };
+
   // 3. Draw Finish Line
   if (Array.isArray(gpsFinishPoints) && gpsFinishPoints.length === 2) {
     let from = project(gpsFinishPoints[0]);
     let to = project(gpsFinishPoints[1]);
     const isFinishActive = activeLabels.has('FINISH') || activeLabels.has('START');
+    const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
 
     if (isFinishActive) {
       ctx.save();
@@ -2060,11 +2078,13 @@ function drawPage4TrackMap(targetTime) {
 
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+      drawLabel(midX, midY, 'FINISH', '#f87171');
     } else {
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.setLineDash([4, 3]);
       ctx.strokeStyle = 'rgba(239, 68, 68, 0.75)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
       ctx.setLineDash([]);
+      drawLabel(midX, midY, 'FINISH', '#f87171');
     }
   }
 
