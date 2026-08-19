@@ -2045,33 +2045,11 @@ function drawPage4TrackMap(targetTime) {
     }
   }
 
-  // Helper for drawing badge background
-  const drawBadge = (x, y, text, strokeColor, fillColor, textColor) => {
-    ctx.save();
-    ctx.font = 'bold 11px Inter, system-ui, sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const textWidth = ctx.measureText(text).width;
-    const boxW = textWidth + 12, boxH = 17, boxX = x - boxW / 2, boxY = y - boxH / 2;
-    ctx.fillStyle = fillColor;
-    ctx.strokeStyle = strokeColor; ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    if (typeof ctx.roundRect === 'function') {
-      ctx.roundRect(boxX, boxY, boxW, boxH, 4);
-    } else {
-      ctx.rect(boxX, boxY, boxW, boxH);
-    }
-    ctx.fill(); ctx.stroke();
-    ctx.fillStyle = textColor;
-    ctx.fillText(text, x, y);
-    ctx.restore();
-  };
-
   // 3. Draw Finish Line
   if (Array.isArray(gpsFinishPoints) && gpsFinishPoints.length === 2) {
-    const from = project(gpsFinishPoints[0]);
-    const to = project(gpsFinishPoints[1]);
+    let from = project(gpsFinishPoints[0]);
+    let to = project(gpsFinishPoints[1]);
     const isFinishActive = activeLabels.has('FINISH') || activeLabels.has('START');
-    const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
 
     if (isFinishActive) {
       ctx.save();
@@ -2082,19 +2060,11 @@ function drawPage4TrackMap(targetTime) {
 
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
-      drawBadge(midX, midY - 11, 'FINISH', '#ef4444', '#450a0a', '#fca5a5');
     } else {
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.setLineDash([4, 3]);
       ctx.strokeStyle = 'rgba(239, 68, 68, 0.75)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
       ctx.setLineDash([]);
-
-      ctx.save();
-      ctx.font = 'bold 10px Inter, system-ui, sans-serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.lineWidth = 3; ctx.strokeStyle = '#0f172a'; ctx.strokeText('FINISH', midX, midY - 9);
-      ctx.fillStyle = '#f87171'; ctx.fillText('FINISH', midX, midY - 9);
-      ctx.restore();
     }
   }
 
@@ -2106,16 +2076,6 @@ function drawPage4TrackMap(targetTime) {
     const label = `CP${index + 1}`;
     const isCpActive = activeLabels.has(label);
 
-    const dx = to.x - from.x, dy = to.y - from.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
-    const minLen = 20;
-    if (len < minLen) {
-      const ux = dx / len, uy = dy / len;
-      from = { x: midX - ux * (minLen / 2), y: midY - uy * (minLen / 2) };
-      to = { x: midX + ux * (minLen / 2), y: midY + uy * (minLen / 2) };
-    }
-
     if (isCpActive) {
       ctx.save();
       ctx.shadowColor = '#06b6d4'; ctx.shadowBlur = 16;
@@ -2125,17 +2085,9 @@ function drawPage4TrackMap(targetTime) {
 
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
-      drawBadge(midX, midY - 11, label, '#22d3ee', '#083344', '#67e8f9');
     } else {
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = 'rgba(6, 182, 212, 0.65)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
-
-      ctx.save();
-      ctx.font = 'bold 9px Inter, system-ui, sans-serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.lineWidth = 2.5; ctx.strokeStyle = '#0f172a'; ctx.strokeText(label, midX, midY - 9);
-      ctx.fillStyle = '#38bdf8'; ctx.fillText(label, midX, midY - 9);
-      ctx.restore();
     }
   });
 
