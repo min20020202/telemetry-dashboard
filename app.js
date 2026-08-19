@@ -2077,18 +2077,24 @@ function drawPage4TrackMap(targetTime) {
       ctx.save();
       ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 14;
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
-      ctx.strokeStyle = '#f87171'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.stroke();
+      ctx.strokeStyle = '#f87171'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.stroke();
       ctx.restore();
 
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
-      if (showBadges) drawBadge(midX, midY - 12, 'FINISH', '#ef4444', '#450a0a', '#fca5a5');
+      drawBadge(midX, midY - 11, 'FINISH', '#ef4444', '#450a0a', '#fca5a5');
     } else {
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
-      ctx.setLineDash([5, 3]);
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.75)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
       ctx.setLineDash([]);
-      if (showBadges) drawBadge(midX, midY - 12, 'FINISH', '#991b1b', '#18181b', '#fca5a5');
+
+      ctx.save();
+      ctx.font = 'bold 10px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3; ctx.strokeStyle = '#0f172a'; ctx.strokeText('FINISH', midX, midY - 9);
+      ctx.fillStyle = '#f87171'; ctx.fillText('FINISH', midX, midY - 9);
+      ctx.restore();
     }
   }
 
@@ -2103,7 +2109,7 @@ function drawPage4TrackMap(targetTime) {
     const dx = to.x - from.x, dy = to.y - from.y;
     const len = Math.hypot(dx, dy) || 1;
     const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
-    const minLen = 22;
+    const minLen = 20;
     if (len < minLen) {
       const ux = dx / len, uy = dy / len;
       from = { x: midX - ux * (minLen / 2), y: midY - uy * (minLen / 2) };
@@ -2114,16 +2120,22 @@ function drawPage4TrackMap(targetTime) {
       ctx.save();
       ctx.shadowColor = '#06b6d4'; ctx.shadowBlur = 16;
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
-      ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.stroke();
+      ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.stroke();
       ctx.restore();
 
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
-      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke();
-      if (showBadges) drawBadge(midX, midY - 12, label, '#22d3ee', '#083344', '#67e8f9');
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+      drawBadge(midX, midY - 11, label, '#22d3ee', '#083344', '#67e8f9');
     } else {
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
-      ctx.strokeStyle = 'rgba(6, 182, 212, 0.55)'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
-      if (showBadges) drawBadge(midX, midY - 12, label, '#0e7490', '#0f172a', '#38bdf8');
+      ctx.strokeStyle = 'rgba(6, 182, 212, 0.65)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
+
+      ctx.save();
+      ctx.font = 'bold 9px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 2.5; ctx.strokeStyle = '#0f172a'; ctx.strokeText(label, midX, midY - 9);
+      ctx.fillStyle = '#38bdf8'; ctx.fillText(label, midX, midY - 9);
+      ctx.restore();
     }
   });
 
