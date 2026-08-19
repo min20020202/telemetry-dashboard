@@ -1720,7 +1720,18 @@ function buildPage4WorkspaceCharts(S, makeCommonOptions) {
   refreshPage4Selectors();
 }
 
+let cachedPage4LapIndex = -1;
+let cachedPage4BoundariesList = [];
+
+function invalidatePage4BoundariesCache() {
+  cachedPage4LapIndex = -1;
+  cachedPage4BoundariesList = [];
+}
+
 function page4LapBoundaries(lapIndex) {
+  if (lapIndex === cachedPage4LapIndex && cachedPage4BoundariesList.length > 0) {
+    return cachedPage4BoundariesList;
+  }
   const lap = gpsLapResults[lapIndex];
   if (!lap) return [];
   const boundaries = [{ label: 'START', time: lap.startTime }];
@@ -1730,10 +1741,13 @@ function page4LapBoundaries(lapIndex) {
   });
   boundaries.sort((a, b) => a.time - b.time);
   boundaries.push({ label: 'FINISH', time: lap.endTime });
+  cachedPage4LapIndex = lapIndex;
+  cachedPage4BoundariesList = boundaries;
   return boundaries;
 }
 
 function refreshPage4Selectors() {
+  invalidatePage4BoundariesCache();
   if (!p4LapSelect) return;
   const previous = Number(p4LapSelect.value);
   p4LapSelect.innerHTML = gpsLapResults.length
@@ -1920,13 +1934,21 @@ function setPage4Playback(active) {
   page4PlaybackLastStamp = 0;
   if (p4PlayToggle) p4PlayToggle.textContent = page4PlaybackActive ? 'Ⅱ 일시정지' : '▶ 재생';
   if (!page4PlaybackActive) return;
-  if (page4CursorTime >= page4RangeEnd - 0.001) updatePage4PlaybackCursor(page4RangeStart);
+
+  if (page4CursorTime >= page4RangeEnd - 0.005 || page4CursorTime < page4RangeStart) {
+    updatePage4PlaybackCursor(page4RangeStart);
+  }
+
   const tick = stamp => {
     if (!page4PlaybackActive) return;
     if (page4PlaybackLastStamp) {
       const rate = Number(p4PlayRate?.value) || 1;
-      updatePage4PlaybackCursor(page4CursorTime + Math.min(0.1, (stamp - page4PlaybackLastStamp) / 1000) * rate);
-      if (page4CursorTime >= page4RangeEnd - 0.001) { setPage4Playback(false); return; }
+      const dt = Math.min(0.1, (stamp - page4PlaybackLastStamp) / 1000) * rate;
+      let nextTime = page4CursorTime + dt;
+      if (nextTime >= page4RangeEnd) {
+        nextTime = page4RangeStart;
+      }
+      updatePage4PlaybackCursor(nextTime);
     }
     page4PlaybackLastStamp = stamp;
     page4PlaybackFrame = requestAnimationFrame(tick);
