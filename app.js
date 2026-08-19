@@ -1809,6 +1809,10 @@ function refreshPage4VisibleRange(startTime, endTime) {
     chart.update('none');
   });
   drawPage4Cursor(page4CursorTime);
+  // Chart.js recalculates every data pixel after zoom/pan. Reproject the DOM
+  // cursor dots immediately as well so none retain coordinates from the
+  // previous viewport.
+  drawCssIntersectionDots(currentCursorIndex, page4Charts, page4CursorTime);
   syncPage4Navigator();
 }
 
