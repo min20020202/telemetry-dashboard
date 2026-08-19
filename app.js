@@ -2082,13 +2082,13 @@ function drawPage4TrackMap(targetTime) {
 
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
-      drawBadge(midX, midY - 12, 'FINISH', '#ef4444', '#450a0a', '#fca5a5');
+      if (showBadges) drawBadge(midX, midY - 12, 'FINISH', '#ef4444', '#450a0a', '#fca5a5');
     } else {
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.setLineDash([5, 3]);
-      ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
       ctx.setLineDash([]);
-      drawBadge(midX, midY - 12, 'FINISH', '#991b1b', '#18181b', '#fca5a5');
+      if (showBadges) drawBadge(midX, midY - 12, 'FINISH', '#991b1b', '#18181b', '#fca5a5');
     }
   }
 
@@ -2112,18 +2112,18 @@ function drawPage4TrackMap(targetTime) {
 
     if (isCpActive) {
       ctx.save();
-      ctx.shadowColor = '#06b6d4'; ctx.shadowBlur = 14;
+      ctx.shadowColor = '#06b6d4'; ctx.shadowBlur = 16;
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.stroke();
       ctx.restore();
 
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke();
-      drawBadge(midX, midY - 12, label, '#22d3ee', '#083344', '#67e8f9');
+      if (showBadges) drawBadge(midX, midY - 12, label, '#22d3ee', '#083344', '#67e8f9');
     } else {
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
-      ctx.strokeStyle = '#06b6d4'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke();
-      drawBadge(midX, midY - 12, label, '#0e7490', '#0f172a', '#38bdf8');
+      ctx.strokeStyle = 'rgba(6, 182, 212, 0.55)'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+      if (showBadges) drawBadge(midX, midY - 12, label, '#0e7490', '#0f172a', '#38bdf8');
     }
   });
 
