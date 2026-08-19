@@ -1941,8 +1941,6 @@ function drawPage4TrackMap(targetTime) {
   if (points.length < 2) return;
   const rect = p4TrackMap.getBoundingClientRect();
   const scale = window.devicePixelRatio || 1;
-  // Keep the internal bitmap square too. Hidden tabs can retain a stale
-  // intrinsic canvas ratio, which previously stretched the map after return.
   const width = Math.max(180, rect.width || 260), height = width;
   if (p4TrackMap.width !== Math.round(width * scale) || p4TrackMap.height !== Math.round(height * scale)) {
     p4TrackMap.width = Math.round(width * scale); p4TrackMap.height = Math.round(height * scale);
@@ -1963,34 +1961,98 @@ function drawPage4TrackMap(targetTime) {
   const lonScale = Math.max(0.1, Math.cos(meanLatRad));
   const xs = allMapPoints.map(point => point.lon * lonScale), ys = allMapPoints.map(point => point.lat);
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-  const mapScale = Math.min((width - 32) / Math.max(1e-9, maxX - minX), (height - 32) / Math.max(1e-9, maxY - minY));
+  const mapScale = Math.min((width - 36) / Math.max(1e-9, maxX - minX), (height - 36) / Math.max(1e-9, maxY - minY));
   const contentWidth = (maxX - minX) * mapScale, contentHeight = (maxY - minY) * mapScale;
   const offsetX = (width - contentWidth) / 2, offsetY = (height - contentHeight) / 2;
   const project = point => ({ x: offsetX + (point.lon * lonScale - minX) * mapScale, y: height - offsetY - (point.lat - minY) * mapScale });
 
-  ctx.beginPath(); points.forEach((point, index) => { const p = project(point); index ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
-  ctx.strokeStyle = '#64748b'; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+  const boundaries = page4LapBoundaries(page4SelectedLapIndex);
+  const startIndex = Number(p4SectorStart?.value) || 0;
+  let endIndex = Number(p4SectorEnd?.value);
+  if (!Number.isInteger(endIndex)) endIndex = boundaries.length - 1;
+  const startBound = boundaries[startIndex];
+  const endBound = boundaries[endIndex];
 
+  const activeLabels = new Set();
+  if (startBound) activeLabels.add(startBound.label);
+  if (endBound) activeLabels.add(endBound.label);
+
+  // 1. Draw Base Track Path
+  ctx.beginPath(); points.forEach((point, index) => { const p = project(point); index ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
+  ctx.strokeStyle = '#334155'; ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+
+  // 2. Draw Active Selected Sector Track Segment (Highlighted Cyan Path)
+  if (startBound && endBound && endBound.time > startBound.time) {
+    const sectorPoints = points.filter(p => p.time >= startBound.time - 0.05 && p.time <= endBound.time + 0.05);
+    if (sectorPoints.length > 1) {
+      ctx.save();
+      ctx.shadowColor = '#0284c7'; ctx.shadowBlur = 8;
+      ctx.beginPath(); sectorPoints.forEach((point, index) => { const p = project(point); index ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
+      ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 5.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Helper for drawing badge background
+  const drawBadge = (x, y, text, strokeColor, fillColor, textColor) => {
+    ctx.save();
+    ctx.font = 'bold 11px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const textWidth = ctx.measureText(text).width;
+    const boxW = textWidth + 12, boxH = 17, boxX = x - boxW / 2, boxY = y - boxH / 2;
+    ctx.fillStyle = fillColor;
+    ctx.strokeStyle = strokeColor; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') {
+      ctx.roundRect(boxX, boxY, boxW, boxH, 4);
+    } else {
+      ctx.rect(boxX, boxY, boxW, boxH);
+    }
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = textColor;
+    ctx.fillText(text, x, y);
+    ctx.restore();
+  };
+
+  // 3. Draw Finish Line
   if (Array.isArray(gpsFinishPoints) && gpsFinishPoints.length === 2) {
     const from = project(gpsFinishPoints[0]);
     const to = project(gpsFinishPoints[1]);
-    ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
-    ctx.setLineDash([5, 3]);
-    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke();
-    ctx.setLineDash([]);
+    const isFinishActive = activeLabels.has('FINISH') || activeLabels.has('START');
 
-    const midX = (from.x + to.x) / 2;
-    const midY = (from.y + to.y) / 2;
-    ctx.font = 'bold 10px Inter, system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#0f172a';
-    ctx.strokeText('FINISH', midX, midY - 8);
-    ctx.fillStyle = '#f87171';
-    ctx.fillText('FINISH', midX, midY - 8);
+    if (isFinishActive) {
+      // Glow Effect for Selected Finish Line
+      ctx.save();
+      ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 14;
+      ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
+      ctx.strokeStyle = '#f87171'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.stroke();
+      ctx.restore();
+
+      ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
+      ctx.setLineDash([5, 3]);
+      ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    if (isFinishActive || p4SectorDropdownActive) {
+      const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
+      if (isFinishActive) {
+        drawBadge(midX, midY - 12, 'FINISH', '#ef4444', '#450a0a', '#fca5a5');
+      } else {
+        ctx.save();
+        ctx.font = 'bold 10px Inter, system-ui, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.lineWidth = 3; ctx.strokeStyle = '#0f172a'; ctx.strokeText('FINISH', midX, midY - 10);
+        ctx.fillStyle = '#f87171'; ctx.fillText('FINISH', midX, midY - 10);
+        ctx.restore();
+      }
+    }
   }
 
+  // 4. Draw Checkpoints
   gpsCheckpoints.forEach((checkpoint, index) => {
     if (!Array.isArray(checkpoint) || checkpoint.length !== 2) return;
     const from = project(checkpoint[0]);
