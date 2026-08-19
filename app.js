@@ -22,6 +22,8 @@ let page4PlaybackFrame = 0;
 let page4PlaybackLastStamp = 0;
 let page4RangeStart = 0;
 let page4RangeEnd = 0;
+let page4ViewStart = 0;
+let page4ViewEnd = 0;
 let page4CursorTime = 0;
 let page4SelectedLapIndex = -1;
 
@@ -1625,8 +1627,24 @@ function applyPage4Selection() {
   }
   const startTime = boundaries[startIndex].time;
   const endTime = boundaries[endIndex].time;
-  const first = findGlobalIndexAtTime(startTime);
-  const last = findGlobalIndexAtTime(endTime);
+  setPage4Playback(false);
+  page4RangeStart = startTime;
+  page4RangeEnd = endTime;
+  page4ViewStart = startTime;
+  page4ViewEnd = endTime;
+  refreshPage4VisibleRange(startTime, endTime);
+  if (p4SectorStatus) p4SectorStatus.textContent = `${boundaries[startIndex].label} → ${boundaries[endIndex].label} · ${(endTime - startTime).toFixed(3)}초`;
+  if (p4PlayTimeline) { p4PlayTimeline.min = String(startTime); p4PlayTimeline.max = String(endTime); p4PlayTimeline.step = '0.01'; }
+  updatePage4PlaybackCursor(startTime);
+}
+
+function refreshPage4VisibleRange(startTime, endTime) {
+  if (!page4Charts.length || !globalData.length) return;
+  page4ViewStart = Math.max(page4RangeStart, Number(startTime));
+  page4ViewEnd = Math.min(page4RangeEnd, Number(endTime));
+  if (!(page4ViewEnd > page4ViewStart)) return;
+  const first = findGlobalIndexAtTime(page4ViewStart);
+  const last = findGlobalIndexAtTime(page4ViewEnd);
   const count = Math.max(1, last - first + 1);
   const relativeIndices = downsampleIndices(count, 4500).map(index => first + index);
   PAGE4_CHART_SPECS.forEach((spec, chartIndex) => {
@@ -1635,16 +1653,37 @@ function applyPage4Selection() {
     spec.series.forEach((series, datasetIndex) => {
       chart.data.datasets[datasetIndex].data = relativeIndices.map(index => ({ x: globalData[index].time_sec, y: page4SeriesValue(series, globalData[index], index) }));
     });
-    chart.options.scales.x.min = startTime;
-    chart.options.scales.x.max = endTime;
+    chart.options.scales.x.min = page4ViewStart;
+    chart.options.scales.x.max = page4ViewEnd;
     chart.update('none');
   });
-  if (p4SectorStatus) p4SectorStatus.textContent = `${boundaries[startIndex].label} → ${boundaries[endIndex].label} · ${(endTime - startTime).toFixed(3)}초`;
-  setPage4Playback(false);
-  page4RangeStart = startTime;
-  page4RangeEnd = endTime;
-  if (p4PlayTimeline) { p4PlayTimeline.min = String(startTime); p4PlayTimeline.max = String(endTime); p4PlayTimeline.step = '0.01'; }
-  updatePage4PlaybackCursor(startTime);
+  drawPage4Cursor(page4CursorTime);
+}
+
+function zoomPage4At(targetTime, factor) {
+  const span = page4ViewEnd - page4ViewStart;
+  const fullSpan = page4RangeEnd - page4RangeStart;
+  if (!(span > 0) || !(fullSpan > 0)) return;
+  const newSpan = Math.max(0.5, Math.min(fullSpan, span * factor));
+  const anchor = Math.max(page4ViewStart, Math.min(page4ViewEnd, targetTime));
+  const ratio = span > 0 ? (anchor - page4ViewStart) / span : 0.5;
+  let start = anchor - newSpan * ratio;
+  let end = start + newSpan;
+  if (start < page4RangeStart) { start = page4RangeStart; end = start + newSpan; }
+  if (end > page4RangeEnd) { end = page4RangeEnd; start = end - newSpan; }
+  refreshPage4VisibleRange(start, end);
+}
+
+function drawPage4Cursor(targetTime) {
+  page4Charts.forEach(chart => {
+    if (!chart?.chartArea || !chart.scales?.x) return;
+    const holder = chart.canvas.parentElement;
+    let line = holder.querySelector('.p4-cursor-line');
+    if (!line) { line = document.createElement('div'); line.className = 'p4-cursor-line'; holder.appendChild(line); }
+    const x = chart.scales.x.getPixelForValue(targetTime);
+    line.style.display = x >= chart.chartArea.left && x <= chart.chartArea.right ? 'block' : 'none';
+    line.style.left = `${x}px`;
+  });
 }
 
 function updatePage4PlaybackCursor(targetTime) {
@@ -1657,6 +1696,7 @@ function updatePage4PlaybackCursor(targetTime) {
   const row = globalData[findGlobalIndexAtTime(page4CursorTime)];
   if (row) updateNumericDisplays(row, null, page4CursorTime);
   drawCssIntersectionDots(currentCursorIndex, page4Charts, page4CursorTime);
+  drawPage4Cursor(page4CursorTime);
 }
 
 function setPage4Playback(active) {
@@ -3136,6 +3176,22 @@ document.addEventListener('wheel', (e) => {
   // 시간축 확대/축소는 실제 그래프가 그려진 canvas 위에서만 동작합니다.
   // 카드, 지도, 수치, 랩 목록의 세로 스크롤은 가로채지 않습니다.
   const chartCanvas = e.target.closest('canvas');
+  const page4Chart = chartCanvas ? page4Charts.find(chart => chart?.canvas === chartCanvas) : null;
+  if (page4Chart && tabTemperature?.classList.contains('active')) {
+    if (!globalData.length || !(page4RangeEnd > page4RangeStart)) return;
+    e.preventDefault();
+    if (zoomPending) return;
+    zoomPending = true;
+    requestAnimationFrame(() => {
+      const rect = chartCanvas.getBoundingClientRect();
+      const pointerX = e.clientX - rect.left;
+      const clampedX = Math.max(page4Chart.chartArea.left, Math.min(page4Chart.chartArea.right, pointerX));
+      const targetTime = page4Chart.scales.x.getValueForPixel(clampedX);
+      zoomPage4At(targetTime, e.deltaY < 0 ? 0.92 : 1.08);
+      zoomPending = false;
+    });
+    return;
+  }
   if (!chartCanvas || !chartCanvas.closest('.canvas-holder, .canvas-holder-sub')) return;
   if (globalData.length === 0 || totalDurationSec <= 0) return;
 
@@ -4701,6 +4757,12 @@ function syncHover(activeChart, chartEvent) {
       // once 25/50/100 Hz channels use different point arrays.
       const clampedX = Math.max(chartArea.left, Math.min(chartArea.right, eventX));
       const targetTime = xScale.getValueForPixel(clampedX);
+      if (page4Charts.includes(lastActiveChart)) {
+        setPage4Playback(false);
+        updatePage4PlaybackCursor(targetTime);
+        hoverSyncPending = false;
+        return;
+      }
       preciseCursorTimeSec = targetTime;
       currentCursorIndex = findSampleIndexAtTime(targetTime);
       const globalIndex = findGlobalIndexAtTime(targetTime);
@@ -4849,7 +4911,8 @@ function renderMotecCharts(data) {
       const allCharts = {
         chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
         diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
-        chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
+        chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro,
+        ...Object.fromEntries(page4Charts.map((chart, index) => [`page4Chart${index}`, chart]))
       };
       for (const chart of Object.values(allCharts)) {
         if (chart && chart.canvas === e.chart.canvas) {
@@ -5295,15 +5358,25 @@ window.addEventListener('keydown', (e) => {
   // Left/Right Arrow: 커서 미세 이동 (지속 입력 시 가속도 적용 및 뷰포트 자동 스크롤)
   else if (key === 'ArrowLeft') {
     e.preventDefault();
-    moveChartCursorByKeyboard(-1, e);
+    if (tabTemperature?.classList.contains('active')) {
+      setPage4Playback(false);
+      updatePage4PlaybackCursor(page4CursorTime - (e.shiftKey ? 0.1 : 0.01));
+    } else moveChartCursorByKeyboard(-1, e);
   } else if (key === 'ArrowRight') {
     e.preventDefault();
-    moveChartCursorByKeyboard(1, e);
+    if (tabTemperature?.classList.contains('active')) {
+      setPage4Playback(false);
+      updatePage4PlaybackCursor(page4CursorTime + (e.shiftKey ? 0.1 : 0.01));
+    } else moveChartCursorByKeyboard(1, e);
   }
 
   // Up/Down Arrow / I/O: 확대/축소 (현재 활성 커서 시간 기준)
   else if (key === 'ArrowUp' || key.toLowerCase() === 'i') {
     e.preventDefault();
+    if (tabTemperature?.classList.contains('active')) {
+      zoomPage4At(page4CursorTime, 0.85);
+      return;
+    }
     const currentSpan = currentEndSec - currentStartSec;
     const targetTime = Number.isFinite(preciseCursorTimeSec) ? preciseCursorTimeSec : (currentStartSec + currentEndSec) / 2;
     const newSpan = Math.max(2.0, currentSpan * 0.85); // 15% 줌인
@@ -5323,6 +5396,10 @@ window.addEventListener('keydown', (e) => {
     drawCssIntersectionDots(currentCursorIndex, null, targetTime);
   } else if (key === 'ArrowDown' || key.toLowerCase() === 'o') {
     e.preventDefault();
+    if (tabTemperature?.classList.contains('active')) {
+      zoomPage4At(page4CursorTime, 1.15);
+      return;
+    }
     const currentSpan = currentEndSec - currentStartSec;
     const targetTime = Number.isFinite(preciseCursorTimeSec) ? preciseCursorTimeSec : (currentStartSec + currentEndSec) / 2;
     const newSpan = Math.min(totalDurationSec, currentSpan * 1.15); // 15% 줌아웃

@@ -501,6 +501,8 @@ body {
 .lap-strip header { position:absolute; top:5px; left:58px; right:10px; z-index:2; display:flex; justify-content:space-between; pointer-events:none; color:#334155; font:900 10px var(--font-mono); }
 .lap-strip header output { color:#0f172a; font-weight:800; }
 .lap-strip canvas { width:100% !important; height:100% !important; }
+.lap-strip canvas { cursor:crosshair; }
+.p4-cursor-line { position:absolute; top:0; bottom:0; width:2px; z-index:10; display:none; pointer-events:none; background:#f97316; box-shadow:0 0 7px rgba(249,115,22,.55); transform:translateX(-1px); }
 .lap-workspace-side { display:grid; grid-template-rows:auto auto minmax(235px, .9fr) minmax(240px, 1.1fr); gap:9px; min-height:0; }
 .lap-side-card { min-height:0; padding:12px; border:1px solid #b9c4d1; border-radius:8px; background:#fff; color:#1e293b; box-shadow:0 2px 8px rgba(15,23,42,.05); }
 .lap-side-card > label,.lap-side-card > strong { display:block; margin-bottom:8px; color:#334155; font:900 11px var(--font-mono); text-transform:uppercase; }
