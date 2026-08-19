@@ -1535,12 +1535,12 @@ const PAGE4_CHART_SPECS = [
   ]}
 ];
 
-function buildPage4WorkspaceCharts(S) {
+function buildPage4WorkspaceCharts(S, makeCommonOptions) {
   page4Charts.forEach(chart => chart?.destroy());
   page4Charts = PAGE4_CHART_SPECS.map((spec, chartIndex) => {
     const canvas = document.getElementById(spec.id);
     if (!canvas) return null;
-    const options = getCommonOptions(spec.min, spec.max);
+    const options = makeCommonOptions(spec.min, spec.max);
     options.plugins.legend = { display: false };
     options.scales.x.ticks.display = chartIndex === PAGE4_CHART_SPECS.length - 1;
     if (spec.second) options.scales.y2 = { position: 'right', min: spec.second[0], max: spec.second[1], display: false, grid: { display: false } };
@@ -5075,7 +5075,7 @@ function renderMotecCharts(data) {
   bindGpsImuDragCursor(chartImuGyro);
 
   // ==================== PAGE 4 LAP / SECTOR WORKSPACE ====================
-  buildPage4WorkspaceCharts(S);
+  buildPage4WorkspaceCharts(S, getCommonOptions);
 
   const ctxSusFr = document.getElementById('chart-sus-fr').getContext('2d');
   chartFR = new Chart(ctxSusFr, {
