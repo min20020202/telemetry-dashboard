@@ -1784,35 +1784,44 @@ function applyPage4Selection() {
   if (!boundaries.length || !page4Charts.length) return;
   const lap = gpsLapResults[page4SelectedLapIndex];
 
+  const wasPlaying = Boolean(page4PlaybackActive);
+
   const hasStart = Boolean(p4SectorStart && p4SectorStart.value !== '');
   const hasEnd = Boolean(p4SectorEnd && p4SectorEnd.value !== '');
   page4UserSpecifiedSector = hasStart || hasEnd;
 
   let startIndex = hasStart ? Number(p4SectorStart.value) : 0;
   let endIndex = hasEnd ? Number(p4SectorEnd.value) : boundaries.length - 1;
-  if (!Number.isInteger(endIndex) || endIndex >= boundaries.length) endIndex = boundaries.length - 1;
-  if (startIndex >= boundaries.length) startIndex = 0;
-  if (hasStart && hasEnd && endIndex <= startIndex) {
+
+  if (hasStart && !hasEnd) {
+    endIndex = boundaries.length - 1;
+  } else if (!hasStart && hasEnd) {
+    startIndex = 0;
+  } else if (hasStart && hasEnd && endIndex <= startIndex) {
     endIndex = Math.min(boundaries.length - 1, startIndex + 1);
     if (endIndex <= startIndex) startIndex = Math.max(0, endIndex - 1);
     if (p4SectorStart) p4SectorStart.value = String(startIndex);
     if (p4SectorEnd) p4SectorEnd.value = String(endIndex);
   }
-  if (p4SectorStart) p4SectorStart.blur();
-  if (p4SectorEnd) p4SectorEnd.blur();
-  if (p4LapSelect) p4LapSelect.blur();
+
+  if (!Number.isInteger(startIndex) || startIndex < 0) startIndex = 0;
+  if (!Number.isInteger(endIndex) || endIndex >= boundaries.length) endIndex = boundaries.length - 1;
 
   const rawStart = boundaries[startIndex]?.time;
   const rawEnd = boundaries[endIndex]?.time;
   const startTime = Number.isFinite(rawStart) ? rawStart : (lap ? lap.startTime : 0);
   const endTime = Number.isFinite(rawEnd) ? rawEnd : (lap ? lap.endTime : startTime + 1);
 
-  setPage4Playback(false);
-  page4RangeStart = startTime;
-  page4RangeEnd = Math.max(startTime + 0.05, endTime);
-  page4ViewStart = startTime;
-  page4ViewEnd = page4RangeEnd;
-  refreshPage4VisibleRange(startTime, page4RangeEnd);
+  const newRangeStart = startTime;
+  const newRangeEnd = Math.max(startTime + 0.5, endTime);
+
+  page4RangeStart = newRangeStart;
+  page4RangeEnd = newRangeEnd;
+  page4ViewStart = newRangeStart;
+  page4ViewEnd = newRangeEnd;
+
+  refreshPage4VisibleRange(newRangeStart, newRangeEnd);
+
   const startLabel = hasStart ? (boundaries[startIndex]?.label || 'START') : '전체';
   const endLabel = hasEnd ? (boundaries[endIndex]?.label || 'FINISH') : '구간';
   if (p4SectorStatus) {
