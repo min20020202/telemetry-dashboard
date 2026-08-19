@@ -315,10 +315,9 @@ function getCalibratedBrake(rawValue) {
 
 // Calibrated Steering
 // 영점/배율/반전은 steering.js의 steeringCal에서 조정합니다 (핸들 그래픽 클릭).
-// 기본값 {zeroRaw:998, degPerLsb:0.1, invert:false}는 기존 하드코딩 식과 동일:
-//   (raw - 2048) * 0.1 + 105 = 0.1*raw - 99.8 = (raw - 998) * 0.1
+// The shared team calibration is defined in steering.js.
 function getCalibratedSteering(rawValue) {
-  const cal = (typeof steeringCal !== 'undefined') ? steeringCal : { zeroRaw: 998, degPerLsb: 0.1, invert: false };
+  const cal = (typeof steeringCal !== 'undefined') ? steeringCal : { zeroRaw: 1298, degPerLsb: 0.1, invert: true };
   const rawVal = (rawValue === undefined || rawValue === null || isNaN(rawValue)) ? cal.zeroRaw : rawValue;
   const deg = (rawVal - cal.zeroRaw) * 0.1;
   return cal.invert ? -deg : deg;
@@ -358,8 +357,34 @@ let gpsHandlingSteeringRatio = 12;
 let gpsDetailCharts = [];
 let gpsDetailSourceData = null;
 const GPS_LAP_COLORS = ['#00e5ff', '#ff3d9a', '#76ff03', '#ffca28', '#7c4dff', '#ff6d00', '#00e676', '#40c4ff'];
-const GPS_FIXED_LINES_STORAGE_KEY = 'nssur_gps_fixed_lines_v1';
+const GPS_FIXED_LINES_STORAGE_KEY = 'nssur_gps_fixed_lines_v2';
 const GPS_FIXED_LINES_INITIAL_PASSWORD = '0000';
+const GPS_SHARED_FIXED_LINES = Object.freeze({
+  finish: [
+    { lat: 35.291942389489876, lon: 126.57411262393 },
+    { lat: 35.29196320033377, lon: 126.57417699694636 }
+  ],
+  checkpoints: [
+    [{ lat: 35.29176369915784, lon: 126.57420314848424 }, { lat: 35.29178779597713, lon: 126.57426550984384 }],
+    [{ lat: 35.291442900713896, lon: 126.57435536384584 }, { lat: 35.29139142091733, lon: 126.57436206936838 }],
+    [{ lat: 35.29234105359834, lon: 126.57494544982912 }, { lat: 35.29237610326498, lon: 126.57501652836801 }],
+    [{ lat: 35.292635689385946, lon: 126.57453909516336 }, { lat: 35.29268607309353, lon: 126.57462224364284 }],
+    [{ lat: 35.29287617620656, lon: 126.57432317733766 }, { lat: 35.29291998799785, lon: 126.57438755035402 }],
+    [{ lat: 35.29288822445155, lon: 126.57405629754068 }, { lat: 35.29292436917566, lon: 126.57414615154268 }],
+    [{ lat: 35.292641782720516, lon: 126.5743701159954 }, { lat: 35.29267464166134, lon: 126.57442241907123 }],
+    [{ lat: 35.292592494284264, lon: 126.57426014542581 }, { lat: 35.29254977761526, lon: 126.57423198223115 }],
+    [{ lat: 35.29238438722259, lon: 126.5743835270405 }, { lat: 35.29231866909194, lon: 126.57438620924952 }],
+    [{ lat: 35.29225087268119, lon: 126.5745793282986 }, { lat: 35.292241014948736, lon: 126.5746369957924 }],
+    [{ lat: 35.29200552431656, lon: 126.5746919810772 }, { lat: 35.29200552431656, lon: 126.57474026083949 }],
+    [{ lat: 35.292100815957234, lon: 126.57481268048288 }, { lat: 35.292132579812524, lon: 126.57484620809556 }],
+    [{ lat: 35.2922136323523, lon: 126.57487973570824 }, { lat: 35.2922421102524, lon: 126.57490387558938 }],
+    [{ lat: 35.292076661493276, lon: 126.5750299394131 }, { lat: 35.292094734038564, lon: 126.57506212592128 }],
+    [{ lat: 35.291852601798055, lon: 126.57498702406886 }, { lat: 35.29182302845159, lon: 126.57503798604013 }],
+    [{ lat: 35.29169597246974, lon: 126.57464101910593 }, { lat: 35.29170035371381, lon: 126.57471612095834 }],
+    [{ lat: 35.29167297093446, lon: 126.57443046569826 }, { lat: 35.29167187562312, lon: 126.57450422644615 }],
+    [{ lat: 35.291994991833526, lon: 126.5742762386799 }, { lat: 35.291979657534064, lon: 126.57436341047288 }]
+  ]
+});
 const CSV_GPS_UTC_OFFSET_SEC = 9 * 3600; // Logger gps_time is stored as Korea Standard Time (UTC+9).
 
 // GPS + IMU synchronized playback state.
@@ -1148,8 +1173,9 @@ function verifyGpsFixedLinesPassword(actionLabel = '고정선을 변경') {
 
 function restoreGpsFixedLines() {
   if (gpsLapPoints.length < 2) return false;
-  let saved;
-  try { saved = JSON.parse(localStorage.getItem(GPS_FIXED_LINES_STORAGE_KEY) || 'null'); } catch (error) { return false; }
+  // The repository copy is authoritative so every browser calculates laps
+  // and sectors from exactly the same geometry.
+  const saved = GPS_SHARED_FIXED_LINES;
   if (!saved || !Array.isArray(saved.finish) || saved.finish.length !== 2) return false;
   const middle = {
     lat: (saved.finish[0].lat + saved.finish[1].lat) * 0.5,

@@ -4,8 +4,7 @@
  * 핸들 그래픽을 클릭하면 조향 보정 패널이 열립니다.
  *   조향각[°] = (raw − 영점raw) × 배율[°/LSB] × (반전 ? −1 : +1)
  *
- * 기본값(영점 998 / 배율 0.1 / 반전 없음)은 기존 하드코딩 식과 완전히 동일합니다.
- *   (raw − 2048) × 0.1 + 105 = 0.1 × raw − 99.8 = (raw − 998) × 0.1   ✔
+ * 팀 공통 기본값은 영점 raw 1298 / 배율 0.1 / Y축 ±90° / 좌우 반전입니다.
  *
  * ── Telemetry_001.csv 로 확인한 영점 오차 ──────────────────────────────────
  *  현재 영점(raw 998)으로는 직진 주행 중에도 조향각이 +28.9°로 표시됩니다.
@@ -22,8 +21,8 @@
 
 // ==================== 보정 상태 ====================
 
-const STEER_CAL_DEFAULT = { zeroRaw: 998, degPerLsb: 0.1, axisLimit: 250, invert: false };
-const STEER_CAL_STORE_KEY = 'nssur_steering_cal';
+const STEER_CAL_DEFAULT = { zeroRaw: 1298, degPerLsb: 0.1, axisLimit: 90, invert: true };
+const STEER_CAL_STORE_KEY = 'nssur_steering_cal_v2';
 
 const steeringCal = Object.assign({}, STEER_CAL_DEFAULT);
 
