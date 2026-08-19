@@ -4069,7 +4069,7 @@ function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverr
   cursorSteering.textContent = (steeringDeg >= 0 ? '+' : '') + steeringDeg.toFixed(1);
 
   if (steeringWheelGraphic) {
-    steeringWheelGraphic.style.transform = `rotate(${steeringDeg}deg)`;
+    steeringWheelGraphic.style.transform = `rotate(${-steeringDeg}deg)`;
   }
 
   const throttleVal = cursorChannelValue('throttle', row.decoded_tps || 0).toFixed(1);
