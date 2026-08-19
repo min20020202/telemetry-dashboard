@@ -128,6 +128,7 @@ const p4SectorStatus = document.getElementById('p4-sector-status');
 const p4TrackMap = document.getElementById('p4-track-map');
 const p4TrackTime = document.getElementById('p4-track-time');
 const p4GDot = document.getElementById('p4-g-dot');
+const p4GTrace = document.getElementById('p4-g-trace');
 const p4PlayToggle = document.getElementById('p4-play-toggle');
 const p4PlayRate = document.getElementById('p4-play-rate');
 const p4PlayTimeline = document.getElementById('p4-play-timeline');
@@ -1636,6 +1637,42 @@ function applyPage4Selection() {
   if (p4SectorStatus) p4SectorStatus.textContent = `${boundaries[startIndex].label} → ${boundaries[endIndex].label} · ${(endTime - startTime).toFixed(3)}초`;
   if (p4PlayTimeline) { p4PlayTimeline.min = String(startTime); p4PlayTimeline.max = String(endTime); p4PlayTimeline.step = '0.01'; }
   updatePage4PlaybackCursor(startTime);
+  drawPage4GTrace();
+}
+
+function drawPage4GTrace() {
+  if (!p4GTrace || page4SelectedLapIndex < 0 || !globalData.length) return;
+  const lap = gpsLapResults[page4SelectedLapIndex];
+  if (!lap) return;
+  const rect = p4GTrace.getBoundingClientRect();
+  const size = Math.max(1, Math.min(rect.width || 218, rect.height || 218));
+  const pixelRatio = window.devicePixelRatio || 1;
+  p4GTrace.width = Math.round(size * pixelRatio);
+  p4GTrace.height = Math.round(size * pixelRatio);
+  const ctx = p4GTrace.getContext('2d');
+  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  ctx.clearRect(0, 0, size, size);
+  const first = findGlobalIndexAtTime(lap.startTime);
+  const last = findGlobalIndexAtTime(lap.endTime);
+  const points = [];
+  let previousTime = -Infinity;
+  for (let index = first; index <= last; index += 1) {
+    const time = Number(globalData[index]?.time_sec);
+    if (!Number.isFinite(time) || time - previousTime < 0.015) continue;
+    const gx = page4SeriesValue(PAGE4_CHART_SPECS[5].series[0], globalData[index], index);
+    const gy = page4SeriesValue(PAGE4_CHART_SPECS[5].series[1], globalData[index], index);
+    if (!Number.isFinite(gx) || !Number.isFinite(gy)) continue;
+    points.push({ x: size * (0.5 - Math.max(-2, Math.min(2, gy)) * 0.22), y: size * (0.5 - Math.max(-2, Math.min(2, gx)) * 0.22) });
+    previousTime = time;
+  }
+  if (!points.length) return;
+  ctx.beginPath();
+  points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+  ctx.strokeStyle = 'rgba(249,115,22,.38)';
+  ctx.lineWidth = 1.25;
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(249,115,22,.32)';
+  points.forEach(point => { ctx.beginPath(); ctx.arc(point.x, point.y, 1.15, 0, Math.PI * 2); ctx.fill(); });
 }
 
 function refreshPage4VisibleRange(startTime, endTime) {
@@ -3129,6 +3166,7 @@ function switchTab(mode) {
           c.update();
         }
       });
+      drawPage4GTrace();
       drawCssIntersectionDots(currentCursorIndex);
     }, 50);
   }
