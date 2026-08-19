@@ -20,6 +20,7 @@ let page4Charts = [];
 let page4PlaybackActive = false;
 let page4PlaybackFrame = 0;
 let page4PlaybackLastStamp = 0;
+let page4PointerDragging = null;
 let page4RangeStart = 0;
 let page4RangeEnd = 0;
 let page4ViewStart = 0;
@@ -1589,6 +1590,37 @@ function buildPage4WorkspaceCharts(S, makeCommonOptions) {
       })) },
       options
     });
+    const scrub = event => {
+      const area = chart.chartArea;
+      const xScale = chart.scales?.x;
+      if (!area || !xScale) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.max(area.left, Math.min(area.right, event.clientX - rect.left));
+      setPage4Playback(false);
+      updatePage4PlaybackCursor(xScale.getValueForPixel(x));
+    };
+    const previousScrub = canvas._page4ScrubHandlers;
+    if (previousScrub) {
+      canvas.removeEventListener('pointerdown', previousScrub.down);
+      canvas.removeEventListener('pointermove', previousScrub.move);
+      canvas.removeEventListener('pointerup', previousScrub.stop);
+      canvas.removeEventListener('pointercancel', previousScrub.stop);
+    }
+    const down = event => {
+      page4PointerDragging = canvas;
+      canvas.setPointerCapture?.(event.pointerId);
+      scrub(event);
+    };
+    const move = event => { if (page4PointerDragging === canvas) scrub(event); };
+    const stopScrub = event => {
+      if (page4PointerDragging === canvas) page4PointerDragging = null;
+      if (canvas.hasPointerCapture?.(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+    };
+    canvas.addEventListener('pointerdown', down);
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', stopScrub);
+    canvas.addEventListener('pointercancel', stopScrub);
+    canvas._page4ScrubHandlers = { down, move, stop: stopScrub };
     const header = canvas.parentElement?.querySelector('header');
     header?.querySelector('.p4-series-toggles')?.remove();
     if (header && spec.series.length > 1) {
@@ -1811,7 +1843,9 @@ function drawPage4TrackMap(targetTime) {
   if (points.length < 2) return;
   const rect = p4TrackMap.getBoundingClientRect();
   const scale = window.devicePixelRatio || 1;
-  const width = Math.max(180, rect.width || 260), height = Math.max(130, rect.height || 180);
+  // Keep the internal bitmap square too. Hidden tabs can retain a stale
+  // intrinsic canvas ratio, which previously stretched the map after return.
+  const width = Math.max(180, rect.width || 260), height = width;
   if (p4TrackMap.width !== Math.round(width * scale) || p4TrackMap.height !== Math.round(height * scale)) {
     p4TrackMap.width = Math.round(width * scale); p4TrackMap.height = Math.round(height * scale);
   }
@@ -3214,6 +3248,7 @@ function switchTab(mode) {
         }
       });
       drawPage4GTrace();
+      drawPage4TrackMap(page4CursorTime);
       drawCssIntersectionDots(currentCursorIndex);
     }, 50);
   }
@@ -5031,6 +5066,7 @@ function renderMotecCharts(data) {
           (e.chart.canvas.id === 'chart-imu-accel' || e.chart.canvas.id === 'chart-imu-gyro')) {
         return;
       }
+      if (page4Charts.some(chart => chart?.canvas === e.chart.canvas)) return;
       const allCharts = {
         chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
         diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,

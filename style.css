@@ -541,7 +541,7 @@ body {
 .p4-steering-widget svg { color:#374151; }
 .p4-steering-widget span b { color:#db2777; font-size:12px; }
 .p4-track-card { display:flex; flex-direction:column; justify-content:center; }
-.p4-track-card canvas { flex:none; width:100%; height:auto !important; min-height:0; aspect-ratio:1 / 1; margin:0 auto; border-radius:5px; background:#101827; }
+.p4-track-card canvas { display:block; flex:none; width:100%; height:auto !important; min-height:0; aspect-ratio:1 / 1; margin:0 auto; border-radius:5px; background:#101827; }
 .p4-track-card small { margin-top:3px; color:#f97316; font:900 10px var(--font-mono); text-align:center; }
 body.dark-mode .lap-workspace { background:#0b1220; }
 body.dark-mode .lap-workspace-charts,body.dark-mode .lap-side-card { border-color:#334155; background:#111827; color:#e5e7eb; }
