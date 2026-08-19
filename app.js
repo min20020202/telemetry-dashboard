@@ -1736,7 +1736,8 @@ function page4LapBoundaries(lapIndex) {
   if (!lap) return [];
   const boundaries = [{ label: 'START', time: lap.startTime }];
   gpsCheckpoints.forEach((checkpoint, index) => {
-    const crossing = findGpsLineCrossings(checkpoint, 3).find(item => item.time > lap.startTime + 0.05 && item.time < lap.endTime - 0.05);
+    const crossings = findGpsLineCrossings(checkpoint, 0.1);
+    const crossing = crossings.find(item => item.time > lap.startTime + 0.02 && item.time < lap.endTime - 0.02);
     if (crossing) boundaries.push({ label: `CP${index + 1}`, time: crossing.time });
   });
   boundaries.sort((a, b) => a.time - b.time);
@@ -1771,9 +1772,11 @@ function refreshPage4SectorOptions() {
 function applyPage4Selection() {
   const boundaries = page4LapBoundaries(page4SelectedLapIndex);
   if (!boundaries.length || !page4Charts.length) return;
+  const lap = gpsLapResults[page4SelectedLapIndex];
   let startIndex = Number(p4SectorStart?.value) || 0;
   let endIndex = Number(p4SectorEnd?.value);
-  if (!Number.isInteger(endIndex)) endIndex = boundaries.length - 1;
+  if (!Number.isInteger(endIndex) || endIndex >= boundaries.length) endIndex = boundaries.length - 1;
+  if (startIndex >= boundaries.length) startIndex = 0;
   if (endIndex <= startIndex) {
     endIndex = Math.min(boundaries.length - 1, startIndex + 1);
     if (endIndex <= startIndex) startIndex = Math.max(0, endIndex - 1);
@@ -1784,17 +1787,22 @@ function applyPage4Selection() {
   if (p4SectorEnd) p4SectorEnd.blur();
   if (p4LapSelect) p4LapSelect.blur();
 
-  const startTime = boundaries[startIndex].time;
-  const endTime = boundaries[endIndex].time;
+  const rawStart = boundaries[startIndex]?.time;
+  const rawEnd = boundaries[endIndex]?.time;
+  const startTime = Number.isFinite(rawStart) ? rawStart : (lap ? lap.startTime : 0);
+  const endTime = Number.isFinite(rawEnd) ? rawEnd : (lap ? lap.endTime : startTime + 1);
+
   setPage4Playback(false);
   page4RangeStart = startTime;
-  page4RangeEnd = endTime;
+  page4RangeEnd = Math.max(startTime + 0.05, endTime);
   page4ViewStart = startTime;
-  page4ViewEnd = endTime;
-  refreshPage4VisibleRange(startTime, endTime);
-  if (p4SectorStatus) p4SectorStatus.textContent = `${boundaries[startIndex].label} → ${boundaries[endIndex].label} · ${(endTime - startTime).toFixed(3)}초`;
-  if (p4PlayTimeline) { p4PlayTimeline.min = String(startTime); p4PlayTimeline.max = String(endTime); p4PlayTimeline.step = '0.01'; }
-  updatePage4PlaybackCursor(startTime);
+  page4ViewEnd = page4RangeEnd;
+  refreshPage4VisibleRange(startTime, page4RangeEnd);
+  const startLabel = boundaries[startIndex]?.label || 'START';
+  const endLabel = boundaries[endIndex]?.label || 'FINISH';
+  if (p4SectorStatus) p4SectorStatus.textContent = `${startLabel} → ${endLabel} · ${(page4RangeEnd - page4RangeStart).toFixed(3)}초`;
+  if (p4PlayTimeline) { p4PlayTimeline.min = String(page4RangeStart); p4PlayTimeline.max = String(page4RangeEnd); p4PlayTimeline.step = '0.01'; }
+  updatePage4PlaybackCursor(page4RangeStart);
   drawPage4GTrace();
 }
 
@@ -4089,12 +4097,11 @@ function setGpsPlayback(shouldPlay) {
     const rate = Number(gpsPlayRate ? gpsPlayRate.value : 1) || 1;
     gpsPlaybackCursorSec += (elapsedMs / 1000) * rate;
     if (gpsPlaybackCursorSec >= playbackEndTime) {
-      updateGpsCursorAtTime(playbackEndTime);
-      setGpsPlayback(false);
-      return;
+      gpsPlaybackCursorSec = minTime;
+      updateGpsCursorAtTime(minTime, true);
+    } else {
+      updateGpsCursorAtTime(gpsPlaybackCursorSec, true);
     }
-
-    updateGpsCursorAtTime(gpsPlaybackCursorSec, true);
     gpsPlaybackFrame = requestAnimationFrame(playbackStep);
   };
 
