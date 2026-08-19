@@ -17,6 +17,12 @@ let chartRR = null;
 let chartCoolantOil = null;
 let chartIntakeEcu = null;
 let page4Charts = [];
+let page4PlaybackActive = false;
+let page4PlaybackFrame = 0;
+let page4PlaybackLastStamp = 0;
+let page4RangeStart = 0;
+let page4RangeEnd = 0;
+let page4CursorTime = 0;
 let page4SelectedLapIndex = -1;
 
 // Global state variables for Page 3 IMU charts
@@ -120,6 +126,11 @@ const p4SectorStatus = document.getElementById('p4-sector-status');
 const p4TrackMap = document.getElementById('p4-track-map');
 const p4TrackTime = document.getElementById('p4-track-time');
 const p4GDot = document.getElementById('p4-g-dot');
+const p4PlayToggle = document.getElementById('p4-play-toggle');
+const p4PlayRate = document.getElementById('p4-play-rate');
+const p4PlayTimeline = document.getElementById('p4-play-timeline');
+const p4PlayTime = document.getElementById('p4-play-time');
+const p4SteeringWheel = document.getElementById('p4-steering-wheel');
 
 // GPS DOMs
 const cursorGpsCoords = document.getElementById('cursor-gps-coords');
@@ -1523,17 +1534,26 @@ const PAGE4_CHART_SPECS = [
   ]},
   { id: 'p4-chart-steering-yaw', min: -250, max: 250, series: [
     ['Steering', '#db2777', r => getCalibratedSteering(r.steering_raw), 'y'],
-    ['Yaw Rate', '#22c55e', r => Number(r.imu_gyro_z_dps) || 0, 'y2', [7, 4]]
+    ['Yaw Rate', '#22c55e', r => Number(r.imu_gyro_z_dps) || 0, 'y2', [7, 4], 'imu_gz']
   ], second: [-100, 100]},
   { id: 'p4-chart-imu', min: -2.5, max: 2.5, series: [
-    ['Longitudinal G', '#f97316', r => Number(r.imu_accel_x_g) || 0],
-    ['Lateral G', '#2563eb', r => Number(r.imu_accel_y_g) || 0]
+    ['Longitudinal G', '#f97316', r => Number(r.imu_accel_x_g) || 0, 'y', [], 'imu_ax'],
+    ['Lateral G', '#2563eb', r => Number(r.imu_accel_y_g) || 0, 'y', [], 'imu_ay']
   ]},
   { id: 'p4-chart-temp', min: 0, max: 130, series: [
     ['Coolant', '#2563eb', r => Number(r.water_c) || 0],
     ['Oil', '#f97316', r => Number(r.oil_c) || 0]
   ]}
 ];
+
+function page4SeriesValue(series, row, globalIndex) {
+  const channelKey = series[5];
+  if (channelKey && typeof channelValueAt === 'function' && Number.isInteger(globalIndex)) {
+    const filtered = channelValueAt(channelKey, globalIndex);
+    if (Number.isFinite(filtered)) return filtered;
+  }
+  return series[2](row);
+}
 
 function buildPage4WorkspaceCharts(S, makeCommonOptions) {
   page4Charts.forEach(chart => chart?.destroy());
@@ -1546,10 +1566,10 @@ function buildPage4WorkspaceCharts(S, makeCommonOptions) {
     if (spec.second) options.scales.y2 = { position: 'right', min: spec.second[0], max: spec.second[1], display: false, grid: { display: false } };
     return new Chart(canvas.getContext('2d'), {
       type: 'line',
-      data: { datasets: spec.series.map(([label, color, getter, axis, dash]) => ({
-        label, data: activeSampledData.map(row => ({ x: row.time_sec, y: getter(row) })),
-        borderColor: color, borderWidth: 1.35, borderDash: dash || [], pointRadius: 0,
-        stepped: spec.stepped ? 'before' : false, fill: false, yAxisID: axis || 'y'
+      data: { datasets: spec.series.map((series) => ({
+        label: series[0], data: activeSampledData.map((row, index) => ({ x: row.time_sec, y: page4SeriesValue(series, row, sampleIndices[index]) })),
+        borderColor: series[1], borderWidth: 1.35, borderDash: series[4] || [], pointRadius: 0,
+        stepped: spec.stepped ? 'before' : false, fill: false, yAxisID: series[3] || 'y'
       })) },
       options
     });
@@ -1613,17 +1633,51 @@ function applyPage4Selection() {
     const chart = page4Charts[chartIndex];
     if (!chart) return;
     spec.series.forEach((series, datasetIndex) => {
-      chart.data.datasets[datasetIndex].data = relativeIndices.map(index => ({ x: globalData[index].time_sec, y: series[2](globalData[index]) }));
+      chart.data.datasets[datasetIndex].data = relativeIndices.map(index => ({ x: globalData[index].time_sec, y: page4SeriesValue(series, globalData[index], index) }));
     });
     chart.options.scales.x.min = startTime;
     chart.options.scales.x.max = endTime;
     chart.update('none');
   });
   if (p4SectorStatus) p4SectorStatus.textContent = `${boundaries[startIndex].label} → ${boundaries[endIndex].label} · ${(endTime - startTime).toFixed(3)}초`;
-  preciseCursorTimeSec = startTime;
-  currentCursorIndex = findSampleIndexAtTime(startTime);
-  const row = globalData[findGlobalIndexAtTime(startTime)];
-  if (row) updateNumericDisplays(row, null, startTime);
+  setPage4Playback(false);
+  page4RangeStart = startTime;
+  page4RangeEnd = endTime;
+  if (p4PlayTimeline) { p4PlayTimeline.min = String(startTime); p4PlayTimeline.max = String(endTime); p4PlayTimeline.step = '0.01'; }
+  updatePage4PlaybackCursor(startTime);
+}
+
+function updatePage4PlaybackCursor(targetTime) {
+  if (!globalData.length) return;
+  page4CursorTime = Math.max(page4RangeStart, Math.min(page4RangeEnd, Number(targetTime) || page4RangeStart));
+  preciseCursorTimeSec = page4CursorTime;
+  currentCursorIndex = findSampleIndexAtTime(page4CursorTime);
+  if (p4PlayTimeline) p4PlayTimeline.value = String(page4CursorTime);
+  if (p4PlayTime) p4PlayTime.textContent = `${(page4CursorTime - page4RangeStart).toFixed(3)} s`;
+  const row = globalData[findGlobalIndexAtTime(page4CursorTime)];
+  if (row) updateNumericDisplays(row, null, page4CursorTime);
+  drawCssIntersectionDots(currentCursorIndex, page4Charts, page4CursorTime);
+}
+
+function setPage4Playback(active) {
+  cancelAnimationFrame(page4PlaybackFrame);
+  page4PlaybackFrame = 0;
+  page4PlaybackActive = Boolean(active && page4RangeEnd > page4RangeStart);
+  page4PlaybackLastStamp = 0;
+  if (p4PlayToggle) p4PlayToggle.textContent = page4PlaybackActive ? 'Ⅱ 일시정지' : '▶ 재생';
+  if (!page4PlaybackActive) return;
+  if (page4CursorTime >= page4RangeEnd - 0.001) updatePage4PlaybackCursor(page4RangeStart);
+  const tick = stamp => {
+    if (!page4PlaybackActive) return;
+    if (page4PlaybackLastStamp) {
+      const rate = Number(p4PlayRate?.value) || 1;
+      updatePage4PlaybackCursor(page4CursorTime + Math.min(0.1, (stamp - page4PlaybackLastStamp) / 1000) * rate);
+      if (page4CursorTime >= page4RangeEnd - 0.001) { setPage4Playback(false); return; }
+    }
+    page4PlaybackLastStamp = stamp;
+    page4PlaybackFrame = requestAnimationFrame(tick);
+  };
+  page4PlaybackFrame = requestAnimationFrame(tick);
 }
 
 function drawPage4TrackMap(targetTime) {
@@ -1653,18 +1707,24 @@ function updatePage4Widgets(row) {
   const set = (id, text) => { const element = document.getElementById(id); if (element) element.textContent = text; };
   const speed = Number(row.gps_speed_kmh) || 0, rpm = Number(row.rpm) || 0, tps = Number(row.decoded_tps) || 0;
   const brake = getCalibratedBrake(row.front_brake_raw), steering = getCalibratedSteering(row.steering_raw);
-  const yaw = Number(row.imu_gyro_z_dps) || 0, gx = Number(row.imu_accel_x_g) || 0, gy = Number(row.imu_accel_y_g) || 0;
+  const rowIndex = findGlobalIndexAtTime(Number(row.time_sec));
+  const yaw = page4SeriesValue(PAGE4_CHART_SPECS[4].series[1], row, rowIndex);
+  const gx = page4SeriesValue(PAGE4_CHART_SPECS[5].series[0], row, rowIndex), gy = page4SeriesValue(PAGE4_CHART_SPECS[5].series[1], row, rowIndex);
   set('p4-speed', `${speed.toFixed(1)} km/h`); set('p4-rpm-tps', `${Math.round(rpm)} rpm · ${tps.toFixed(1)}%`);
   set('p4-gear', Number(row.gear) > 0 ? String(Math.round(row.gear)) : 'N'); set('p4-pedals', `T ${tps.toFixed(1)} · B ${brake.toFixed(1)}%`);
   set('p4-steering-yaw', `${steering.toFixed(1)}° · ${yaw.toFixed(1)}°/s`); set('p4-imu', `X ${gx.toFixed(2)} · Y ${gy.toFixed(2)} g`);
   set('p4-temp', `${Math.round(Number(row.water_c) || 0)} · ${Math.round(Number(row.oil_c) || 0)} °C`); set('p4-gx', gx.toFixed(2)); set('p4-gy', gy.toFixed(2));
   if (p4GDot) { p4GDot.style.left = `${50 + Math.max(-2, Math.min(2, gy)) * 22}%`; p4GDot.style.top = `${50 - Math.max(-2, Math.min(2, gx)) * 22}%`; }
+  set('p4-steering-value', `${steering >= 0 ? '+' : ''}${steering.toFixed(1)}°`);
+  if (p4SteeringWheel) p4SteeringWheel.style.transform = `rotate(${-steering}deg)`;
   drawPage4TrackMap(Number(row.time_sec));
 }
 
 p4LapSelect?.addEventListener('change', () => { page4SelectedLapIndex = Number(p4LapSelect.value); refreshPage4SectorOptions(); });
 p4SectorStart?.addEventListener('change', applyPage4Selection);
 p4SectorEnd?.addEventListener('change', applyPage4Selection);
+p4PlayToggle?.addEventListener('click', () => setPage4Playback(!page4PlaybackActive));
+p4PlayTimeline?.addEventListener('input', () => { setPage4Playback(false); updatePage4PlaybackCursor(Number(p4PlayTimeline.value)); });
 
 function syncGpsTimelineRange(minTime, maxTime, value) {
   const safeValue = Math.max(minTime, Math.min(maxTime, Number(value) || minTime));
@@ -2897,6 +2957,7 @@ document.addEventListener('keydown', (event) => {
 
 function switchTab(mode) {
   if (mode !== 'gps' && gpsPlaybackActive) setGpsPlayback(false);
+  if (mode !== 'temperature' && page4PlaybackActive) setPage4Playback(false);
 
   // Remove active from all tabs and pages
   tabGeneral.classList.remove('active');
@@ -3814,6 +3875,7 @@ function applyGpsImuLowPassFilter() {
     recomputeChannel(key);
   });
   refreshChartsAfterFilter();
+  if (page4Charts.length && page4SelectedLapIndex >= 0) applyPage4Selection();
   updateGpsCursorAtTime(Number(scrollBar.value) || 0);
 }
 
@@ -4349,6 +4411,7 @@ function initDataAndDashboard() {
 
   // 최초 1회 전체 차트 생성 기동
   renderMotecCharts(activeSampledData);
+  if (gpsImuLpf?.checked) applyGpsImuLowPassFilter();
   currentCursorIndex = 0;
   preciseCursorTimeSec = Number(activeSampledData[0]?.time_sec) || 0;
   if (activeSampledData[0]) updateNumericDisplays(activeSampledData[0]);
@@ -5220,7 +5283,9 @@ window.addEventListener('keydown', (e) => {
   // full-view reset shortcut.
   else if (key === ' ' || key === 'Spacebar') {
     e.preventDefault();
-    if (tabGps && tabGps.classList.contains('active')) {
+    if (tabTemperature && tabTemperature.classList.contains('active')) {
+      if (!e.repeat) setPage4Playback(!page4PlaybackActive);
+    } else if (tabGps && tabGps.classList.contains('active')) {
       if (!e.repeat) setGpsPlayback(!gpsPlaybackActive);
     } else {
       applyZoomRange(0, totalDurationSec);
