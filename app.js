@@ -5543,7 +5543,7 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (tabTemperature?.classList.contains('active')) {
       setPage4Playback(false);
-      const targetTime = Math.max(page4RangeStart, page4CursorTime - (e.shiftKey ? 0.1 : 0.01));
+      const targetTime = Math.max(page4RangeStart, page4CursorTime - (e.shiftKey ? 0.01 : 0.1));
       keepPage4CursorInView(targetTime, -1);
       updatePage4PlaybackCursor(targetTime);
     } else moveChartCursorByKeyboard(-1, e);
@@ -5551,7 +5551,7 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (tabTemperature?.classList.contains('active')) {
       setPage4Playback(false);
-      const targetTime = Math.min(page4RangeEnd, page4CursorTime + (e.shiftKey ? 0.1 : 0.01));
+      const targetTime = Math.min(page4RangeEnd, page4CursorTime + (e.shiftKey ? 0.01 : 0.1));
       keepPage4CursorInView(targetTime, 1);
       updatePage4PlaybackCursor(targetTime);
     } else moveChartCursorByKeyboard(1, e);
