@@ -16,6 +16,8 @@ let chartRR = null;
 // Global state variables for Page 4 charts
 let chartCoolantOil = null;
 let chartIntakeEcu = null;
+let page4Charts = [];
+let page4SelectedLapIndex = -1;
 
 // Global state variables for Page 3 IMU charts
 let chartImuAccel = null;
@@ -111,6 +113,13 @@ const tempMaxCoolant = document.getElementById('temp-max-coolant');
 const tempMaxOil = document.getElementById('temp-max-oil');
 const tempMaxIat = document.getElementById('temp-max-iat');
 const tempMaxEcu = document.getElementById('temp-max-ecu');
+const p4LapSelect = document.getElementById('p4-lap-select');
+const p4SectorStart = document.getElementById('p4-sector-start');
+const p4SectorEnd = document.getElementById('p4-sector-end');
+const p4SectorStatus = document.getElementById('p4-sector-status');
+const p4TrackMap = document.getElementById('p4-track-map');
+const p4TrackTime = document.getElementById('p4-track-time');
+const p4GDot = document.getElementById('p4-g-dot');
 
 // GPS DOMs
 const cursorGpsCoords = document.getElementById('cursor-gps-coords');
@@ -1245,6 +1254,7 @@ function handleGpsCheckpointMapClick(event) {
   drawGpsCheckpoints();
   saveGpsFixedLines();
   renderGpsSectorComparison();
+  refreshPage4Selectors();
   setGpsLapStatus(`CP${gpsCheckpoints.length} 저장 완료 · 다음 체크포인트는 주행 순서대로 추가하십시오.`, 'ok');
 }
 
@@ -1496,6 +1506,165 @@ function drawGpsHandlingEvents() {
     L.polyline(coords, { color: event.type === 'under' ? '#2563eb' : '#ef4444', weight: 9, opacity: 0.88, interactive: false }).addTo(gpsHandlingLayer);
   });
 }
+
+const PAGE4_CHART_SPECS = [
+  { id: 'p4-chart-speed', min: 0, series: [
+    ['GPS Speed', '#f97316', r => Number(r.gps_speed_kmh) || 0],
+    ['FL Wheel', '#2563eb', r => Number(r.fl_speed_kmh) || 0]
+  ]},
+  { id: 'p4-chart-rpm-tps', min: 0, series: [
+    ['RPM', '#dc2626', r => Number(r.rpm) || 0, 'y'],
+    ['TPS', '#16a34a', r => Number(r.decoded_tps) || 0, 'y2']
+  ], second: [0, 100]},
+  { id: 'p4-chart-gear', min: 0, max: 6, stepped: true, series: [['Gear', '#7c3aed', r => Number(r.gear) || 0]] },
+  { id: 'p4-chart-pedals', min: 0, max: 100, series: [
+    ['TPS', '#16a34a', r => Number(r.decoded_tps) || 0],
+    ['Brake', '#ef4444', r => getCalibratedBrake(r.front_brake_raw)]
+  ]},
+  { id: 'p4-chart-steering-yaw', min: -250, max: 250, series: [
+    ['Steering', '#db2777', r => getCalibratedSteering(r.steering_raw), 'y'],
+    ['Yaw Rate', '#22c55e', r => Number(r.imu_gyro_z_dps) || 0, 'y2', [7, 4]]
+  ], second: [-100, 100]},
+  { id: 'p4-chart-imu', min: -2.5, max: 2.5, series: [
+    ['Longitudinal G', '#f97316', r => Number(r.imu_accel_x_g) || 0],
+    ['Lateral G', '#2563eb', r => Number(r.imu_accel_y_g) || 0]
+  ]},
+  { id: 'p4-chart-temp', min: 0, max: 130, series: [
+    ['Coolant', '#2563eb', r => Number(r.water_c) || 0],
+    ['Oil', '#f97316', r => Number(r.oil_c) || 0]
+  ]}
+];
+
+function buildPage4WorkspaceCharts(S) {
+  page4Charts.forEach(chart => chart?.destroy());
+  page4Charts = PAGE4_CHART_SPECS.map((spec, chartIndex) => {
+    const canvas = document.getElementById(spec.id);
+    if (!canvas) return null;
+    const options = getCommonOptions(spec.min, spec.max);
+    options.plugins.legend = { display: false };
+    options.scales.x.ticks.display = chartIndex === PAGE4_CHART_SPECS.length - 1;
+    if (spec.second) options.scales.y2 = { position: 'right', min: spec.second[0], max: spec.second[1], display: false, grid: { display: false } };
+    return new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: { datasets: spec.series.map(([label, color, getter, axis, dash]) => ({
+        label, data: activeSampledData.map(row => ({ x: row.time_sec, y: getter(row) })),
+        borderColor: color, borderWidth: 1.35, borderDash: dash || [], pointRadius: 0,
+        stepped: spec.stepped ? 'before' : false, fill: false, yAxisID: axis || 'y'
+      })) },
+      options
+    });
+  }).filter(Boolean);
+  refreshPage4Selectors();
+}
+
+function page4LapBoundaries(lapIndex) {
+  const lap = gpsLapResults[lapIndex];
+  if (!lap) return [];
+  const boundaries = [{ label: 'START', time: lap.startTime }];
+  gpsCheckpoints.forEach((checkpoint, index) => {
+    const crossing = findGpsLineCrossings(checkpoint, 3).find(item => item.time > lap.startTime + 0.05 && item.time < lap.endTime - 0.05);
+    if (crossing) boundaries.push({ label: `CP${index + 1}`, time: crossing.time });
+  });
+  boundaries.sort((a, b) => a.time - b.time);
+  boundaries.push({ label: 'FINISH', time: lap.endTime });
+  return boundaries;
+}
+
+function refreshPage4Selectors() {
+  if (!p4LapSelect) return;
+  const previous = Number(p4LapSelect.value);
+  p4LapSelect.innerHTML = gpsLapResults.length
+    ? gpsLapResults.map((lap, index) => `<option value="${index}">LAP ${lap.number} · ${formatLapTime(lap.duration)}</option>`).join('')
+    : '<option value="">GPS 페이지에서 피니시라인을 설정하세요</option>';
+  page4SelectedLapIndex = gpsLapResults.length ? (Number.isInteger(previous) && gpsLapResults[previous] ? previous : 0) : -1;
+  if (page4SelectedLapIndex >= 0) p4LapSelect.value = String(page4SelectedLapIndex);
+  refreshPage4SectorOptions();
+}
+
+function refreshPage4SectorOptions() {
+  if (!p4SectorStart || !p4SectorEnd) return;
+  const boundaries = page4LapBoundaries(page4SelectedLapIndex);
+  const options = boundaries.map((point, index) => `<option value="${index}">${point.label}</option>`).join('');
+  p4SectorStart.innerHTML = options;
+  p4SectorEnd.innerHTML = options;
+  if (boundaries.length) p4SectorEnd.value = String(boundaries.length - 1);
+  applyPage4Selection();
+}
+
+function applyPage4Selection() {
+  const boundaries = page4LapBoundaries(page4SelectedLapIndex);
+  if (!boundaries.length || !page4Charts.length) return;
+  let startIndex = Number(p4SectorStart?.value) || 0;
+  let endIndex = Number(p4SectorEnd?.value);
+  if (!Number.isInteger(endIndex)) endIndex = boundaries.length - 1;
+  if (endIndex <= startIndex) {
+    endIndex = Math.min(boundaries.length - 1, startIndex + 1);
+    if (endIndex <= startIndex) startIndex = Math.max(0, endIndex - 1);
+    if (p4SectorStart) p4SectorStart.value = String(startIndex);
+    if (p4SectorEnd) p4SectorEnd.value = String(endIndex);
+  }
+  const startTime = boundaries[startIndex].time;
+  const endTime = boundaries[endIndex].time;
+  const first = findGlobalIndexAtTime(startTime);
+  const last = findGlobalIndexAtTime(endTime);
+  const count = Math.max(1, last - first + 1);
+  const relativeIndices = downsampleIndices(count, 4500).map(index => first + index);
+  PAGE4_CHART_SPECS.forEach((spec, chartIndex) => {
+    const chart = page4Charts[chartIndex];
+    if (!chart) return;
+    spec.series.forEach((series, datasetIndex) => {
+      chart.data.datasets[datasetIndex].data = relativeIndices.map(index => ({ x: globalData[index].time_sec, y: series[2](globalData[index]) }));
+    });
+    chart.options.scales.x.min = startTime;
+    chart.options.scales.x.max = endTime;
+    chart.update('none');
+  });
+  if (p4SectorStatus) p4SectorStatus.textContent = `${boundaries[startIndex].label} → ${boundaries[endIndex].label} · ${(endTime - startTime).toFixed(3)}초`;
+  preciseCursorTimeSec = startTime;
+  currentCursorIndex = findSampleIndexAtTime(startTime);
+  const row = globalData[findGlobalIndexAtTime(startTime)];
+  if (row) updateNumericDisplays(row, null, startTime);
+}
+
+function drawPage4TrackMap(targetTime) {
+  if (!p4TrackMap || page4SelectedLapIndex < 0) return;
+  const lap = gpsLapResults[page4SelectedLapIndex];
+  const points = gpsLapPoints.filter(point => point.time >= lap.startTime && point.time <= lap.endTime);
+  if (points.length < 2) return;
+  const rect = p4TrackMap.getBoundingClientRect();
+  const scale = window.devicePixelRatio || 1;
+  const width = Math.max(180, rect.width || 260), height = Math.max(130, rect.height || 180);
+  if (p4TrackMap.width !== Math.round(width * scale) || p4TrackMap.height !== Math.round(height * scale)) {
+    p4TrackMap.width = Math.round(width * scale); p4TrackMap.height = Math.round(height * scale);
+  }
+  const ctx = p4TrackMap.getContext('2d'); ctx.setTransform(scale, 0, 0, scale, 0, 0); ctx.clearRect(0, 0, width, height);
+  const minLon = Math.min(...points.map(p => p.lon)), maxLon = Math.max(...points.map(p => p.lon));
+  const minLat = Math.min(...points.map(p => p.lat)), maxLat = Math.max(...points.map(p => p.lat));
+  const project = point => ({ x: 14 + (point.lon - minLon) / Math.max(1e-9, maxLon - minLon) * (width - 28), y: height - 14 - (point.lat - minLat) / Math.max(1e-9, maxLat - minLat) * (height - 28) });
+  ctx.beginPath(); points.forEach((point, index) => { const p = project(point); index ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
+  ctx.strokeStyle = '#64748b'; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+  const position = getGpsLapPositionAtTime(lap, Math.max(lap.startTime, Math.min(lap.endTime, targetTime)));
+  if (position) { const p = project(position); ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fillStyle = '#f97316'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke(); }
+  if (p4TrackTime) p4TrackTime.textContent = formatLapTime(Math.max(0, Math.min(lap.duration, targetTime - lap.startTime)));
+}
+
+function updatePage4Widgets(row) {
+  if (!row) return;
+  const set = (id, text) => { const element = document.getElementById(id); if (element) element.textContent = text; };
+  const speed = Number(row.gps_speed_kmh) || 0, rpm = Number(row.rpm) || 0, tps = Number(row.decoded_tps) || 0;
+  const brake = getCalibratedBrake(row.front_brake_raw), steering = getCalibratedSteering(row.steering_raw);
+  const yaw = Number(row.imu_gyro_z_dps) || 0, gx = Number(row.imu_accel_x_g) || 0, gy = Number(row.imu_accel_y_g) || 0;
+  set('p4-speed', `${speed.toFixed(1)} km/h`); set('p4-rpm-tps', `${Math.round(rpm)} rpm · ${tps.toFixed(1)}%`);
+  set('p4-gear', Number(row.gear) > 0 ? String(Math.round(row.gear)) : 'N'); set('p4-pedals', `T ${tps.toFixed(1)} · B ${brake.toFixed(1)}%`);
+  set('p4-steering-yaw', `${steering.toFixed(1)}° · ${yaw.toFixed(1)}°/s`); set('p4-imu', `X ${gx.toFixed(2)} · Y ${gy.toFixed(2)} g`);
+  set('p4-temp', `${Math.round(Number(row.water_c) || 0)} · ${Math.round(Number(row.oil_c) || 0)} °C`); set('p4-gx', gx.toFixed(2)); set('p4-gy', gy.toFixed(2));
+  if (p4GDot) { p4GDot.style.left = `${50 + Math.max(-2, Math.min(2, gy)) * 22}%`; p4GDot.style.top = `${50 - Math.max(-2, Math.min(2, gx)) * 22}%`; }
+  drawPage4TrackMap(Number(row.time_sec));
+}
+
+p4LapSelect?.addEventListener('change', () => { page4SelectedLapIndex = Number(p4LapSelect.value); refreshPage4SectorOptions(); });
+p4SectorStart?.addEventListener('change', applyPage4Selection);
+p4SectorEnd?.addEventListener('change', applyPage4Selection);
 
 function syncGpsTimelineRange(minTime, maxTime, value) {
   const safeValue = Math.max(minTime, Math.min(maxTime, Number(value) || minTime));
@@ -1928,6 +2097,7 @@ function renderGpsLapResults(crossings, laps) {
     ? lapDistances.reduce((sum, distance) => sum + distance, 0) / lapDistances.length
     : NaN;
   renderFullscreenLapTimes(laps, best);
+  refreshPage4Selectors();
   if (gpsLapBestTime) gpsLapBestTime.textContent = formatLapTime(best);
   if (gpsLapAverageDistance) gpsLapAverageDistance.textContent = formatGpsLapDistance(averageDistance);
   if (gpsLapFixSummary) {
@@ -2230,6 +2400,7 @@ function clearGpsLapAnalysis(removeSaved = false) {
   if (gpsGoProSourceType || gpsGoProMatched) closeGoProVideo();
   closeYouTubeDialog();
   gpsLapResults = [];
+  refreshPage4Selectors();
   gpsHandlingEventsData = [];
   gpsHandlingLayer?.clearLayers();
   if (gpsHandlingCard) gpsHandlingCard.hidden = true;
@@ -2588,7 +2759,7 @@ function updateChartsTheme() {
   const targetCharts = [
     chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
     diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
-    chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
+    chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro, ...page4Charts
   ];
   targetCharts.forEach(chart => {
     if (!chart) return;
@@ -2831,10 +3002,10 @@ function switchTab(mode) {
     if (tabTemperature) tabTemperature.classList.add('active');
     if (pageTemperature) pageTemperature.classList.add('active');
     if (lblScrollType) {
-      lblScrollType.textContent = '🌡️ 온도 그래프 좌우 스크롤:';
+      lblScrollType.textContent = '🏁 선택 구간 커서:';
     }
     setTimeout(() => {
-      [chartCoolantOil, chartIntakeEcu].forEach(c => {
+      page4Charts.forEach(c => {
         if (c) {
           c.resize();
           c.update();
@@ -3042,7 +3213,7 @@ function drawCssIntersectionDots(index, chartSubset = null, targetTimeOverride =
   const targetCharts = chartSubset || [
     chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
     diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
-    chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
+    chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro, ...page4Charts
   ];
   
   targetCharts.forEach(chart => {
@@ -3756,6 +3927,7 @@ function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverr
     }
     currentTimeVal.textContent = timeText;
   }
+  updatePage4Widgets(row);
 
   if (scrollBar && tabGps && tabGps.classList.contains('active')) {
     scrollBar.value = displayTime.toFixed(2);
@@ -4902,96 +5074,8 @@ function renderMotecCharts(data) {
   bindGpsImuDragCursor(chartImuAccel);
   bindGpsImuDragCursor(chartImuGyro);
 
-  // ==================== PAGE 4 TEMPERATURE CHARTS ====================
-  const temperatureOptions = getCommonOptions(0, 130, { stepSize: 10 });
-  temperatureOptions.scales.y.title = {
-    display: true,
-    text: 'Temperature [°C]',
-    color: tickColor
-  };
-  temperatureOptions.scales.ySpeed = {
-    type: 'linear',
-    position: 'right',
-    min: 0,
-    suggestedMax: 120,
-    grid: { drawOnChartArea: false },
-    ticks: { color: tickColor, font: { family: 'JetBrains Mono', size: 9 } },
-    title: {
-      display: true,
-      text: 'FL Wheel Speed [km/h]',
-      color: tickColor
-    }
-  };
-  temperatureOptions.plugins.legend = {
-    display: true,
-    position: 'top',
-    labels: { color: tickColor, boxWidth: 18, font: { family: 'JetBrains Mono', size: 10 } }
-  };
-  chartCoolantOil = new Chart(document.getElementById('chart-coolant-oil').getContext('2d'), {
-    type: 'line',
-    data: {
-      datasets: [
-        {
-          label: 'Coolant',
-          data: S('water', r => r.water_c),
-          borderColor: '#2563eb',
-          borderWidth: 1.6,
-          pointRadius: 0,
-          fill: false
-        },
-        {
-          label: 'Oil',
-          data: S('oil', r => r.oil_c),
-          borderColor: '#f97316',
-          borderWidth: 1.6,
-          pointRadius: 0,
-          fill: false
-        },
-        {
-          label: 'FL Wheel Speed',
-          data: S('fl_speed', r => r.fl_speed_kmh || 0),
-          yAxisID: 'ySpeed',
-          borderColor: '#06b6d4',
-          borderWidth: 1.4,
-          borderDash: [6, 3],
-          pointRadius: 0,
-          fill: false
-        }
-      ]
-    },
-    options: temperatureOptions
-  });
-
-  const environmentOptions = getCommonOptions(0, 130, { stepSize: 10 });
-  environmentOptions.plugins.legend = {
-    display: true,
-    position: 'top',
-    labels: { color: tickColor, boxWidth: 18, font: { family: 'JetBrains Mono', size: 10 } }
-  };
-  chartIntakeEcu = new Chart(document.getElementById('chart-intake-ecu').getContext('2d'), {
-    type: 'line',
-    data: {
-      datasets: [
-        {
-          label: 'Intake Air',
-          data: S('iat', r => r.iat_c),
-          borderColor: '#16a34a',
-          borderWidth: 1.6,
-          pointRadius: 0,
-          fill: false
-        },
-        {
-          label: 'ECU',
-          data: S('ecu', r => r.ecu_c),
-          borderColor: '#db2777',
-          borderWidth: 1.6,
-          pointRadius: 0,
-          fill: false
-        }
-      ]
-    },
-    options: environmentOptions
-  });
+  // ==================== PAGE 4 LAP / SECTOR WORKSPACE ====================
+  buildPage4WorkspaceCharts(S);
 
   const ctxSusFr = document.getElementById('chart-sus-fr').getContext('2d');
   chartFR = new Chart(ctxSusFr, {

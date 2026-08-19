@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260819-1">
+  <link rel="stylesheet" href="style.css?v=20260819-2">
 </head>
 <body>
 
@@ -44,7 +44,7 @@
           <button id="tab-general" class="view-tab active">1: 종합 주행 분석</button>
           <button id="tab-diagnostics" class="view-tab">2: 입력 및 서스펜션 분석</button>
           <button id="tab-gps" class="view-tab">3: GPS + IMU 주행 분석</button>
-          <button id="tab-temperature" class="view-tab">4: 냉각 및 온도 분석</button>
+          <button id="tab-temperature" class="view-tab">4: 랩 구간 분석</button>
           <button id="tab-realtime" class="view-tab">5: 실시간 텔레메트리</button>
           <button id="tab-help" class="view-tab">6: 도움말</button>
         </nav>
@@ -560,51 +560,23 @@
         </div>
       </section>
 
-      <!-- [페이지 4] EMU 냉각 및 온도 분석 -->
-      <section id="page-temperature" class="temperature-panel page-view">
-        <div class="temperature-summary-grid">
-          <div class="temperature-metric coolant">
-            <span class="temperature-metric-label">냉각수 온도 · EMU CLT</span>
-            <strong><span id="temp-cursor-coolant">--</span> °C</strong>
-            <small>최고 <span id="temp-max-coolant">--</span> °C</small>
-          </div>
-          <div class="temperature-metric oil">
-            <span class="temperature-metric-label">엔진 오일 온도 · EMU Oil Temp</span>
-            <strong><span id="temp-cursor-oil">--</span> °C</strong>
-            <small>최고 <span id="temp-max-oil">--</span> °C</small>
-          </div>
-          <div class="temperature-metric intake">
-            <span class="temperature-metric-label">Intake Air Temperature</span>
-            <strong><span id="temp-cursor-iat">--</span> °C</strong>
-            <small>최고 <span id="temp-max-iat">--</span> °C</small>
-          </div>
-          <div class="temperature-metric ecu">
-            <span class="temperature-metric-label">ECU Temperature</span>
-            <strong><span id="temp-cursor-ecu">--</span> °C</strong>
-            <small>최고 <span id="temp-max-ecu">--</span> °C</small>
-          </div>
-        </div>
-
-        <div class="temperature-chart-grid">
-          <div class="motec-chart-card temperature-chart-card">
-            <div class="chart-label-bar">
-              <span class="signal-title color-blue">Cooling System — Coolant / Oil [°C] + FL Wheel Speed [km/h]</span>
-              <span class="temperature-source">EMU 0x602 · dual axis</span>
-            </div>
-            <div class="canvas-holder">
-              <canvas id="chart-coolant-oil"></canvas>
-            </div>
-          </div>
-          <div class="motec-chart-card temperature-chart-card">
-            <div class="chart-label-bar">
-              <span class="signal-title color-orange">Thermal Environment — Intake / ECU [°C]</span>
-              <span class="temperature-source">EMU 0x600 / 0x604</span>
-            </div>
-            <div class="canvas-holder">
-              <canvas id="chart-intake-ecu"></canvas>
-            </div>
-          </div>
-        </div>
+      <!-- [페이지 4] MoTeC 스타일 랩/구간 종합 분석 -->
+      <section id="page-temperature" class="lap-workspace page-view">
+        <main class="lap-workspace-charts">
+          <div class="lap-strip"><header>1 · SPEED <output id="p4-speed">--.- km/h</output></header><canvas id="p4-chart-speed"></canvas></div>
+          <div class="lap-strip"><header>2 · RPM / TPS <output id="p4-rpm-tps">---- rpm · --.-%</output></header><canvas id="p4-chart-rpm-tps"></canvas></div>
+          <div class="lap-strip"><header>3 · GEAR <output id="p4-gear">-</output></header><canvas id="p4-chart-gear"></canvas></div>
+          <div class="lap-strip"><header>4 · TPS / BRAKE <output id="p4-pedals">T --.- · B --.-%</output></header><canvas id="p4-chart-pedals"></canvas></div>
+          <div class="lap-strip"><header>5 · STEERING / YAW RATE <output id="p4-steering-yaw">--.-° · --.-°/s</output></header><canvas id="p4-chart-steering-yaw"></canvas></div>
+          <div class="lap-strip"><header>6 · IMU LONGITUDINAL / LATERAL G <output id="p4-imu">X --.-- · Y --.-- g</output></header><canvas id="p4-chart-imu"></canvas></div>
+          <div class="lap-strip"><header>7 · COOLANT / OIL TEMPERATURE <output id="p4-temp">-- · -- °C</output></header><canvas id="p4-chart-temp"></canvas></div>
+        </main>
+        <aside class="lap-workspace-side">
+          <section class="lap-side-card"><label for="p4-lap-select">랩 선택</label><select id="p4-lap-select"><option value="">피니시라인 설정 필요</option></select></section>
+          <section class="lap-side-card lap-sector-select"><strong>분석 구간</strong><div><label>시작<select id="p4-sector-start"></select></label><span>→</span><label>종료<select id="p4-sector-end"></select></label></div><small id="p4-sector-status">랩 전체 구간</small></section>
+          <section class="lap-side-card p4-g-card"><strong>IMU G</strong><div class="p4-g-meter"><i></i><i></i><b>↑</b><span id="p4-g-dot"></span></div><div><span>종G <b id="p4-gx">--.--</b></span><span>횡G <b id="p4-gy">--.--</b></span></div></section>
+          <section class="lap-side-card p4-track-card"><strong>현재 랩 위치</strong><canvas id="p4-track-map"></canvas><small id="p4-track-time">--:--.---</small></section>
+        </aside>
       </section>
 
       <!-- [페이지 5] 실시간 무선 텔레메트리 -->
@@ -857,6 +829,6 @@
   <script src="filters.js?v=20260812-1"></script>
   <script src="steering.js?v=20260812-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
-  <script src="app.js?v=20260819-4"></script>
+  <script src="app.js?v=20260819-5"></script>
 </body>
 </html>
