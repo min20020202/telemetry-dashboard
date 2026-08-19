@@ -1569,12 +1569,16 @@ function buildPage4WorkspaceCharts(S, makeCommonOptions) {
     options.plugins.legend = { display: false };
     options.scales.x.ticks.display = chartIndex === PAGE4_CHART_SPECS.length - 1;
     options.scales.y.ticks.maxTicksLimit = chartIndex === 2 ? 3 : (chartIndex === 6 ? 4 : 6);
+    options.scales.y.ticks.font = { family: 'JetBrains Mono', size: 8 };
+    options.scales.y.ticks.padding = 2;
+    options.scales.y.afterFit = axis => { axis.width = 40; };
+    if (chartIndex === 1) options.scales.y.ticks.callback = value => value === 0 ? '0' : `${Number(value) / 1000}k`;
     if (spec.second) {
-      options.scales.y2 = { position: 'right', min: spec.second[0], max: spec.second[1], display: true, grid: { display: false }, ticks: { color: '#64748b', maxTicksLimit: 5, font: { family: 'JetBrains Mono', size: 8 } }, afterFit(axis) { axis.width = 46; } };
+      options.scales.y2 = { position: 'right', min: spec.second[0], max: spec.second[1], display: true, grid: { display: false }, ticks: { color: '#64748b', padding: 2, maxTicksLimit: 5, font: { family: 'JetBrains Mono', size: 8 } }, afterFit(axis) { axis.width = 34; } };
     } else {
       // Reserve the same space as a right-side axis so every chart has an
       // identical plot width and the synchronized cursor stays vertical.
-      options.layout.padding.right = 46;
+      options.layout.padding.right = 34;
     }
     const chart = new Chart(canvas.getContext('2d'), {
       type: 'line',
@@ -1812,9 +1816,14 @@ function drawPage4TrackMap(targetTime) {
     p4TrackMap.width = Math.round(width * scale); p4TrackMap.height = Math.round(height * scale);
   }
   const ctx = p4TrackMap.getContext('2d'); ctx.setTransform(scale, 0, 0, scale, 0, 0); ctx.clearRect(0, 0, width, height);
-  const minLon = Math.min(...points.map(p => p.lon)), maxLon = Math.max(...points.map(p => p.lon));
-  const minLat = Math.min(...points.map(p => p.lat)), maxLat = Math.max(...points.map(p => p.lat));
-  const project = point => ({ x: 14 + (point.lon - minLon) / Math.max(1e-9, maxLon - minLon) * (width - 28), y: height - 14 - (point.lat - minLat) / Math.max(1e-9, maxLat - minLat) * (height - 28) });
+  const meanLatRad = points.reduce((sum, point) => sum + point.lat, 0) / points.length * Math.PI / 180;
+  const lonScale = Math.max(0.1, Math.cos(meanLatRad));
+  const xs = points.map(point => point.lon * lonScale), ys = points.map(point => point.lat);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const mapScale = Math.min((width - 28) / Math.max(1e-9, maxX - minX), (height - 28) / Math.max(1e-9, maxY - minY));
+  const contentWidth = (maxX - minX) * mapScale, contentHeight = (maxY - minY) * mapScale;
+  const offsetX = (width - contentWidth) / 2, offsetY = (height - contentHeight) / 2;
+  const project = point => ({ x: offsetX + (point.lon * lonScale - minX) * mapScale, y: height - offsetY - (point.lat - minY) * mapScale });
   ctx.beginPath(); points.forEach((point, index) => { const p = project(point); index ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
   ctx.strokeStyle = '#64748b'; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
   gpsCheckpoints.forEach(checkpoint => {
