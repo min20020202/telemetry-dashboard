@@ -1735,19 +1735,21 @@ function invalidatePage4BoundariesCache() {
 }
 
 function page4LapBoundaries(lapIndex) {
-  if (lapIndex === cachedPage4LapIndex && cachedPage4BoundariesList.length > 0) {
+  if (cachedPage4LapIndex === lapIndex && cachedPage4BoundariesList && cachedPage4BoundariesList.length > 0) {
     return cachedPage4BoundariesList;
   }
   const lap = gpsLapResults[lapIndex];
-  if (!lap) return [];
-  const boundaries = [{ label: 'START', time: lap.startTime }];
+  const startTime = lap ? lap.startTime : (gpsLapPoints.length ? gpsLapPoints[0].time : 0);
+  const endTime = lap ? lap.endTime : (gpsLapPoints.length ? gpsLapPoints[gpsLapPoints.length - 1].time : (totalDurationSec || 100));
+
+  const boundaries = [{ label: 'START', time: startTime }];
   gpsCheckpoints.forEach((checkpoint, index) => {
     const crossings = findGpsLineCrossings(checkpoint, 0.1);
-    const crossing = crossings.find(item => item.time > lap.startTime + 0.02 && item.time < lap.endTime - 0.02);
+    const crossing = crossings.find(item => item.time >= startTime - 0.05 && item.time <= endTime + 0.05);
     if (crossing) boundaries.push({ label: `CP${index + 1}`, time: crossing.time });
   });
   boundaries.sort((a, b) => a.time - b.time);
-  boundaries.push({ label: 'FINISH', time: lap.endTime });
+  boundaries.push({ label: 'FINISH', time: endTime });
   cachedPage4LapIndex = lapIndex;
   cachedPage4BoundariesList = boundaries;
   return boundaries;
@@ -1759,9 +1761,9 @@ function refreshPage4Selectors() {
   const previous = Number(p4LapSelect.value);
   p4LapSelect.innerHTML = gpsLapResults.length
     ? gpsLapResults.map((lap, index) => `<option value="${index}">LAP ${lap.number} · ${formatLapTime(lap.duration)}</option>`).join('')
-    : '<option value="">GPS 페이지에서 피니시라인을 설정하세요</option>';
+    : '<option value="-1">전체 트랙 (랩 미선택)</option>';
   page4SelectedLapIndex = gpsLapResults.length ? (Number.isInteger(previous) && gpsLapResults[previous] ? previous : 0) : -1;
-  if (page4SelectedLapIndex >= 0) p4LapSelect.value = String(page4SelectedLapIndex);
+  p4LapSelect.value = String(page4SelectedLapIndex);
   refreshPage4SectorOptions();
 }
 
