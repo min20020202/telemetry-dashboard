@@ -2132,9 +2132,21 @@ function drawPage4TrackMap(targetTime) {
     }
   });
 
-  const position = getGpsLapPositionAtTime(lap, Math.max(lap.startTime, Math.min(lap.endTime, targetTime)));
+  let position = null;
+  let trackTimeText = '0:00.000';
+  if (lap && Number.isFinite(lap.startTime) && Number.isFinite(lap.endTime)) {
+    position = getGpsLapPositionAtTime(lap, Math.max(lap.startTime, Math.min(lap.endTime, targetTime)));
+    trackTimeText = formatLapTime(Math.max(0, Math.min(lap.duration, targetTime - lap.startTime)));
+  } else {
+    const idx = findGlobalIndexAtTime(targetTime);
+    const row = idx >= 0 ? globalData[idx] : null;
+    if (row && Number.isFinite(Number(row.gps_lat)) && Number.isFinite(Number(row.gps_lon))) {
+      position = { lat: Number(row.gps_lat), lon: Number(row.gps_lon) };
+    }
+    trackTimeText = formatLapTime(Math.max(0, targetTime));
+  }
   if (position) { const p = project(position); ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fillStyle = '#f97316'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke(); }
-  if (p4TrackTime) p4TrackTime.textContent = formatLapTime(Math.max(0, Math.min(lap.duration, targetTime - lap.startTime)));
+  if (p4TrackTime) p4TrackTime.textContent = trackTimeText;
 }
 
 function updatePage4Widgets(row) {
