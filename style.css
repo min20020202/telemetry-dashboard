@@ -495,10 +495,10 @@ body {
 /* Page 4 · MoTeC-style lap/sector workspace */
 .lap-workspace { display:grid; grid-template-columns:minmax(0, 1fr) 290px; align-items:stretch; gap:8px; height:auto; min-height:0; padding:6px; background:#eef2f6; }
 .lap-workspace.active { display:grid !important; }
-.lap-workspace-charts { display:grid; grid-template-rows:18fr 18fr 5fr 18fr 18fr 18fr 5fr; min-width:0; min-height:760px; overflow:hidden; border:1px solid #b9c4d1; border-radius:8px; background:#fff; }
+.lap-workspace-charts { display:grid; grid-template-rows:17fr 17fr 5fr 17fr 17fr 17fr 10fr; min-width:0; min-height:760px; overflow:hidden; border:1px solid #b9c4d1; border-radius:8px; background:#fff; }
 .lap-strip { position:relative; min-height:0; border-bottom:1px solid #cbd5e1; overflow:hidden; }
 .lap-strip:last-child { border-bottom:0; }
-.lap-strip header { position:absolute; top:4px; left:58px; right:10px; z-index:2; display:flex; align-items:center; gap:8px; pointer-events:none; color:#334155; font:900 10px var(--font-mono); }
+.lap-strip header { position:absolute; top:4px; left:58px; right:56px; z-index:2; display:flex; align-items:center; gap:8px; pointer-events:none; color:#334155; font:900 10px var(--font-mono); }
 .lap-strip header output { color:#0f172a; font-weight:800; }
 .lap-strip header output { margin-left:auto; white-space:nowrap; }
 .p4-series-toggles { display:flex; align-items:center; gap:3px; pointer-events:auto; }

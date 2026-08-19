@@ -1568,7 +1568,14 @@ function buildPage4WorkspaceCharts(S, makeCommonOptions) {
     const options = makeCommonOptions(spec.min, spec.max);
     options.plugins.legend = { display: false };
     options.scales.x.ticks.display = chartIndex === PAGE4_CHART_SPECS.length - 1;
-    if (spec.second) options.scales.y2 = { position: 'right', min: spec.second[0], max: spec.second[1], display: true, grid: { display: false }, ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 8 } }, afterFit(axis) { axis.width = 46; } };
+    options.scales.y.ticks.maxTicksLimit = chartIndex === 2 ? 3 : (chartIndex === 6 ? 4 : 6);
+    if (spec.second) {
+      options.scales.y2 = { position: 'right', min: spec.second[0], max: spec.second[1], display: true, grid: { display: false }, ticks: { color: '#64748b', maxTicksLimit: 5, font: { family: 'JetBrains Mono', size: 8 } }, afterFit(axis) { axis.width = 46; } };
+    } else {
+      // Reserve the same space as a right-side axis so every chart has an
+      // identical plot width and the synchronized cursor stays vertical.
+      options.layout.padding.right = 46;
+    }
     const chart = new Chart(canvas.getContext('2d'), {
       type: 'line',
       data: { datasets: spec.series.map((series) => ({
@@ -1810,6 +1817,13 @@ function drawPage4TrackMap(targetTime) {
   const project = point => ({ x: 14 + (point.lon - minLon) / Math.max(1e-9, maxLon - minLon) * (width - 28), y: height - 14 - (point.lat - minLat) / Math.max(1e-9, maxLat - minLat) * (height - 28) });
   ctx.beginPath(); points.forEach((point, index) => { const p = project(point); index ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
   ctx.strokeStyle = '#64748b'; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+  gpsCheckpoints.forEach(checkpoint => {
+    if (!Array.isArray(checkpoint) || checkpoint.length !== 2) return;
+    const from = project(checkpoint[0]);
+    const to = project(checkpoint[1]);
+    ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
+    ctx.strokeStyle = '#06b6d4'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+  });
   const position = getGpsLapPositionAtTime(lap, Math.max(lap.startTime, Math.min(lap.endTime, targetTime)));
   if (position) { const p = project(position); ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fillStyle = '#f97316'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke(); }
   if (p4TrackTime) p4TrackTime.textContent = formatLapTime(Math.max(0, Math.min(lap.duration, targetTime - lap.startTime)));
