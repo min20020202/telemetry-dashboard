@@ -1948,23 +1948,69 @@ function drawPage4TrackMap(targetTime) {
     p4TrackMap.width = Math.round(width * scale); p4TrackMap.height = Math.round(height * scale);
   }
   const ctx = p4TrackMap.getContext('2d'); ctx.setTransform(scale, 0, 0, scale, 0, 0); ctx.clearRect(0, 0, width, height);
+
+  const allMapPoints = [...points];
+  if (Array.isArray(gpsFinishPoints) && gpsFinishPoints.length === 2) {
+    allMapPoints.push(...gpsFinishPoints);
+  }
+  gpsCheckpoints.forEach(cp => {
+    if (Array.isArray(cp) && cp.length === 2) {
+      allMapPoints.push(...cp);
+    }
+  });
+
   const meanLatRad = points.reduce((sum, point) => sum + point.lat, 0) / points.length * Math.PI / 180;
   const lonScale = Math.max(0.1, Math.cos(meanLatRad));
-  const xs = points.map(point => point.lon * lonScale), ys = points.map(point => point.lat);
+  const xs = allMapPoints.map(point => point.lon * lonScale), ys = allMapPoints.map(point => point.lat);
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-  const mapScale = Math.min((width - 28) / Math.max(1e-9, maxX - minX), (height - 28) / Math.max(1e-9, maxY - minY));
+  const mapScale = Math.min((width - 32) / Math.max(1e-9, maxX - minX), (height - 32) / Math.max(1e-9, maxY - minY));
   const contentWidth = (maxX - minX) * mapScale, contentHeight = (maxY - minY) * mapScale;
   const offsetX = (width - contentWidth) / 2, offsetY = (height - contentHeight) / 2;
   const project = point => ({ x: offsetX + (point.lon * lonScale - minX) * mapScale, y: height - offsetY - (point.lat - minY) * mapScale });
+
   ctx.beginPath(); points.forEach((point, index) => { const p = project(point); index ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
   ctx.strokeStyle = '#64748b'; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
-  gpsCheckpoints.forEach(checkpoint => {
+
+  if (Array.isArray(gpsFinishPoints) && gpsFinishPoints.length === 2) {
+    const from = project(gpsFinishPoints[0]);
+    const to = project(gpsFinishPoints[1]);
+    ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
+    ctx.setLineDash([5, 3]);
+    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.setLineDash([]);
+
+    const midX = (from.x + to.x) / 2;
+    const midY = (from.y + to.y) / 2;
+    ctx.font = 'bold 10px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#0f172a';
+    ctx.strokeText('FINISH', midX, midY - 8);
+    ctx.fillStyle = '#f87171';
+    ctx.fillText('FINISH', midX, midY - 8);
+  }
+
+  gpsCheckpoints.forEach((checkpoint, index) => {
     if (!Array.isArray(checkpoint) || checkpoint.length !== 2) return;
     const from = project(checkpoint[0]);
     const to = project(checkpoint[1]);
     ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
     ctx.strokeStyle = '#06b6d4'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+
+    const midX = (from.x + to.x) / 2;
+    const midY = (from.y + to.y) / 2;
+    const label = `CP${index + 1}`;
+    ctx.font = 'bold 10px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#0f172a';
+    ctx.strokeText(label, midX, midY - 8);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillText(label, midX, midY - 8);
   });
+
   const position = getGpsLapPositionAtTime(lap, Math.max(lap.startTime, Math.min(lap.endTime, targetTime)));
   if (position) { const p = project(position); ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fillStyle = '#f97316'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke(); }
   if (p4TrackTime) p4TrackTime.textContent = formatLapTime(Math.max(0, Math.min(lap.duration, targetTime - lap.startTime)));
