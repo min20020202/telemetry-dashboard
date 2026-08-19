@@ -1735,21 +1735,19 @@ function invalidatePage4BoundariesCache() {
 }
 
 function page4LapBoundaries(lapIndex) {
-  if (cachedPage4LapIndex === lapIndex && cachedPage4BoundariesList && cachedPage4BoundariesList.length > 0) {
+  if (lapIndex === cachedPage4LapIndex && cachedPage4BoundariesList.length > 0) {
     return cachedPage4BoundariesList;
   }
   const lap = gpsLapResults[lapIndex];
-  const startTime = lap ? lap.startTime : (gpsLapPoints.length ? gpsLapPoints[0].time : 0);
-  const endTime = lap ? lap.endTime : (gpsLapPoints.length ? gpsLapPoints[gpsLapPoints.length - 1].time : (totalDurationSec || 100));
-
-  const boundaries = [{ label: 'START', time: startTime }];
+  if (!lap) return [];
+  const boundaries = [{ label: 'START', time: lap.startTime }];
   gpsCheckpoints.forEach((checkpoint, index) => {
     const crossings = findGpsLineCrossings(checkpoint, 0.1);
-    const crossing = crossings.find(item => item.time >= startTime - 0.05 && item.time <= endTime + 0.05);
+    const crossing = crossings.find(item => item.time > lap.startTime + 0.02 && item.time < lap.endTime - 0.02);
     if (crossing) boundaries.push({ label: `CP${index + 1}`, time: crossing.time });
   });
   boundaries.sort((a, b) => a.time - b.time);
-  boundaries.push({ label: 'FINISH', time: endTime });
+  boundaries.push({ label: 'FINISH', time: lap.endTime });
   cachedPage4LapIndex = lapIndex;
   cachedPage4BoundariesList = boundaries;
   return boundaries;
@@ -1761,23 +1759,19 @@ function refreshPage4Selectors() {
   const previous = Number(p4LapSelect.value);
   p4LapSelect.innerHTML = gpsLapResults.length
     ? gpsLapResults.map((lap, index) => `<option value="${index}">LAP ${lap.number} · ${formatLapTime(lap.duration)}</option>`).join('')
-    : '<option value="-1">전체 트랙 (랩 미선택)</option>';
+    : '<option value="">GPS 페이지에서 피니시라인을 설정하세요</option>';
   page4SelectedLapIndex = gpsLapResults.length ? (Number.isInteger(previous) && gpsLapResults[previous] ? previous : 0) : -1;
-  p4LapSelect.value = String(page4SelectedLapIndex);
+  if (page4SelectedLapIndex >= 0) p4LapSelect.value = String(page4SelectedLapIndex);
   refreshPage4SectorOptions();
 }
-
-let page4UserSpecifiedSector = false;
 
 function refreshPage4SectorOptions() {
   if (!p4SectorStart || !p4SectorEnd) return;
   const boundaries = page4LapBoundaries(page4SelectedLapIndex);
   const options = boundaries.map((point, index) => `<option value="${index}">${point.label}</option>`).join('');
-  p4SectorStart.innerHTML = `<option value="">구간 선택 (시작)</option>` + options;
-  p4SectorEnd.innerHTML = `<option value="">구간 선택 (종료)</option>` + options;
-  p4SectorStart.value = '';
-  p4SectorEnd.value = '';
-  page4UserSpecifiedSector = false;
+  p4SectorStart.innerHTML = options;
+  p4SectorEnd.innerHTML = options;
+  if (boundaries.length) p4SectorEnd.value = String(boundaries.length - 1);
   applyPage4Selection();
 }
 
@@ -1785,52 +1779,34 @@ function applyPage4Selection() {
   const boundaries = page4LapBoundaries(page4SelectedLapIndex);
   if (!boundaries.length || !page4Charts.length) return;
   const lap = gpsLapResults[page4SelectedLapIndex];
-
-  const wasPlaying = Boolean(page4PlaybackActive);
-
-  const hasStart = Boolean(p4SectorStart && p4SectorStart.value !== '');
-  const hasEnd = Boolean(p4SectorEnd && p4SectorEnd.value !== '');
-  page4UserSpecifiedSector = hasStart || hasEnd;
-
-  let startIndex = hasStart ? Number(p4SectorStart.value) : 0;
-  let endIndex = hasEnd ? Number(p4SectorEnd.value) : boundaries.length - 1;
-
-  if (hasStart && !hasEnd) {
-    endIndex = boundaries.length - 1;
-  } else if (!hasStart && hasEnd) {
-    startIndex = 0;
-  } else if (hasStart && hasEnd && endIndex <= startIndex) {
+  let startIndex = Number(p4SectorStart?.value) || 0;
+  let endIndex = Number(p4SectorEnd?.value);
+  if (!Number.isInteger(endIndex) || endIndex >= boundaries.length) endIndex = boundaries.length - 1;
+  if (startIndex >= boundaries.length) startIndex = 0;
+  if (endIndex <= startIndex) {
     endIndex = Math.min(boundaries.length - 1, startIndex + 1);
     if (endIndex <= startIndex) startIndex = Math.max(0, endIndex - 1);
     if (p4SectorStart) p4SectorStart.value = String(startIndex);
     if (p4SectorEnd) p4SectorEnd.value = String(endIndex);
   }
-
-  if (!Number.isInteger(startIndex) || startIndex < 0) startIndex = 0;
-  if (!Number.isInteger(endIndex) || endIndex >= boundaries.length) endIndex = boundaries.length - 1;
+  if (p4SectorStart) p4SectorStart.blur();
+  if (p4SectorEnd) p4SectorEnd.blur();
+  if (p4LapSelect) p4LapSelect.blur();
 
   const rawStart = boundaries[startIndex]?.time;
   const rawEnd = boundaries[endIndex]?.time;
   const startTime = Number.isFinite(rawStart) ? rawStart : (lap ? lap.startTime : 0);
   const endTime = Number.isFinite(rawEnd) ? rawEnd : (lap ? lap.endTime : startTime + 1);
 
-  const newRangeStart = startTime;
-  const newRangeEnd = Math.max(startTime + 0.5, endTime);
-
-  page4RangeStart = newRangeStart;
-  page4RangeEnd = newRangeEnd;
-  page4ViewStart = newRangeStart;
-  page4ViewEnd = newRangeEnd;
-
-  refreshPage4VisibleRange(newRangeStart, newRangeEnd);
-
-  const startLabel = hasStart ? (boundaries[startIndex]?.label || 'START') : '전체';
-  const endLabel = hasEnd ? (boundaries[endIndex]?.label || 'FINISH') : '구간';
-  if (p4SectorStatus) {
-    p4SectorStatus.textContent = page4UserSpecifiedSector
-      ? `${startLabel} → ${endLabel} · ${(page4RangeEnd - page4RangeStart).toFixed(3)}초`
-      : `전체 구간 선택 안됨 · ${(page4RangeEnd - page4RangeStart).toFixed(3)}초`;
-  }
+  setPage4Playback(false);
+  page4RangeStart = startTime;
+  page4RangeEnd = Math.max(startTime + 0.05, endTime);
+  page4ViewStart = startTime;
+  page4ViewEnd = page4RangeEnd;
+  refreshPage4VisibleRange(startTime, page4RangeEnd);
+  const startLabel = boundaries[startIndex]?.label || 'START';
+  const endLabel = boundaries[endIndex]?.label || 'FINISH';
+  if (p4SectorStatus) p4SectorStatus.textContent = `${startLabel} → ${endLabel} · ${(page4RangeEnd - page4RangeStart).toFixed(3)}초`;
   if (p4PlayTimeline) { p4PlayTimeline.min = String(page4RangeStart); p4PlayTimeline.max = String(page4RangeEnd); p4PlayTimeline.step = '0.01'; }
   updatePage4PlaybackCursor(page4RangeStart);
   drawPage4GTrace();
@@ -2069,28 +2045,11 @@ function drawPage4TrackMap(targetTime) {
     }
   }
 
-  // Show CP numbers in initial unselected state. Once user specifies a sector, hide all CP numbers!
-  const showBadges = !page4UserSpecifiedSector || Boolean(p4SectorDropdownActive);
-
-  // Helper for drawing CP number label
-  const drawLabel = (x, y, text, textColor) => {
-    if (!showBadges) return;
-    ctx.save();
-    ctx.font = 'bold 9.5px Inter, system-ui, sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.lineWidth = 2.5; ctx.strokeStyle = '#0f172a';
-    ctx.strokeText(text, x, y - 9);
-    ctx.fillStyle = textColor;
-    ctx.fillText(text, x, y - 9);
-    ctx.restore();
-  };
-
   // 3. Draw Finish Line
   if (Array.isArray(gpsFinishPoints) && gpsFinishPoints.length === 2) {
     let from = project(gpsFinishPoints[0]);
     let to = project(gpsFinishPoints[1]);
     const isFinishActive = activeLabels.has('FINISH') || activeLabels.has('START');
-    const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
 
     if (isFinishActive) {
       ctx.save();
@@ -2101,13 +2060,11 @@ function drawPage4TrackMap(targetTime) {
 
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
-      drawLabel(midX, midY, 'FINISH', '#f87171');
     } else {
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.setLineDash([4, 3]);
       ctx.strokeStyle = 'rgba(239, 68, 68, 0.75)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
       ctx.setLineDash([]);
-      drawLabel(midX, midY, 'FINISH', '#f87171');
     }
   }
 
@@ -2118,7 +2075,6 @@ function drawPage4TrackMap(targetTime) {
     let to = project(checkpoint[1]);
     const label = `CP${index + 1}`;
     const isCpActive = activeLabels.has(label);
-    const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
 
     if (isCpActive) {
       ctx.save();
@@ -2129,11 +2085,9 @@ function drawPage4TrackMap(targetTime) {
 
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
-      drawLabel(midX, midY, label, '#38bdf8');
     } else {
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = 'rgba(6, 182, 212, 0.65)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
-      drawLabel(midX, midY, label, '#38bdf8');
     }
   });
 
