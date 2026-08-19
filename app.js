@@ -3345,11 +3345,10 @@ document.addEventListener('wheel', (e) => {
     if (zoomPending) return;
     zoomPending = true;
     requestAnimationFrame(() => {
-      const rect = chartCanvas.getBoundingClientRect();
-      const pointerX = e.clientX - rect.left;
-      const clampedX = Math.max(page4Chart.chartArea.left, Math.min(page4Chart.chartArea.right, pointerX));
-      const targetTime = page4Chart.scales.x.getValueForPixel(clampedX);
-      zoomPage4At(targetTime, e.deltaY < 0 ? 0.92 : 1.08);
+      // Page 4 always zooms around the synchronized orange cursor line, not
+      // around the current mouse position. This keeps the inspected sample
+      // fixed on screen while the surrounding time span changes.
+      zoomPage4At(page4CursorTime, e.deltaY < 0 ? 0.92 : 1.08);
       zoomPending = false;
     });
     return;
