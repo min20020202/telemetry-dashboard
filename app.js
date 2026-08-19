@@ -1603,8 +1603,45 @@ function buildPage4WorkspaceCharts(S, makeCommonOptions) {
       keepPage4CursorInView(targetTime, rawX >= area.right ? 1 : (rawX <= area.left ? -1 : Math.sign(targetTime - previousTime)));
       updatePage4PlaybackCursor(targetTime);
     };
+    let edgePanFrame = 0;
+    let edgePanDirection = 0;
+    let edgePanStrength = 0;
+    let edgePanLastStamp = 0;
+    const stopEdgePan = () => {
+      edgePanDirection = 0;
+      edgePanStrength = 0;
+      edgePanLastStamp = 0;
+      if (edgePanFrame) cancelAnimationFrame(edgePanFrame);
+      edgePanFrame = 0;
+    };
+    const edgePanTick = stamp => {
+      if (page4PointerDragging !== canvas || !edgePanDirection) { stopEdgePan(); return; }
+      if (edgePanLastStamp) {
+        const elapsed = Math.min(0.05, (stamp - edgePanLastStamp) / 1000);
+        const span = page4ViewEnd - page4ViewStart;
+        const speed = span * (0.18 + edgePanStrength * 0.82);
+        const targetTime = Math.max(page4RangeStart, Math.min(page4RangeEnd, page4CursorTime + edgePanDirection * speed * elapsed));
+        keepPage4CursorInView(targetTime, edgePanDirection);
+        updatePage4PlaybackCursor(targetTime);
+        if (targetTime === page4RangeStart || targetTime === page4RangeEnd) { stopEdgePan(); return; }
+      }
+      edgePanLastStamp = stamp;
+      edgePanFrame = requestAnimationFrame(edgePanTick);
+    };
+    const updateEdgePan = event => {
+      const area = chart.chartArea;
+      if (!area || page4PointerDragging !== canvas) { stopEdgePan(); return; }
+      const rect = canvas.getBoundingClientRect();
+      const rawX = event.clientX - rect.left;
+      const overflow = rawX < area.left ? rawX - area.left : (rawX > area.right ? rawX - area.right : 0);
+      if (!overflow) { stopEdgePan(); return; }
+      edgePanDirection = Math.sign(overflow);
+      edgePanStrength = Math.min(1, Math.abs(overflow) / Math.max(1, area.right - area.left));
+      if (!edgePanFrame) edgePanFrame = requestAnimationFrame(edgePanTick);
+    };
     const previousScrub = canvas._page4ScrubHandlers;
     if (previousScrub) {
+      previousScrub.stopEdgePan?.();
       canvas.removeEventListener('pointerdown', previousScrub.down);
       canvas.removeEventListener('pointermove', previousScrub.move);
       canvas.removeEventListener('pointerup', previousScrub.stop);
@@ -1614,17 +1651,23 @@ function buildPage4WorkspaceCharts(S, makeCommonOptions) {
       page4PointerDragging = canvas;
       canvas.setPointerCapture?.(event.pointerId);
       scrub(event);
+      updateEdgePan(event);
     };
-    const move = event => { if (page4PointerDragging === canvas) scrub(event); };
+    const move = event => {
+      if (page4PointerDragging !== canvas) return;
+      scrub(event);
+      updateEdgePan(event);
+    };
     const stopScrub = event => {
       if (page4PointerDragging === canvas) page4PointerDragging = null;
+      stopEdgePan();
       if (canvas.hasPointerCapture?.(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
     };
     canvas.addEventListener('pointerdown', down);
     canvas.addEventListener('pointermove', move);
     canvas.addEventListener('pointerup', stopScrub);
     canvas.addEventListener('pointercancel', stopScrub);
-    canvas._page4ScrubHandlers = { down, move, stop: stopScrub };
+    canvas._page4ScrubHandlers = { down, move, stop: stopScrub, stopEdgePan };
     const header = canvas.parentElement?.querySelector('header');
     header?.querySelector('.p4-series-toggles')?.remove();
     if (header && spec.series.length > 1) {
