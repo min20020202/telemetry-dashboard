@@ -1173,23 +1173,28 @@ function verifyGpsFixedLinesPassword(actionLabel = '고정선을 변경') {
 
 function restoreGpsFixedLines() {
   if (gpsLapPoints.length < 2) return false;
-  // The repository copy is authoritative so every browser calculates laps
-  // and sectors from exactly the same geometry.
-  const saved = GPS_SHARED_FIXED_LINES;
+  let saved = null;
+  try {
+    const raw = localStorage.getItem(GPS_FIXED_LINES_STORAGE_KEY);
+    if (raw) saved = JSON.parse(raw);
+  } catch (e) {}
+  if (!saved || !Array.isArray(saved.finish) || saved.finish.length !== 2) {
+    saved = GPS_SHARED_FIXED_LINES;
+  }
   if (!saved || !Array.isArray(saved.finish) || saved.finish.length !== 2) return false;
   const middle = {
     lat: (saved.finish[0].lat + saved.finish[1].lat) * 0.5,
     lon: (saved.finish[0].lon + saved.finish[1].lon) * 0.5
   };
   const nearest = gpsLapPoints.reduce((best, point) => Math.min(best, distanceMeters(middle, point)), Infinity);
-  if (nearest > 120) {
+  if (nearest > 500) {
     setGpsLapStatus('저장된 고정선은 다른 트랙 좌표라 적용하지 않았습니다.', 'warn');
     return false;
   }
   gpsFinishPoints = saved.finish.map(point => ({ lat: Number(point.lat), lon: Number(point.lon) }));
-  gpsCheckpoints = Array.isArray(saved.checkpoints)
-    ? saved.checkpoints.filter(line => Array.isArray(line) && line.length === 2)
-    : [];
+  if (Array.isArray(saved.checkpoints)) {
+    gpsCheckpoints = saved.checkpoints.filter(line => Array.isArray(line) && line.length === 2);
+  }
   drawGpsFinishLine();
   drawGpsCheckpoints();
   if (gpsLapClear) gpsLapClear.disabled = false;
@@ -1203,15 +1208,16 @@ function drawGpsCheckpoints() {
   gpsCheckpointLayer?.clearLayers();
   gpsCheckpoints.forEach((checkpoint, index) => {
     const color = '#06b6d4';
-    L.polyline(checkpoint.map(point => [point.lat, point.lon]), {
+    const points = checkpoint.map(point => [Number(point.lat ?? point[0]), Number(point.lon ?? point.lng ?? point[1])]);
+    L.polyline(points, {
       color,
       weight: 3,
       opacity: 0.72,
       interactive: false
     }).addTo(gpsCheckpointLayer);
     const middle = {
-      lat: (checkpoint[0].lat + checkpoint[1].lat) * 0.5,
-      lon: (checkpoint[0].lon + checkpoint[1].lon) * 0.5
+      lat: (points[0][0] + points[1][0]) * 0.5,
+      lon: (points[0][1] + points[1][1]) * 0.5
     };
     L.marker([middle.lat, middle.lon], {
       interactive: false,
@@ -1969,9 +1975,11 @@ function setPage4Playback(active) {
 }
 
 function drawPage4TrackMap(targetTime) {
-  if (!p4TrackMap || page4SelectedLapIndex < 0) return;
-  const lap = gpsLapResults[page4SelectedLapIndex];
-  const points = gpsLapPoints.filter(point => point.time >= lap.startTime && point.time <= lap.endTime);
+  if (!p4TrackMap) return;
+  const lap = page4SelectedLapIndex >= 0 ? gpsLapResults[page4SelectedLapIndex] : null;
+  const points = (lap && gpsLapPoints.length)
+    ? gpsLapPoints.filter(point => point.time >= lap.startTime && point.time <= lap.endTime)
+    : gpsLapPoints;
   if (points.length < 2) return;
   const rect = p4TrackMap.getBoundingClientRect();
   const scale = window.devicePixelRatio || 1;
