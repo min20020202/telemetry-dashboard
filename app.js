@@ -2095,11 +2095,20 @@ function drawPage4TrackMap(targetTime) {
   // 4. Draw Checkpoints
   gpsCheckpoints.forEach((checkpoint, index) => {
     if (!Array.isArray(checkpoint) || checkpoint.length !== 2) return;
-    const from = project(checkpoint[0]);
-    const to = project(checkpoint[1]);
+    let from = project(checkpoint[0]);
+    let to = project(checkpoint[1]);
     const label = `CP${index + 1}`;
     const isCpActive = activeLabels.has(label);
+
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const len = Math.hypot(dx, dy) || 1;
     const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
+    const minLen = 22;
+    if (len < minLen) {
+      const ux = dx / len, uy = dy / len;
+      from = { x: midX - ux * (minLen / 2), y: midY - uy * (minLen / 2) };
+      to = { x: midX + ux * (minLen / 2), y: midY + uy * (minLen / 2) };
+    }
 
     if (isCpActive) {
       ctx.save();
@@ -2121,7 +2130,8 @@ function drawPage4TrackMap(targetTime) {
   let position = null;
   let trackTimeText = '0:00.000';
   if (lap && Number.isFinite(lap.startTime) && Number.isFinite(lap.endTime)) {
-    position = getGpsLapPositionAtTime(lap, Math.max(lap.startTime, Math.min(lap.endTime, targetTime)));
+    const clampedTime = Math.max(lap.startTime, Math.min(lap.endTime, targetTime));
+    position = getGpsLapPositionAtTime(lap, clampedTime);
     trackTimeText = formatLapTime(Math.max(0, Math.min(lap.duration, targetTime - lap.startTime)));
   } else {
     const idx = findGlobalIndexAtTime(targetTime);
