@@ -127,7 +127,10 @@ def main():
 
     median_length = statistics.median(item[1][-1] for item in laps)
     laps = [item for item in laps if abs(item[1][-1] - median_length) <= median_length * 0.02]
-    normalized_count = max(200, round(median_length / 2))
+    # Build the median path at roughly 1 m intervals. Projection still uses
+    # continuous line segments, so callers can interpolate at 0.1 m without
+    # implying 0.1 m GPS measurement accuracy.
+    normalized_count = max(200, round(median_length))
     median_path = []
     for index in range(normalized_count + 1):
         ratio = index / normalized_count
@@ -144,7 +147,7 @@ def main():
     for previous, current in zip(median_path, median_path[1:]):
         cumulative.append(cumulative[-1] + distance(previous, current))
     total = cumulative[-1]
-    spacing = 2.0
+    spacing = 1.0
     targets = [index * spacing for index in range(int(total // spacing) + 1)]
     if not math.isclose(targets[-1], total):
         targets.append(total)
