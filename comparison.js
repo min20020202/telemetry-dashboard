@@ -2,7 +2,8 @@
   'use strict';
 
   const COLORS = ['#06b6d4', '#ff3d9a', '#76ff03', '#ffca28'];
-  const state = { sessions: [], selected: new Set(), cache: new Map(), charts: {}, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0 };
+  const state = { sessions: [], selected: new Set(), cache: new Map(), charts: {}, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, viewMin: 0, viewMax: null };
+  const boundChartCanvases = new WeakSet();
   const $ = id => document.getElementById(id);
   const ui = {
     files: $('comparison-files'), clear: $('comparison-clear'), status: $('comparison-status'),
@@ -187,15 +188,46 @@
   }
 
   function chartOptions(yTitle) {
+    const distance = totalDistance();
     return {
       responsive: true, maintainAspectRatio: false, animation: false, normalized: true, parsing: false,
       interaction: { mode: 'index', intersect: false },
       plugins: { legend: { display: true, labels: { boxWidth: 10, boxHeight: 2, font: { size: 9 } } }, tooltip: { enabled: true } },
       scales: {
-        x: { type: 'linear', min: 0, max: totalDistance(), title: { display: true, text: '공통 중심선 거리 [m]', font: { size: 9 } }, ticks: { maxTicksLimit: 9, font: { size: 9 } } },
+        x: { type: 'linear', min: state.viewMin, max: state.viewMax ?? distance, title: { display: true, text: '공통 중심선 거리 [m]', font: { size: 9 } }, ticks: { maxTicksLimit: 9, font: { size: 9 } } },
         y: { title: { display: true, text: yTitle, font: { size: 9 } }, ticks: { maxTicksLimit: 6, font: { size: 9 } } }
       }
     };
+  }
+
+  function setChartViewRange(min, max) {
+    const distance = totalDistance();
+    const width = Math.max(10, Math.min(distance, max - min));
+    state.viewMin = Math.max(0, Math.min(Math.max(0, distance - width), min));
+    state.viewMax = state.viewMin + width;
+    Object.values(state.charts).forEach(chart => {
+      chart.options.scales.x.min = state.viewMin;
+      chart.options.scales.x.max = state.viewMax;
+      chart.update('none');
+    });
+  }
+
+  function bindChartZoom(canvas) {
+    if (!canvas || boundChartCanvases.has(canvas)) return;
+    boundChartCanvases.add(canvas);
+    canvas.addEventListener('wheel', event => {
+      const chart = Object.values(state.charts).find(candidate => candidate.canvas === canvas);
+      if (!chart?.chartArea) return;
+      event.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const anchor = chart.scales.x.getValueForPixel(event.clientX - rect.left);
+      const currentMin = chart.scales.x.min, currentMax = chart.scales.x.max;
+      const factor = event.deltaY > 0 ? 1.22 : .82;
+      const nextWidth = Math.max(10, Math.min(totalDistance(), (currentMax - currentMin) * factor));
+      const ratio = Math.max(0, Math.min(1, (anchor - currentMin) / Math.max(.001, currentMax - currentMin)));
+      setChartViewRange(anchor - nextWidth * ratio, anchor + nextWidth * (1 - ratio));
+    }, { passive: false });
+    canvas.addEventListener('dblclick', () => setChartViewRange(0, totalDistance()));
   }
 
   function sampleAtElapsed(item, elapsed) {
@@ -255,6 +287,7 @@
     const options = chartOptions(title);
     Object.assign(options.scales.y, extra);
     state.charts[name] = new Chart(canvas, { type: 'line', data: { datasets }, options, plugins: [comparisonCursorPlugin] });
+    bindChartZoom(canvas);
   }
 
   function line(label, color, samples, key, dashed = false, comparisonIndex = 0) {
@@ -410,7 +443,7 @@
   ui.files?.addEventListener('change', event => { const files = [...event.target.files]; event.target.value = ''; importFiles(files); });
   ui.clear?.addEventListener('click', () => {
     setPlaying(false);
-    state.sessions = []; state.selected.clear(); state.cache.clear();
+    state.sessions = []; state.selected.clear(); state.cache.clear(); state.viewMin = 0; state.viewMax = null;
     Object.values(state.charts).forEach(chart => chart.destroy()); state.charts = {};
     renderSessions(); render(); setStatus('CSV를 추가한 뒤 비교할 랩을 2~4개 선택하세요.');
   });
