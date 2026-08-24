@@ -35,7 +35,8 @@
     if (!laps.length) throw new Error(`${file.name}: 고정 피니시라인을 통과한 완성 랩이 없습니다.`);
     const sourceKey = `${file.name}:${file.size || 0}:${file.lastModified || 0}`;
     let session = state.sessions.find(item => item.sourceKey === sourceKey);
-    if (!session) {
+    const isNew = !session;
+    if (isNew) {
       session = {
         id: ++state.serial,
         sourceKey,
@@ -48,9 +49,9 @@
       };
       state.sessions.push(session);
     }
-    if (autoSelect && state.selected.size === 0) {
-      session.laps.map((lap, lapIndex) => ({ lap, lapIndex })).sort((a, b) => a.lap.duration - b.lap.duration).slice(0, 2)
-        .forEach(item => state.selected.add(selectionKey(session.id, item.lapIndex)));
+    if (autoSelect && isNew && state.selected.size < 4) {
+      const best = session.laps.map((lap, lapIndex) => ({ lap, lapIndex })).sort((a, b) => a.lap.duration - b.lap.duration)[0];
+      if (best) state.selected.add(selectionKey(session.id, best.lapIndex));
     }
     return session;
   }
@@ -60,7 +61,7 @@
       handleFile(file, {
         skipUpload: true,
         onComplete: snapshot => {
-          try { addSession(snapshot); resolve(); }
+          try { addSession(snapshot, true); resolve(); }
           catch (error) { reject(error); }
         },
         onError: reject
@@ -72,19 +73,13 @@
     if (!files.length) return;
     switchTab('comparison');
     let failures = [];
-    const initialSessionCount = state.sessions.length;
     for (let index = 0; index < files.length; index += 1) {
       setStatus(`${index + 1} / ${files.length} · ${files[index].name} 분석 중…`);
       try { await importOne(files[index]); }
       catch (error) { failures.push(error.message); }
     }
-    if (files.length === 1 && state.sessions.length === initialSessionCount + 1 && state.selected.size === 0) {
-      const session = state.sessions.at(-1);
-      session.laps.map((lap, lapIndex) => ({ lap, lapIndex })).sort((a, b) => a.lap.duration - b.lap.duration).slice(0, 2)
-        .forEach(item => state.selected.add(selectionKey(session.id, item.lapIndex)));
-    }
     renderSessions();
-    if (state.selected.size >= 2) render();
+    if (state.selected.size >= 1) render();
     else setStatus(failures.length ? failures.join(' / ') : `${files.length}개 CSV 추가 완료 · 같은 파일 안에서도 비교할 랩을 선택할 수 있습니다.`, failures.length > 0);
   }
 
@@ -334,6 +329,18 @@
     return mixed;
   }
 
+  function cursorElapsedForItem(item, items = selectedLaps()) {
+    if (state.activeSector === null) return state.playElapsed;
+    const timing = sectorTiming(item, state.activeSector, items);
+    return timing ? timing.start.time - item.lap.startTime : 0;
+  }
+
+  function cursorSampleForItem(item, items = selectedLaps()) {
+    const sample = sampleAtElapsed(item, cursorElapsedForItem(item, items));
+    if (sample && state.activeSector !== null) sample.x = sectorBounds(items)[state.activeSector];
+    return sample;
+  }
+
   function seriesValueAt(data, x) {
     if (!data?.length) return null;
     let low = 0, high = data.length - 1;
@@ -349,7 +356,7 @@
     afterDatasetsDraw(chart) {
       const items = selectedLaps();
       if (!items.length || !chart.chartArea) return;
-      const ctx = chart.ctx, positions = items.map(item => sampleAtElapsed(item, state.playElapsed));
+      const ctx = chart.ctx, positions = items.map(item => cursorSampleForItem(item, items));
       ctx.save();
       positions.forEach((sample, index) => {
         if (!sample) return;
@@ -534,8 +541,12 @@
     else {
       const start = bounds[state.activeSector], end = bounds[state.activeSector + 1];
       setChartViewRange(start, end);
-      jumpToDistance(start);
+      setPlaying(false);
+      const baselineTiming = sectorTiming(items[0], state.activeSector, items);
+      state.playElapsed = baselineTiming ? baselineTiming.start.time - items[0].lap.startTime : 0;
+      state.hoverDistance = null;
     }
+    syncPlaybackUi(items);
     renderSectors(items);
     renderMap(items);
     scrollSelectedSectorIntoView(state.activeSector);
@@ -546,7 +557,7 @@
     if (items.length < 2) { ui.sector.innerHTML = '<p class="comparison-empty">두 개 이상의 랩을 선택하세요.</p>'; return; }
     const bounds = sectorBounds(items);
     const cells = items.map((item, index) => ({ item, index, data: sampleLap(item) }));
-    const controls = `<div class="comparison-sector-controls"><button type="button" data-sector-toggle aria-pressed="${state.activeSector !== null}" class="comparison-sector-toggle ${state.activeSector !== null ? 'active' : ''}">구간 보기 ${state.activeSector !== null ? 'ON' : 'OFF'}</button>${bounds.slice(0, -1).map((_, index) => `<button type="button" data-sector="${index}" class="${state.activeSector === index ? 'active' : ''}">S${index + 1}</button>`).join('')}</div>`;
+    const controls = `<div class="comparison-sector-controls">${bounds.slice(0, -1).map((_, index) => `<button type="button" data-sector="${index}" aria-pressed="${state.activeSector === index}" class="${state.activeSector === index ? 'active' : ''}">S${index + 1}</button>`).join('')}</div>`;
     ui.sector.innerHTML = `${controls}<table><thead><tr><th>구간</th>${cells.map(cell => `<th style="color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)} L${cell.item.lap.number}</th>`).join('')}</tr></thead><tbody>${bounds.slice(0, -1).map((start, sectorIndex) => {
       const end = bounds[sectorIndex + 1];
       const durations = cells.map(cell => sectorDuration(cell.item, sectorIndex, items));
@@ -615,7 +626,7 @@
       ctx.fillStyle = '#ffffff'; ctx.font = '800 9px monospace'; ctx.fillText(`CP${index + 1}`, (x1 + x2) / 2 + 4, (y1 + y2) / 2 - 4);
     });
     items.forEach((item, index) => {
-      const point = lapPositionAtElapsed(item, state.playElapsed);
+      const point = lapPositionAtElapsed(item, cursorElapsedForItem(item, items));
       if (!point) return;
       const [x, y] = xy(point);
       ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fillStyle = COLORS[index]; ctx.fill();
@@ -661,7 +672,7 @@
       if (ui.deltaValue) ui.deltaValue.textContent = '-- s';
       return;
     }
-    const samples = items.map(item => Number.isFinite(previewAt) ? sampleAtDistance(item, previewAt) : sampleAtElapsed(item, state.playElapsed));
+    const samples = items.map(item => Number.isFinite(previewAt) ? sampleAtDistance(item, previewAt) : sampleAtElapsed(item, cursorElapsedForItem(item, items)));
     const baseline = sampleLap(items[0]);
     if (ui.speedValue) ui.speedValue.innerHTML = playbackValueMarkup(samples.map((sample, index) => ({
       index, text: `L${items[index].lap.number} ${sample ? sample.speed.toFixed(1) : '--'} km/h`
@@ -681,19 +692,19 @@
   function syncPlaybackUi(items = selectedLaps()) {
     const duration = playbackDuration(items);
     state.playElapsed = Math.max(0, Math.min(duration, state.playElapsed));
-    if (ui.slider) { ui.slider.max = String(Math.max(.01, duration)); ui.slider.value = String(state.playElapsed); ui.slider.disabled = !duration; }
-    if (ui.playTime) ui.playTime.textContent = `${state.playElapsed.toFixed(2)} s`;
+    if (ui.slider) { ui.slider.max = String(Math.max(.01, duration)); ui.slider.value = String(state.playElapsed); ui.slider.disabled = !duration || state.activeSector !== null; }
+    if (ui.playTime) ui.playTime.textContent = state.activeSector === null ? `${state.playElapsed.toFixed(2)} s` : `${state.playElapsed.toFixed(2)} s · 구간 시작`;
     if (ui.playDistance) ui.playDistance.innerHTML = items.length ? items.map((item, index) => {
-      const sample = sampleAtElapsed(item, state.playElapsed);
+      const sample = cursorSampleForItem(item, items);
       return `<span style="color:${COLORS[index]}">L${item.lap.number} ${(sample?.x || 0).toFixed(1)} m</span>`;
     }).join('') : '-- m';
     updatePlaybackValues(items, state.hoverDistance);
-    if (ui.play) { ui.play.textContent = state.playing ? 'Ⅱ 일시정지' : '▶ 재생'; ui.play.disabled = !duration; }
+    if (ui.play) { ui.play.textContent = state.playing ? 'Ⅱ 일시정지' : '▶ 재생'; ui.play.disabled = !duration || state.activeSector !== null; }
     Object.values(state.charts).forEach(chart => chart.draw());
   }
   function setPlaying(active) {
     const items = selectedLaps(), duration = playbackDuration(items);
-    if (!duration) active = false;
+    if (!duration || state.activeSector !== null) active = false;
     if (active && state.playElapsed >= duration - .001) state.playElapsed = 0;
     state.playing = active;
     state.playStamp = 0;
@@ -775,14 +786,10 @@
     renderMap(selectedLaps());
   });
   ui.sector?.addEventListener('click', event => {
-    const toggle = event.target.closest('[data-sector-toggle]');
-    if (toggle) {
-      selectSector(state.activeSector === null ? state.lastSector : null);
-      return;
-    }
     const button = event.target.closest('[data-sector]');
     if (!button) return;
-    selectSector(Number(button.dataset.sector));
+    const index = Number(button.dataset.sector);
+    selectSector(state.activeSector === index ? null : index);
   });
   ui.map?.addEventListener('click', event => {
     const geometry = state.mapGeometry;
