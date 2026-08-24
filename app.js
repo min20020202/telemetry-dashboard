@@ -2280,6 +2280,25 @@ function drawPage4TrackMap(targetTime) {
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = 'rgba(6, 182, 212, 0.65)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
     }
+
+    // Keep the map unobstructed: show only a small sequence number beside
+    // each checkpoint line instead of a full CP label or badge.
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const lineLength = Math.max(1, Math.hypot(dx, dy));
+    const labelOffset = Math.max(5, Math.min(8, width * 0.025));
+    const labelX = (from.x + to.x) / 2 - (dy / lineLength) * labelOffset;
+    const labelY = (from.y + to.y) / 2 + (dx / lineLength) * labelOffset;
+    ctx.save();
+    ctx.font = `800 ${Math.max(7, Math.min(10, width * 0.032))}px ${getComputedStyle(document.documentElement).getPropertyValue('--font-mono') || 'monospace'}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'rgba(15, 23, 42, 0.9)';
+    ctx.fillStyle = isCpActive ? '#ffffff' : 'rgba(165, 243, 252, 0.9)';
+    ctx.strokeText(String(index + 1), labelX, labelY);
+    ctx.fillText(String(index + 1), labelX, labelY);
+    ctx.restore();
   });
 
   let position = null;
