@@ -556,8 +556,8 @@ body {
 .p4-g-scale.right.outer { right:7%; }.p4-g-scale.right.inner { right:23%; }
 #p4-g-dot { position:absolute; z-index:3; left:50%; top:50%; width:13px; height:13px; border:2px solid #fff; border-radius:50%; background:#f97316; box-shadow:0 0 8px rgba(249,115,22,.75); transform:translate(-50%,-50%); transition:left .04s linear,top .04s linear; }
 .p4-g-values { display:flex; flex:0 0 auto; justify-content:space-around; gap:12px; margin-top:clamp(3px, .7vh, 7px); font:800 10px var(--font-mono); white-space:nowrap; }
-.p4-g-card .p4-steering-widget { display:flex; flex:0 0 clamp(36px, 5.5vh, 42px); align-items:center; justify-content:center; gap:9px; margin-top:clamp(2px, .5vh, 5px); padding-top:clamp(2px, .5vh, 5px); border-top:1px solid #e2e8f0; font:800 9px var(--font-mono); }
-.p4-steering-widget svg { flex:0 0 36px; width:36px; height:36px; overflow:visible; transform-origin:center; transition:transform .04s linear; }
+.p4-g-card .p4-steering-widget { display:flex; flex:1 1 58px; min-height:48px; align-items:center; justify-content:center; gap:clamp(12px, 6%, 24px); margin-top:clamp(2px, .5vh, 5px); padding:clamp(3px, .6vh, 7px) 10%; border-top:1px solid #e2e8f0; font:800 10px var(--font-mono); }
+.p4-steering-widget svg { flex:0 0 clamp(42px, 6vh, 52px); width:clamp(42px, 6vh, 52px); height:clamp(42px, 6vh, 52px); overflow:visible; transform-origin:center; transition:transform .04s linear; }
 .p4-steering-widget svg { color:#374151; }
 .p4-steering-widget span b { color:#db2777; font-size:12px; }
 .p4-track-card { display:flex; flex-direction:column; justify-content:center; }
@@ -568,7 +568,7 @@ body.dark-mode .lap-workspace-charts,body.dark-mode .lap-side-card { border-colo
 body.dark-mode .lap-strip { border-color:#334155; }
 body.dark-mode .lap-strip header,body.dark-mode .lap-strip header output,body.dark-mode .lap-side-card > label,body.dark-mode .lap-side-card > strong { color:#e5e7eb; }
 @media(max-width:900px){.lap-workspace{grid-template-columns:1fr;height:auto}.lap-workspace-charts{height:900px}.lap-workspace-side{grid-template-columns:1fr 1fr;grid-template-rows:auto auto}.p4-track-card,.p4-g-card{min-height:260px}}
-@media(max-height:800px) and (min-width:901px){.p4-g-meter{width:min(190px,76%,23vh);min-width:138px}.p4-g-values{font-size:9px}.p4-steering-widget svg{flex-basis:32px;width:32px;height:32px}.p4-steering-widget span b{font-size:11px}}
+@media(max-height:800px) and (min-width:901px){.p4-g-meter{width:min(190px,76%,23vh);min-width:138px}.p4-g-values{font-size:9px}.p4-g-card .p4-steering-widget{min-height:42px;padding-block:2px}.p4-steering-widget svg{flex-basis:38px;width:38px;height:38px}.p4-steering-widget span b{font-size:11px}}
 
 .view-column {
   position: relative; /* 세로 관통 커서선 기준점 제공 */
