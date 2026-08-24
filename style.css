@@ -276,6 +276,8 @@ body {
 }
 
 .tab-nav-arrow:hover { color: var(--accent-orange); border-color: var(--accent-orange); }
+.tab-nav-arrow[hidden] { display:none !important; }
+.tab-nav-arrow:disabled { opacity:.3; color:var(--text-secondary); border-color:var(--border-color); cursor:default; }
 
 .view-tab {
   font-size: 12px;

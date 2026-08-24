@@ -3642,10 +3642,36 @@ if (tabHelp) {
   tabHelp.addEventListener('click', () => switchTab('help'));
 }
 
+function updateTabNavArrowState() {
+  if (!tabNavigation || tabNavPrev?.hidden || tabNavNext?.hidden) return;
+  const maxScroll = Math.max(0, tabNavigation.scrollWidth - tabNavigation.clientWidth);
+  tabNavPrev.disabled = tabNavigation.scrollLeft <= 1;
+  tabNavNext.disabled = tabNavigation.scrollLeft >= maxScroll - 1;
+}
+
+function refreshTabNavArrows() {
+  if (!tabNavigation || !tabNavPrev || !tabNavNext) return;
+  // Measure with both arrows removed so they do not create overflow themselves.
+  tabNavPrev.hidden = true;
+  tabNavNext.hidden = true;
+  const hasOverflow = tabNavigation.scrollWidth > tabNavigation.clientWidth + 2;
+  tabNavPrev.hidden = !hasOverflow;
+  tabNavNext.hidden = !hasOverflow;
+  if (!hasOverflow) tabNavigation.scrollLeft = 0;
+  else requestAnimationFrame(updateTabNavArrowState);
+}
+
 tabNavPrev?.addEventListener('click', () => tabNavigation?.scrollBy({ left: -260, behavior: 'smooth' }));
 tabNavNext?.addEventListener('click', () => tabNavigation?.scrollBy({ left: 260, behavior: 'smooth' }));
+tabNavigation?.addEventListener('scroll', updateTabNavArrowState, { passive: true });
+window.addEventListener('resize', refreshTabNavArrows);
+requestAnimationFrame(refreshTabNavArrows);
+document.fonts?.ready?.then(refreshTabNavArrows);
 document.querySelectorAll('.view-tab').forEach(button => button.addEventListener('click', () => {
-  requestAnimationFrame(() => button.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' }));
+  requestAnimationFrame(() => {
+    button.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    setTimeout(updateTabNavArrowState, 260);
+  });
 }));
 
 pageHelp?.addEventListener('click', event => {
