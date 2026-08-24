@@ -4401,6 +4401,15 @@ gpsFullscreenTimeline?.addEventListener('input', event => {
   updateGpsFullscreenTimelineVisual();
 });
 window.addEventListener('resize', updateGpsFullscreenTimelineVisual);
+let page4ResponsiveRedrawFrame = 0;
+window.addEventListener('resize', () => {
+  if (!tabTemperature?.classList.contains('active')) return;
+  cancelAnimationFrame(page4ResponsiveRedrawFrame);
+  page4ResponsiveRedrawFrame = requestAnimationFrame(() => {
+    drawPage4GTrace();
+    drawPage4TrackMap(page4CursorTime);
+  });
+});
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && gpsPlaybackActive) setGpsPlayback(false);
 });
