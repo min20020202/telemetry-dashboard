@@ -32,6 +32,9 @@ let page4CursorTime = 0;
 let page4SelectedLapIndex = -1;
 let page4AxisMode = 'time';
 const page4LapDistanceCache = new Map();
+const page4SessionStore = [];
+let page4SessionSerial = 0;
+let page4ActiveSessionId = null;
 let gpsAxisMode = 'time';
 
 // Global state variables for Page 3 IMU charts
@@ -171,6 +174,12 @@ const p4PlayTimeline = document.getElementById('p4-play-timeline');
 const p4PlayTime = document.getElementById('p4-play-time');
 const p4SteeringWheel = document.getElementById('p4-steering-wheel');
 const p4AxisModeControl = document.getElementById('p4-axis-mode');
+const p4SessionDrawerToggle = document.getElementById('p4-session-drawer-toggle');
+const p4SessionDrawer = document.getElementById('p4-session-drawer');
+const p4SessionDrawerClose = document.getElementById('p4-session-drawer-close');
+const p4SessionDrawerShade = document.getElementById('p4-session-drawer-shade');
+const p4SessionFiles = document.getElementById('p4-session-files');
+const p4SessionList = document.getElementById('p4-session-list');
 
 // GPS DOMs
 const cursorGpsCoords = document.getElementById('cursor-gps-coords');
@@ -1970,6 +1979,110 @@ function refreshPage4Selectors() {
   refreshPage4SectorOptions();
 }
 
+function escapePage4SessionHtml(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+}
+
+function setPage4SessionDrawer(open) {
+  const workspace = document.getElementById('page-temperature');
+  workspace?.classList.toggle('p4-session-drawer-open', open);
+  p4SessionDrawer?.setAttribute('aria-hidden', String(!open));
+  p4SessionDrawerToggle?.setAttribute('aria-expanded', String(open));
+  if (p4SessionDrawerShade) p4SessionDrawerShade.hidden = !open;
+}
+
+function page4BestLapIndex(session) {
+  if (!session?.laps?.length) return -1;
+  return session.laps.reduce((best, lap, index, laps) => lap.duration < laps[best].duration ? index : best, 0);
+}
+
+function renderPage4SessionDrawer() {
+  if (!p4SessionList) return;
+  if (!page4SessionStore.length) {
+    p4SessionList.innerHTML = '<p>아직 추가된 세션이 없습니다.</p>';
+    return;
+  }
+  p4SessionList.innerHTML = page4SessionStore.map(session => `
+    <section class="p4-session-card ${session.id === page4ActiveSessionId ? 'active' : ''}" data-p4-session="${session.id}">
+      <div class="p4-session-card-head">
+        <input type="text" value="${escapePage4SessionHtml(session.driver)}" data-p4-session-driver="${session.id}" aria-label="드라이버 이름">
+        <button class="p4-session-card-remove" type="button" data-p4-session-remove="${session.id}" aria-label="${escapePage4SessionHtml(session.driver)} 세션 제거" title="이 세션 제거">×</button>
+      </div>
+      <small title="${escapePage4SessionHtml(session.fileName)}">${escapePage4SessionHtml(session.fileName)} · ${session.laps.length}개 완성 랩</small>
+      <div class="p4-session-laps">${session.laps.map((lap, lapIndex) => `
+        <button type="button" class="p4-session-lap ${session.id === page4ActiveSessionId && lapIndex === page4SelectedLapIndex ? 'active' : ''}" data-p4-session-lap="${session.id}:${lapIndex}"><i></i>L${lap.number} ${formatLapTime(lap.duration)}</button>
+      `).join('')}</div>
+    </section>
+  `).join('');
+}
+
+function registerPage4Session(snapshot, makeActive = true) {
+  const file = snapshot?.file;
+  if (!file || !snapshot?.laps?.length) return null;
+  const sourceKey = `${file.name}:${file.size || 0}:${file.lastModified || 0}`;
+  let session = page4SessionStore.find(item => item.sourceKey === sourceKey);
+  if (!session) {
+    session = { id: ++page4SessionSerial, sourceKey, fileName: file.name, driver: file.name.replace(/\.csv$/i, '') };
+    page4SessionStore.push(session);
+  }
+  session.rows = snapshot.rows;
+  session.gpsPoints = (snapshot.gpsPoints || []).map(point => ({ ...point }));
+  session.laps = (snapshot.laps || []).map(lap => ({ ...lap }));
+  session.checkpoints = (snapshot.checkpoints || []).map(line => line.map(point => ({ ...point })));
+  if (makeActive) {
+    const bestLapIndex = page4BestLapIndex(session);
+    page4ActiveSessionId = session.id;
+    page4SelectedLapIndex = bestLapIndex;
+    refreshPage4Selectors();
+    page4SelectedLapIndex = bestLapIndex;
+    if (bestLapIndex >= 0 && p4LapSelect) {
+      p4LapSelect.value = String(bestLapIndex);
+      refreshPage4SectorOptions();
+    }
+  }
+  renderPage4SessionDrawer();
+  return session;
+}
+
+function activatePage4SessionLap(sessionId, lapIndex) {
+  const session = page4SessionStore.find(item => item.id === sessionId);
+  if (!session || !session.laps[lapIndex]) return;
+  setPage4Playback(false);
+  if (page4ActiveSessionId !== sessionId) {
+    globalData = session.rows;
+    if (loadedFileBadge) {
+      loadedFileBadge.textContent = `📄 ${session.fileName}`;
+      loadedFileBadge.style.display = 'inline-block';
+    }
+    initDataAndDashboard();
+    gpsLapPoints = session.gpsPoints.map(point => ({ ...point }));
+    gpsLapResults = session.laps.map(lap => ({ ...lap }));
+    gpsCheckpoints = session.checkpoints.map(line => line.map(point => ({ ...point })));
+  }
+  page4ActiveSessionId = sessionId;
+  page4SelectedLapIndex = lapIndex;
+  refreshPage4Selectors();
+  page4SelectedLapIndex = lapIndex;
+  if (p4LapSelect) p4LapSelect.value = String(lapIndex);
+  refreshPage4SectorOptions();
+  renderPage4SessionDrawer();
+}
+
+function importPage4SessionFile(file) {
+  return new Promise((resolve, reject) => {
+    handleFile(file, {
+      skipUpload: true,
+      onComplete: snapshot => {
+        const session = registerPage4Session(snapshot, true);
+        session ? resolve(session) : reject(new Error(`${file.name}: 완성 랩이 없습니다.`));
+      },
+      onError: reject
+    });
+  });
+}
+
+window.registerCurrentPage4Session = snapshot => registerPage4Session(snapshot, true);
+
 function refreshPage4SectorOptions() {
   if (!p4SectorStart || !p4SectorEnd) return;
   const boundaries = page4LapBoundaries(page4SelectedLapIndex);
@@ -2369,7 +2482,50 @@ function updatePage4Widgets(row) {
   drawPage4TrackMap(Number(row.time_sec));
 }
 
-p4LapSelect?.addEventListener('change', () => { page4SelectedLapIndex = Number(p4LapSelect.value); refreshPage4SectorOptions(); });
+p4SessionDrawerToggle?.addEventListener('click', () => setPage4SessionDrawer(!document.getElementById('page-temperature')?.classList.contains('p4-session-drawer-open')));
+p4SessionDrawerClose?.addEventListener('click', () => setPage4SessionDrawer(false));
+p4SessionDrawerShade?.addEventListener('click', () => setPage4SessionDrawer(false));
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && document.getElementById('page-temperature')?.classList.contains('p4-session-drawer-open')) setPage4SessionDrawer(false);
+});
+p4SessionFiles?.addEventListener('change', async event => {
+  const files = [...event.target.files];
+  event.target.value = '';
+  for (const file of files) {
+    try { await importPage4SessionFile(file); }
+    catch (error) { alert(error.message || `${file.name}을 불러오지 못했습니다.`); }
+  }
+});
+p4SessionList?.addEventListener('input', event => {
+  const session = page4SessionStore.find(item => item.id === Number(event.target.dataset.p4SessionDriver));
+  if (session) session.driver = event.target.value.trim() || session.fileName.replace(/\.csv$/i, '');
+});
+p4SessionList?.addEventListener('click', event => {
+  const remove = event.target.closest('[data-p4-session-remove]');
+  if (remove) {
+    const sessionId = Number(remove.dataset.p4SessionRemove);
+    const sessionIndex = page4SessionStore.findIndex(item => item.id === sessionId);
+    const session = page4SessionStore[sessionIndex];
+    if (!session || !window.confirm(`“${session.driver}” 세션(${session.fileName})을 제거하시겠습니까?`)) return;
+    page4SessionStore.splice(sessionIndex, 1);
+    if (page4ActiveSessionId === sessionId) {
+      const next = page4SessionStore[Math.min(sessionIndex, page4SessionStore.length - 1)];
+      page4ActiveSessionId = null;
+      if (next) activatePage4SessionLap(next.id, page4BestLapIndex(next));
+    }
+    renderPage4SessionDrawer();
+    return;
+  }
+  const lap = event.target.closest('[data-p4-session-lap]');
+  if (!lap) return;
+  const [sessionId, lapIndex] = lap.dataset.p4SessionLap.split(':').map(Number);
+  activatePage4SessionLap(sessionId, lapIndex);
+});
+p4LapSelect?.addEventListener('change', () => {
+  page4SelectedLapIndex = Number(p4LapSelect.value);
+  refreshPage4SectorOptions();
+  renderPage4SessionDrawer();
+});
 p4SectorStart?.addEventListener('change', applyPage4Selection);
 p4SectorEnd?.addEventListener('change', applyPage4Selection);
 p4PlayToggle?.addEventListener('click', () => setPage4Playback(!page4PlaybackActive));
@@ -5041,7 +5197,10 @@ function handleFile(file, options = {}) {
       if (typeof options.onComplete === 'function') {
         options.onComplete(snapshot);
       }
-      if (!options.skipUpload) window.registerCurrentComparisonSession?.(snapshot);
+      if (!options.skipUpload) {
+        window.registerCurrentPage4Session?.(snapshot);
+        window.registerCurrentComparisonSession?.(snapshot);
+      }
     },
     error: function (err) {
       statusBadge.className = 'status-badge inactive';

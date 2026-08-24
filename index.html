@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260825-12">
+  <link rel="stylesheet" href="style.css?v=20260825-13">
 </head>
 <body>
 
@@ -585,6 +585,14 @@
           <section class="lap-side-card p4-g-card"><strong>IMU G / STEERING</strong><div class="p4-g-meter"><canvas id="p4-g-trace"></canvas><i></i><i></i><b>↑</b><span class="p4-g-scale top outer">+2g</span><span class="p4-g-scale top inner">+1g</span><span id="p4-g-dot"></span></div><div class="p4-g-values"><span>종G <b id="p4-gx">--.--</b></span><span>횡G <b id="p4-gy">--.--</b></span></div><div class="p4-steering-widget"><svg id="p4-steering-wheel" viewBox="0 0 100 100" aria-label="조향 핸들"><circle cx="50" cy="50" r="40" stroke="var(--text-primary)" stroke-width="8" fill="none" opacity="0.8"></circle><line x1="50" y1="50" x2="50" y2="90" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round"></line><line x1="50" y1="50" x2="10" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round"></line><line x1="50" y1="50" x2="90" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round"></line><circle cx="50" cy="50" r="10" fill="var(--accent-magenta)"></circle><rect x="47" y="6" width="6" height="8" fill="var(--accent-orange)" rx="1"></rect></svg><span>핸들 <b id="p4-steering-value">--.-°</b></span></div></section>
           <section class="lap-side-card p4-track-card"><canvas id="p4-track-map" aria-label="현재 랩 위치"></canvas><small id="p4-track-time">--:--.---</small></section>
         </aside>
+        <button id="p4-session-drawer-toggle" class="p4-session-drawer-toggle" type="button" aria-expanded="false" aria-controls="p4-session-drawer"><span>세션<br>·<br>랩</span><i>›</i></button>
+        <button id="p4-session-drawer-shade" class="p4-session-drawer-shade" type="button" aria-label="세션과 랩 창 닫기" hidden></button>
+        <aside id="p4-session-drawer" class="p4-session-drawer" aria-hidden="true">
+          <header><strong>세션과 랩</strong><button id="p4-session-drawer-close" type="button" aria-label="닫기">×</button></header>
+          <label for="p4-session-files" class="p4-session-file-button">＋ 분석 CSV 추가</label>
+          <input id="p4-session-files" type="file" accept=".csv,.CSV" multiple hidden>
+          <div id="p4-session-list" class="p4-session-list"><p>아직 추가된 세션이 없습니다.</p></div>
+        </aside>
       </section>
 
       <!-- [페이지 5] 여러 CSV / 드라이버 / 랩 거리축 비교 -->
@@ -985,7 +993,7 @@
   <script src="steering.js?v=20260820-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
-  <script src="app.js?v=20260825-1"></script>
+  <script src="app.js?v=20260825-2"></script>
   <script src="comparison.js?v=20260825-18"></script>
 </body>
 </html>
