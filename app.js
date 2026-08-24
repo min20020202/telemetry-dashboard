@@ -4982,15 +4982,17 @@ function handleFile(file, options = {}) {
       globalData = results.data;
       initDataAndDashboard();
       if (!options.skipUpload) uploadFileToServer(file);
+      const snapshot = {
+        file,
+        rows: globalData,
+        gpsPoints: gpsLapPoints,
+        laps: gpsLapResults,
+        checkpoints: gpsCheckpoints
+      };
       if (typeof options.onComplete === 'function') {
-        options.onComplete({
-          file,
-          rows: globalData,
-          gpsPoints: gpsLapPoints,
-          laps: gpsLapResults,
-          checkpoints: gpsCheckpoints
-        });
+        options.onComplete(snapshot);
       }
+      if (!options.skipUpload) window.registerCurrentComparisonSession?.(snapshot);
     },
     error: function (err) {
       statusBadge.className = 'status-badge inactive';

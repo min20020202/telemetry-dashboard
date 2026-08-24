@@ -25,27 +25,39 @@
     ui.status.classList.toggle('error', error);
   }
 
+  function addSession(snapshot, autoSelect = false) {
+    const file = snapshot.file;
+    const laps = (snapshot.laps || []).map(lap => ({ ...lap }));
+    if (!laps.length) throw new Error(`${file.name}: 고정 피니시라인을 통과한 완성 랩이 없습니다.`);
+    const sourceKey = `${file.name}:${file.size || 0}:${file.lastModified || 0}`;
+    let session = state.sessions.find(item => item.sourceKey === sourceKey);
+    if (!session) {
+      session = {
+        id: ++state.serial,
+        sourceKey,
+        fileName: file.name,
+        driver: file.name.replace(/\.csv$/i, ''),
+        rows: snapshot.rows,
+        gpsPoints: (snapshot.gpsPoints || []).map(point => ({ ...point })),
+        laps,
+        checkpoints: (snapshot.checkpoints || []).map(line => line.map(point => ({ ...point })))
+      };
+      state.sessions.push(session);
+    }
+    if (autoSelect && state.selected.size === 0) {
+      session.laps.map((lap, lapIndex) => ({ lap, lapIndex })).sort((a, b) => a.lap.duration - b.lap.duration).slice(0, 2)
+        .forEach(item => state.selected.add(selectionKey(session.id, item.lapIndex)));
+    }
+    return session;
+  }
+
   function importOne(file) {
     return new Promise((resolve, reject) => {
       handleFile(file, {
         skipUpload: true,
         onComplete: snapshot => {
-          const laps = (snapshot.laps || []).map(lap => ({ ...lap }));
-          if (!laps.length) {
-            reject(new Error(`${file.name}: 고정 피니시라인을 통과한 완성 랩이 없습니다.`));
-            return;
-          }
-          const id = ++state.serial;
-          state.sessions.push({
-            id,
-            fileName: file.name,
-            driver: file.name.replace(/\.csv$/i, ''),
-            rows: snapshot.rows,
-            gpsPoints: (snapshot.gpsPoints || []).map(point => ({ ...point })),
-            laps,
-            checkpoints: (snapshot.checkpoints || []).map(line => line.map(point => ({ ...point })))
-          });
-          resolve();
+          try { addSession(snapshot); resolve(); }
+          catch (error) { reject(error); }
         },
         onError: reject
       });
@@ -276,6 +288,16 @@
     if (items.length) setStatus(`${items.length}개 랩을 1 m 간격 공통 중심선 거리축으로 비교 중입니다.`);
   }
   window.renderDriverComparison = render;
+  window.registerCurrentComparisonSession = snapshot => {
+    try {
+      const session = addSession(snapshot, true);
+      renderSessions();
+      render();
+      setStatus(`${session.fileName}의 ${session.laps.length}개 랩을 불러왔습니다. 같은 CSV 안에서 바로 비교할 수 있습니다.`);
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  };
 
   ui.files?.addEventListener('change', event => { const files = [...event.target.files]; event.target.value = ''; importFiles(files); });
   ui.clear?.addEventListener('click', () => {
