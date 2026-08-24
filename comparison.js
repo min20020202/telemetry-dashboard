@@ -770,14 +770,15 @@
     const endOptions = bounds.slice(0, -1).map((_, index) => `<option value="${index}" ${index === state.activeSectorEnd ? 'selected' : ''}>S${index + 1}</option>`).join('');
     const rangeSummary = state.activeSector === null ? '' : `<div class="comparison-sector-selection-summary"><b>S${state.activeSector + 1}${state.activeSectorEnd > state.activeSector ? `–S${state.activeSectorEnd + 1}` : ''} 소요시간</b>${cells.map(cell => {
       const timing = sectorRangeTiming(cell.item, state.activeSector, state.activeSectorEnd, items);
-      return `<span style="--session-color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)} L${cell.item.lap.number} <strong>${timing ? `${timing.duration.toFixed(3)}s` : '통과 기록 없음'}</strong></span>`;
+      return `<span style="--session-color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)}&nbsp;L${cell.item.lap.number} <strong>${timing ? `${timing.duration.toFixed(3)}s` : '통과 기록 없음'}</strong></span>`;
     }).join('')}</div>`;
     const controls = `<div class="comparison-sector-controls"><div class="comparison-sector-buttons">${bounds.slice(0, -1).map((_, index) => `<button type="button" data-sector="${index}" aria-pressed="${isActive(index)}" class="${isActive(index) ? 'active' : ''}">S${index + 1}</button>`).join('')}</div><div class="comparison-sector-range"><span>다중 구간</span><label>시작 <select data-sector-range-start>${options}</select></label><i>→</i><label>종료 <select data-sector-range-end>${endOptions}</select></label><button type="button" data-sector-range-reset>초기화</button></div>${rangeSummary}</div>`;
-    ui.sector.innerHTML = `${controls}<table><thead><tr><th>구간</th>${cells.map(cell => `<th style="color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)} L${cell.item.lap.number}</th>`).join('')}</tr></thead><tbody>${bounds.slice(0, -1).map((start, sectorIndex) => {
+    ui.sector.innerHTML = `${controls}<table><thead><tr><th>구간</th>${cells.map(cell => `<th style="color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)}&nbsp;L${cell.item.lap.number}</th>`).join('')}</tr></thead><tbody>${bounds.slice(0, -1).map((start, sectorIndex) => {
       const end = bounds[sectorIndex + 1];
       const durations = cells.map(cell => sectorDuration(cell.item, sectorIndex, items));
       const validDurations = durations.filter(Number.isFinite);
       const fastest = validDurations.length ? Math.min(...validDurations) : NaN;
+      const referenceDuration = durations[0];
       return `<tr class="${isActive(sectorIndex) ? 'active' : ''}" data-sector-row="${sectorIndex}"><td><button type="button" data-sector="${sectorIndex}">S${sectorIndex + 1}</button><br><small>${start.toFixed(0)}–${end.toFixed(0)}m</small></td>${cells.map(cell => {
         const points = cell.data.filter(point => point.x >= start && point.x <= end);
         const first = points[0], last = points.at(-1);
@@ -788,8 +789,12 @@
         const minIndex = points.findIndex(point => point.speed === minSpeed);
         const throttle = points.slice(Math.max(0, minIndex)).find(point => point.tps >= 20);
         const detail = `최저속도 ${minSpeed.toFixed(1)} km/h · 브레이크 ${brake ? `${brake.x.toFixed(0)}m` : '없음'} · 재가속 ${throttle ? `${throttle.x.toFixed(0)}m` : '없음'} · 탈출속도 ${(last?.speed || 0).toFixed(1)} km/h`;
+        const delta = Number.isFinite(duration) && Number.isFinite(referenceDuration) ? duration - referenceDuration : NaN;
+        const deltaMarkup = Number.isFinite(delta)
+          ? `<small class="sector-time-delta ${delta < -.0005 ? 'faster' : delta > .0005 ? 'slower' : 'equal'}">기준 ${delta >= 0 ? '+' : ''}${delta.toFixed(3)}s</small>`
+          : '';
         return Number.isFinite(duration)
-          ? `<td class="${isFastest ? 'sector-fastest' : ''}" title="${detail}"><b>${duration.toFixed(3)}s</b>${isFastest ? '<span class="sector-fastest-badge">★ FAST</span>' : ''}</td>`
+          ? `<td class="${isFastest ? 'sector-fastest' : ''}" title="${detail}"><b>${duration.toFixed(3)}s</b>${isFastest ? '<span class="sector-fastest-badge">★ FAST</span>' : ''}${deltaMarkup}</td>`
           : '<td title="해당 체크포인트의 실제 교차점을 찾지 못했습니다."><b>통과 기록 없음</b></td>';
       }).join('')}</tr>`;
     }).join('')}</tbody></table>`;
@@ -913,7 +918,9 @@
       ui.slider.disabled = !duration;
       ui.slider.style.setProperty('--comparison-play-progress', `${duration ? Math.max(0, Math.min(100, state.playElapsed / duration * 100)) : 0}%`);
     }
-    if (ui.playTime) ui.playTime.textContent = state.activeSector === null ? `${state.playElapsed.toFixed(2)} s` : `구간 +${state.playElapsed.toFixed(2)} s`;
+    if (ui.playTime) ui.playTime.textContent = state.activeSector === null
+      ? `${state.playElapsed.toFixed(2)} s`
+      : `구간 ${state.playElapsed.toFixed(2)} / ${duration.toFixed(2)} s`;
     if (ui.playDistance) ui.playDistance.innerHTML = items.length ? items.map((item, index) => {
       const sample = cursorSampleForItem(item, items);
       return `<span style="color:${COLORS[index]}">L${item.lap.number} ${(sample?.x || 0).toFixed(1)} m</span>`;
@@ -1071,7 +1078,9 @@
     renderSeriesToggleButtons(name);
   });
   ui.slider?.addEventListener('input', () => {
-    const requested = Number(ui.slider.value) || 0;
+    const duration = playbackDuration();
+    const rawRequested = Number(ui.slider.value) || 0;
+    const requested = duration - rawRequested <= .015 ? duration : rawRequested;
     setPlaying(false);
     state.playElapsed = requested;
     state.hoverDistance = null;
