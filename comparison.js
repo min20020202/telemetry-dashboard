@@ -2,7 +2,7 @@
   'use strict';
 
   const COLORS = ['#06b6d4', '#ff3d9a', '#76ff03', '#ffca28'];
-  const state = { sessions: [], selected: new Set(), cache: new Map(), distanceMapCache: new Map(), sourceSeriesCache: new Map(), sectorCache: new Map(), charts: {}, chartEnabled: { speed: true, pedal: true, steering: true, delta: true }, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, playRenderStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, lastSector: 0, mapGeometry: null };
+  const state = { sessions: [], selected: new Set(), cache: new Map(), distanceMapCache: new Map(), sourceSeriesCache: new Map(), sectorCache: new Map(), charts: {}, seriesEnabled: new Map(), serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, playRenderStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, lastSector: 0, mapGeometry: null };
   const boundChartCanvases = new WeakSet();
   const $ = id => document.getElementById(id);
   const ui = {
@@ -246,7 +246,7 @@
     return {
       responsive: true, maintainAspectRatio: false, animation: false, normalized: true, parsing: false,
       interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: true, labels: { boxWidth: 28, boxHeight: 2, padding: 11, font: { size: 9 } } }, tooltip: { enabled: true } },
+      plugins: { legend: { display: false }, tooltip: { enabled: true } },
       scales: {
         x: { type: 'linear', min: state.viewMin, max: state.viewMax ?? distance, title: { display: true, text: '공통 중심선 거리 [m]', font: { size: 9 } }, ticks: { maxTicksLimit: 9, font: { size: 9 } } },
         y: { title: { display: true, text: yTitle, font: { size: 9 } }, ticks: { maxTicksLimit: 6, font: { size: 9 } } }
@@ -413,7 +413,6 @@
   const comparisonCursorPlugin = {
     id: 'comparisonPlaybackCursor',
     afterDatasetsDraw(chart) {
-      if (chart.$comparisonName && state.chartEnabled[chart.$comparisonName] === false) return;
       const items = selectedLaps();
       if (!items.length || !chart.chartArea) return;
       const ctx = chart.ctx, positions = items.map(item => cursorSampleForItem(item, items));
@@ -444,26 +443,33 @@
     if (!canvas) return;
     const options = chartOptions(title);
     Object.assign(options.scales.y, extra);
-    datasets.forEach(dataset => { dataset.hidden = state.chartEnabled[name] === false; });
+    datasets.forEach((dataset, index) => {
+      dataset.comparisonSeriesId ||= `${name}|${index}|${dataset.label}`;
+      if (!state.seriesEnabled.has(dataset.comparisonSeriesId)) state.seriesEnabled.set(dataset.comparisonSeriesId, true);
+      dataset.hidden = state.seriesEnabled.get(dataset.comparisonSeriesId) === false;
+    });
     state.charts[name] = new Chart(canvas, { type: 'line', data: { datasets }, options, plugins: [comparisonCursorPlugin] });
     state.charts[name].$comparisonName = name;
-    syncChartToggleButton(name);
+    renderSeriesToggleButtons(name);
     bindChartZoom(canvas);
   }
 
-  function syncChartToggleButton(name) {
-    const button = document.querySelector(`[data-comparison-chart-toggle="${name}"]`);
-    if (!button) return;
-    const enabled = state.chartEnabled[name] !== false;
-    button.textContent = `그래프 ${enabled ? 'ON' : 'OFF'}`;
-    button.classList.toggle('active', enabled);
-    button.setAttribute('aria-pressed', String(enabled));
+  function renderSeriesToggleButtons(name) {
+    const container = $(`comparison-${name}-toggles`);
+    const chart = state.charts[name];
+    if (!container || !chart) return;
+    container.innerHTML = chart.data.datasets.map((dataset, index) => {
+      const active = chart.isDatasetVisible(index);
+      const dashed = Array.isArray(dataset.borderDash) && dataset.borderDash.length > 0;
+      return `<button type="button" data-comparison-series-chart="${name}" data-comparison-series-index="${index}" class="${active ? 'active' : ''}" aria-pressed="${active}" style="--series-color:${dataset.borderColor}"><i class="${dashed ? 'dashed' : ''}"></i>${escapeHtml(dataset.label)}</button>`;
+    }).join('');
   }
 
   function sourceLine(label, color, item, key, dashed = false, comparisonIndex = 0) {
     const sourceHz = COMPARISON_SOURCE_HZ[key] || 100;
     return {
       label, comparisonIndex, comparisonItem: item, comparisonKey: key, comparisonSourceHz: sourceHz,
+      comparisonSeriesId: `${item.key}|${key}`,
       data: visibleComparisonSourceSeries(item, key, sourceHz),
       borderColor: color, backgroundColor: color, borderWidth: dashed ? 2 : 1.7,
       borderDash: dashed ? [9, 6] : [], pointRadius: 0, fill: false
@@ -478,7 +484,7 @@
     const baseline = sampled[0]?.data || [];
     rebuildChart('delta', 'comparison-delta-chart', sampled.map(s => ({
       label: s.label, data: s.data.map((point, index) => ({ x: point.x, y: point.elapsed - (baseline[index]?.elapsed || 0) })),
-      comparisonIndex: sampled.indexOf(s), borderColor: s.color, backgroundColor: s.color, borderWidth: 1.8, pointRadius: 0, fill: false
+      comparisonIndex: sampled.indexOf(s), comparisonSeriesId: `${s.item.key}|delta`, borderColor: s.color, backgroundColor: s.color, borderWidth: 1.8, pointRadius: 0, fill: false
     })), 'Δ time [s]');
   }
 
@@ -862,7 +868,7 @@
   ui.files?.addEventListener('change', event => { const files = [...event.target.files]; event.target.value = ''; importFiles(files); });
   ui.clear?.addEventListener('click', () => {
     setPlaying(false);
-    state.sessions = []; state.selected.clear(); state.cache.clear(); state.distanceMapCache.clear(); state.sourceSeriesCache.clear(); state.sectorCache.clear(); state.viewMin = 0; state.viewMax = null; state.hoverDistance = null; state.activeSector = null; state.lastSector = 0; state.mapGeometry = null;
+    state.sessions = []; state.selected.clear(); state.cache.clear(); state.distanceMapCache.clear(); state.sourceSeriesCache.clear(); state.sectorCache.clear(); state.seriesEnabled.clear(); state.viewMin = 0; state.viewMax = null; state.hoverDistance = null; state.activeSector = null; state.lastSector = 0; state.mapGeometry = null;
     Object.values(state.charts).forEach(chart => chart.destroy()); state.charts = {};
     renderSessions(); render(); setStatus('CSV를 추가한 뒤 비교할 랩을 2~4개 선택하세요.');
   });
@@ -895,15 +901,18 @@
   ui.play?.addEventListener('click', () => setPlaying(!state.playing));
   ui.rate?.addEventListener('change', () => { state.playRate = Number(ui.rate.value) || 1; });
   $('page-comparison')?.addEventListener('click', event => {
-    const button = event.target.closest('[data-comparison-chart-toggle]');
+    const button = event.target.closest('[data-comparison-series-chart]');
     if (!button) return;
-    const name = button.dataset.comparisonChartToggle;
-    if (!(name in state.chartEnabled)) return;
-    state.chartEnabled[name] = !state.chartEnabled[name];
+    const name = button.dataset.comparisonSeriesChart;
+    const index = Number(button.dataset.comparisonSeriesIndex);
     const chart = state.charts[name];
-    chart?.data.datasets.forEach((_, index) => chart.setDatasetVisibility(index, state.chartEnabled[name]));
-    chart?.update('none');
-    syncChartToggleButton(name);
+    const dataset = chart?.data.datasets[index];
+    if (!chart || !dataset) return;
+    const enabled = !chart.isDatasetVisible(index);
+    chart.setDatasetVisibility(index, enabled);
+    state.seriesEnabled.set(dataset.comparisonSeriesId, enabled);
+    chart.update('none');
+    renderSeriesToggleButtons(name);
   });
   ui.slider?.addEventListener('input', () => {
     const requested = Number(ui.slider.value) || 0;
