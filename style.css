@@ -68,7 +68,7 @@
 .comparison-live-separator { color:var(--text-secondary); font-style:normal; opacity:.65; }
 .comparison-chart-canvas { position:relative; min-width:0; min-height:0; overflow:hidden; }
 .comparison-chart-canvas canvas { position:absolute; inset:0; width:100% !important; height:100% !important; min-width:0; }
-.comparison-track-card canvas { width: 100% !important; height: 100% !important; min-width: 0; }
+.comparison-track-card canvas { align-self:start; width:100% !important; height:calc(100% - 7px) !important; min-width:0; border-radius:3px; }
 .comparison-chart-stack canvas { cursor:crosshair; }
 .comparison-track-card canvas { cursor:pointer; }
 .comparison-bottom-grid { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); grid-template-rows:minmax(0,1fr); min-height:0; gap:10px; overflow:hidden; }
