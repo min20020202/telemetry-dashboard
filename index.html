@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260825-5">
+  <link rel="stylesheet" href="style.css?v=20260825-6">
 </head>
 <body>
 
@@ -624,10 +624,10 @@
           </aside>
           <main class="comparison-main">
             <section class="comparison-chart-stack">
-              <article><header><strong>속도</strong><output id="comparison-speed-value">-- km/h</output></header><canvas id="comparison-speed-chart"></canvas></article>
-              <article><header><strong>TPS / 브레이크</strong><output id="comparison-pedal-value">-- %</output></header><canvas id="comparison-pedal-chart"></canvas></article>
-              <article><header><strong>조향각 / Yaw rate</strong><output id="comparison-steering-value">--</output></header><canvas id="comparison-steering-chart"></canvas></article>
-              <article><header><strong>기준 랩 대비 누적 시간</strong><output id="comparison-delta-value">-- s</output></header><canvas id="comparison-delta-chart"></canvas></article>
+              <article><header><strong>속도</strong><div class="comparison-chart-head-actions"><output id="comparison-speed-value">-- km/h</output><button type="button" data-comparison-chart-toggle="speed" class="active" aria-pressed="true">그래프 ON</button></div></header><canvas id="comparison-speed-chart"></canvas></article>
+              <article><header><strong>조향각 / Yaw rate</strong><div class="comparison-chart-head-actions"><output id="comparison-steering-value">--</output><button type="button" data-comparison-chart-toggle="steering" class="active" aria-pressed="true">그래프 ON</button></div></header><canvas id="comparison-steering-chart"></canvas></article>
+              <article><header><strong>TPS / 브레이크</strong><div class="comparison-chart-head-actions"><output id="comparison-pedal-value">-- %</output><button type="button" data-comparison-chart-toggle="pedal" class="active" aria-pressed="true">그래프 ON</button></div></header><canvas id="comparison-pedal-chart"></canvas></article>
+              <article><header><strong>기준 랩 대비 누적 시간</strong><div class="comparison-chart-head-actions"><output id="comparison-delta-value">-- s</output><button type="button" data-comparison-chart-toggle="delta" class="active" aria-pressed="true">그래프 ON</button></div></header><canvas id="comparison-delta-chart"></canvas></article>
             </section>
             <section class="comparison-bottom-grid">
               <article class="comparison-track-card">
@@ -988,6 +988,6 @@
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
   <script src="app.js?v=20260825-1"></script>
-  <script src="comparison.js?v=20260825-12"></script>
+  <script src="comparison.js?v=20260825-13"></script>
 </body>
 </html>

@@ -56,6 +56,9 @@
 .comparison-chart-stack article { display: grid; grid-template-rows: auto 160px; min-width: 0; padding: 8px; }
 .comparison-chart-stack header, .comparison-bottom-grid header { display: flex; justify-content: space-between; gap: 8px; padding: 0 3px 5px; font-size: 12px; }
 .comparison-chart-stack output { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:2px 5px; color:var(--accent-orange); font-family:monospace; font-size:10px; text-align:right; }
+.comparison-chart-head-actions { display:flex; min-width:0; align-items:center; justify-content:flex-end; gap:7px; }
+.comparison-chart-head-actions button { flex:0 0 auto; height:21px; padding:0 7px; border:1px solid var(--border-color); border-radius:5px; background:var(--panel-bg); color:var(--text-secondary); font:800 8px var(--font-mono); cursor:pointer; }
+.comparison-chart-head-actions button.active { border-color:var(--accent-orange); background:rgba(249,115,22,.1); color:var(--accent-orange); }
 .comparison-live-item { white-space:nowrap; font-weight:800; }
 .comparison-live-separator { color:var(--text-secondary); font-style:normal; opacity:.65; }
 .comparison-chart-stack canvas, .comparison-track-card canvas { width: 100% !important; height: 100% !important; min-width: 0; }

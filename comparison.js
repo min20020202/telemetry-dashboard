@@ -2,7 +2,7 @@
   'use strict';
 
   const COLORS = ['#06b6d4', '#ff3d9a', '#76ff03', '#ffca28'];
-  const state = { sessions: [], selected: new Set(), cache: new Map(), sectorCache: new Map(), charts: {}, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, playRenderStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, lastSector: 0, mapGeometry: null };
+  const state = { sessions: [], selected: new Set(), cache: new Map(), sectorCache: new Map(), charts: {}, chartEnabled: { speed: true, pedal: true, steering: true, delta: true }, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, playRenderStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, lastSector: 0, mapGeometry: null };
   const boundChartCanvases = new WeakSet();
   const $ = id => document.getElementById(id);
   const ui = {
@@ -202,7 +202,7 @@
     return {
       responsive: true, maintainAspectRatio: false, animation: false, normalized: true, parsing: false,
       interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: true, labels: { boxWidth: 10, boxHeight: 2, font: { size: 9 } } }, tooltip: { enabled: true } },
+      plugins: { legend: { display: true, labels: { boxWidth: 28, boxHeight: 2, padding: 11, font: { size: 9 } } }, tooltip: { enabled: true } },
       scales: {
         x: { type: 'linear', min: state.viewMin, max: state.viewMax ?? distance, title: { display: true, text: '공통 중심선 거리 [m]', font: { size: 9 } }, ticks: { maxTicksLimit: 9, font: { size: 9 } } },
         y: { title: { display: true, text: yTitle, font: { size: 9 } }, ticks: { maxTicksLimit: 6, font: { size: 9 } } }
@@ -365,6 +365,7 @@
   const comparisonCursorPlugin = {
     id: 'comparisonPlaybackCursor',
     afterDatasetsDraw(chart) {
+      if (chart.$comparisonName && state.chartEnabled[chart.$comparisonName] === false) return;
       const items = selectedLaps();
       if (!items.length || !chart.chartArea) return;
       const ctx = chart.ctx, positions = items.map(item => cursorSampleForItem(item, items));
@@ -375,7 +376,8 @@
         if (x < chart.chartArea.left || x > chart.chartArea.right) return;
         ctx.beginPath(); ctx.moveTo(x, chart.chartArea.top); ctx.lineTo(x, chart.chartArea.bottom);
         ctx.strokeStyle = COLORS[index]; ctx.lineWidth = 1.5; ctx.globalAlpha = .78; ctx.stroke();
-        chart.data.datasets.forEach(dataset => {
+        chart.data.datasets.forEach((dataset, datasetIndex) => {
+          if (!chart.isDatasetVisible(datasetIndex)) return;
           if (dataset.comparisonIndex !== index) return;
           const value = seriesValueAt(dataset.data, sample.x);
           if (!Number.isFinite(value)) return;
@@ -394,12 +396,24 @@
     if (!canvas) return;
     const options = chartOptions(title);
     Object.assign(options.scales.y, extra);
+    datasets.forEach(dataset => { dataset.hidden = state.chartEnabled[name] === false; });
     state.charts[name] = new Chart(canvas, { type: 'line', data: { datasets }, options, plugins: [comparisonCursorPlugin] });
+    state.charts[name].$comparisonName = name;
+    syncChartToggleButton(name);
     bindChartZoom(canvas);
   }
 
+  function syncChartToggleButton(name) {
+    const button = document.querySelector(`[data-comparison-chart-toggle="${name}"]`);
+    if (!button) return;
+    const enabled = state.chartEnabled[name] !== false;
+    button.textContent = `그래프 ${enabled ? 'ON' : 'OFF'}`;
+    button.classList.toggle('active', enabled);
+    button.setAttribute('aria-pressed', String(enabled));
+  }
+
   function line(label, color, samples, key, dashed = false, comparisonIndex = 0) {
-    return { label, comparisonIndex, data: samples.map(point => ({ x: point.x, y: point[key] })), borderColor: color, backgroundColor: color, borderWidth: 1.6, borderDash: dashed ? [5, 3] : [], pointRadius: 0, fill: false };
+    return { label, comparisonIndex, data: samples.map(point => ({ x: point.x, y: point[key] })), borderColor: color, backgroundColor: color, borderWidth: dashed ? 2 : 1.7, borderDash: dashed ? [9, 6] : [], pointRadius: 0, fill: false };
   }
 
   function renderCharts(items) {
@@ -826,6 +840,17 @@
   });
   ui.play?.addEventListener('click', () => setPlaying(!state.playing));
   ui.rate?.addEventListener('change', () => { state.playRate = Number(ui.rate.value) || 1; });
+  $('page-comparison')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-comparison-chart-toggle]');
+    if (!button) return;
+    const name = button.dataset.comparisonChartToggle;
+    if (!(name in state.chartEnabled)) return;
+    state.chartEnabled[name] = !state.chartEnabled[name];
+    const chart = state.charts[name];
+    chart?.data.datasets.forEach((_, index) => chart.setDatasetVisibility(index, state.chartEnabled[name]));
+    chart?.update('none');
+    syncChartToggleButton(name);
+  });
   ui.slider?.addEventListener('input', () => {
     const requested = Number(ui.slider.value) || 0;
     setPlaying(false);
