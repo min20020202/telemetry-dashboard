@@ -791,8 +791,8 @@
         const detail = `최저속도 ${minSpeed.toFixed(1)} km/h · 브레이크 ${brake ? `${brake.x.toFixed(0)}m` : '없음'} · 재가속 ${throttle ? `${throttle.x.toFixed(0)}m` : '없음'} · 탈출속도 ${(last?.speed || 0).toFixed(1)} km/h`;
         const delta = Number.isFinite(duration) && Number.isFinite(referenceDuration) ? duration - referenceDuration : NaN;
         const deltaMarkup = cell.index > 0 && Number.isFinite(delta)
-          ? `<small class="sector-time-delta ${delta < -.0005 ? 'faster' : delta > .0005 ? 'slower' : 'equal'}">기준 ${delta >= 0 ? '+' : ''}${delta.toFixed(3)}s</small>`
-          : '';
+          ? `<small class="sector-time-delta ${delta < -.0005 ? 'faster' : delta > .0005 ? 'slower' : 'equal'}">${delta >= 0 ? '+' : ''}${delta.toFixed(3)}s</small>`
+          : '<small class="sector-time-delta sector-time-delta-placeholder" aria-hidden="true">&nbsp;</small>';
         return Number.isFinite(duration)
           ? `<td class="${isFastest ? 'sector-fastest' : ''}" title="${detail}"><b>${duration.toFixed(3)}s</b>${isFastest ? '<span class="sector-fastest-badge">★ FAST</span>' : ''}${deltaMarkup}</td>`
           : '<td title="해당 체크포인트의 실제 교차점을 찾지 못했습니다."><b>통과 기록 없음</b></td>';

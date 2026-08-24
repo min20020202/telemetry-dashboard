@@ -722,6 +722,7 @@ body {
 .p4-live-values span { position:relative; color:#0f172a; }
 .p4-live-values span i { margin-right:5px; color:#0f172a; font-style:normal; font-weight:900; }
 .p4-live-values.p4-multi-values span::before { display:inline-block; width:6px; height:6px; margin-right:4px; border-radius:50%; background:var(--lap-value-color); content:""; vertical-align:-.5px; }
+.sector-time-delta-placeholder { visibility:hidden; }
 .p4-series-menu-button { flex:0 0 20px; display:grid; place-content:center; gap:2px; width:20px; height:20px; padding:0; border:1px solid #cbd5e1; border-radius:5px; background:rgba(255,255,255,.94); cursor:pointer; pointer-events:auto; }
 .p4-series-menu-button span { display:block; width:11px; height:1.5px; border-radius:2px; background:#475569; }
 .p4-series-menu-button[aria-expanded="true"] { border-color:#f97316; background:#fff7ed; }
