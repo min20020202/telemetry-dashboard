@@ -2,7 +2,7 @@
   'use strict';
 
   const COLORS = ['#06b6d4', '#ff3d9a', '#76ff03', '#ffca28'];
-  const state = { sessions: [], selected: new Set(), cache: new Map(), charts: {}, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, lastSector: 0, mapGeometry: null };
+  const state = { sessions: [], selected: new Set(), cache: new Map(), sectorCache: new Map(), charts: {}, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, lastSector: 0, mapGeometry: null };
   const boundChartCanvases = new WeakSet();
   const $ = id => document.getElementById(id);
   const ui = {
@@ -380,9 +380,98 @@
     return [0, ...checkpointDistances(items), totalDistance()];
   }
 
-  function sectorDuration(item, start, end) {
-    const data = sampleLap(item);
-    return interpolate(data, end, 'x', 'elapsed') - interpolate(data, start, 'x', 'elapsed');
+  function orderedCheckpointLines(items) {
+    const source = items[0]?.session.checkpoints || [];
+    return source.map((line, sourceIndex) => {
+      if (!line?.[0] || !line?.[1]) return null;
+      const mid = { lat: (line[0].lat + line[1].lat) / 2, lon: (line[0].lon + line[1].lon) / 2 };
+      const distance = projectPoint(mid.lat, mid.lon)?.distance;
+      return Number.isFinite(distance) && distance > 2 && distance < totalDistance() - 2
+        ? { line, sourceIndex, distance }
+        : null;
+    }).filter(Boolean).sort((a, b) => a.distance - b.distance);
+  }
+
+  function interpolateGpsPoint(left, right, ratio, time) {
+    return {
+      time,
+      lat: left.lat + (right.lat - left.lat) * ratio,
+      lon: left.lon + (right.lon - left.lon) * ratio
+    };
+  }
+
+  function findLapLineCrossing(item, line, afterTime) {
+    const fixes = item.session.gpsPoints
+      .filter(point => point.time >= item.lap.startTime - .05 && point.time <= item.lap.endTime + .05)
+      .sort((a, b) => a.time - b.time);
+    if (fixes.length < 2) return null;
+    const origin = line[0];
+    const lat0 = origin.lat * Math.PI / 180, mLat = 111320, mLon = mLat * Math.cos(lat0);
+    const local = point => ({ x: (point.lon - origin.lon) * mLon, y: (point.lat - origin.lat) * mLat });
+    const a = local(line[0]), b = local(line[1]);
+    const rx = b.x - a.x, ry = b.y - a.y;
+    for (let index = 1; index < fixes.length; index += 1) {
+      const previous = fixes[index - 1], current = fixes[index];
+      if (current.time <= afterTime + .001) continue;
+      const p = local(previous), q = local(current), sx = q.x - p.x, sy = q.y - p.y;
+      const denominator = sx * ry - sy * rx;
+      if (Math.abs(denominator) < 1e-9) continue;
+      const dx = a.x - p.x, dy = a.y - p.y;
+      const travelRatio = (dx * ry - dy * rx) / denominator;
+      const lineRatio = (dx * sy - dy * sx) / denominator;
+      if (travelRatio < 0 || travelRatio > 1 || lineRatio < 0 || lineRatio > 1) continue;
+      const time = previous.time + (current.time - previous.time) * travelRatio;
+      if (time <= afterTime + .001 || time >= item.lap.endTime - .001) continue;
+      return interpolateGpsPoint(previous, current, travelRatio, time);
+    }
+    return null;
+  }
+
+  function lapPointAtTime(item, time) {
+    const points = item.session.gpsPoints
+      .filter(point => point.time >= item.lap.startTime - .05 && point.time <= item.lap.endTime + .05)
+      .sort((a, b) => a.time - b.time);
+    if (!points.length) return null;
+    let low = 0, high = points.length - 1;
+    while (low < high) { const middle = (low + high) >> 1; if (points[middle].time < time) low = middle + 1; else high = middle; }
+    const right = points[low], left = points[Math.max(0, low - 1)];
+    const span = right.time - left.time;
+    const ratio = span ? Math.max(0, Math.min(1, (time - left.time) / span)) : 0;
+    return interpolateGpsPoint(left, right, ratio, time);
+  }
+
+  function lapSectorBoundaries(item, items) {
+    const definitions = orderedCheckpointLines(items);
+    const signature = definitions.map(({ line }) => line.map(point => `${Number(point.lat).toFixed(7)},${Number(point.lon).toFixed(7)}`).join(':')).join('|');
+    const cacheKey = `${item.key}|${signature}`;
+    if (state.sectorCache.has(cacheKey)) return state.sectorCache.get(cacheKey);
+    const start = lapPointAtTime(item, item.lap.startTime);
+    const finish = lapPointAtTime(item, item.lap.endTime);
+    if (!start || !finish) return [];
+    const boundaries = [start];
+    let afterTime = item.lap.startTime;
+    for (const definition of definitions) {
+      const crossing = findLapLineCrossing(item, definition.line, afterTime);
+      if (!crossing) {
+        state.sectorCache.set(cacheKey, []);
+        return [];
+      }
+      boundaries.push(crossing);
+      afterTime = crossing.time;
+    }
+    boundaries.push(finish);
+    state.sectorCache.set(cacheKey, boundaries);
+    return boundaries;
+  }
+
+  function sectorTiming(item, sectorIndex, items) {
+    const boundaries = lapSectorBoundaries(item, items);
+    const start = boundaries[sectorIndex], end = boundaries[sectorIndex + 1];
+    return start && end ? { start, end, duration: end.time - start.time } : null;
+  }
+
+  function sectorDuration(item, sectorIndex, items) {
+    return sectorTiming(item, sectorIndex, items)?.duration ?? NaN;
   }
 
   function scrollSelectedSectorIntoView(index) {
@@ -421,8 +510,9 @@
     const controls = `<div class="comparison-sector-controls"><button type="button" data-sector-toggle aria-pressed="${state.activeSector !== null}" class="comparison-sector-toggle ${state.activeSector !== null ? 'active' : ''}">구간 보기 ${state.activeSector !== null ? 'ON' : 'OFF'}</button>${bounds.slice(0, -1).map((_, index) => `<button type="button" data-sector="${index}" class="${state.activeSector === index ? 'active' : ''}">S${index + 1}</button>`).join('')}</div>`;
     ui.sector.innerHTML = `${controls}<table><thead><tr><th>구간</th>${cells.map(cell => `<th style="color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)} L${cell.item.lap.number}</th>`).join('')}</tr></thead><tbody>${bounds.slice(0, -1).map((start, sectorIndex) => {
       const end = bounds[sectorIndex + 1];
-      const durations = cells.map(cell => sectorDuration(cell.item, start, end));
-      const fastest = Math.min(...durations);
+      const durations = cells.map(cell => sectorDuration(cell.item, sectorIndex, items));
+      const validDurations = durations.filter(Number.isFinite);
+      const fastest = validDurations.length ? Math.min(...validDurations) : NaN;
       return `<tr class="${state.activeSector === sectorIndex ? 'active' : ''}" data-sector-row="${sectorIndex}"><td><button type="button" data-sector="${sectorIndex}">S${sectorIndex + 1}</button><br><small>${start.toFixed(0)}–${end.toFixed(0)}m</small></td>${cells.map(cell => {
         const points = cell.data.filter(point => point.x >= start && point.x <= end);
         const first = points[0], last = points.at(-1);
@@ -433,7 +523,9 @@
         const minIndex = points.findIndex(point => point.speed === minSpeed);
         const throttle = points.slice(Math.max(0, minIndex)).find(point => point.tps >= 20);
         const detail = `최저속도 ${minSpeed.toFixed(1)} km/h · 브레이크 ${brake ? `${brake.x.toFixed(0)}m` : '없음'} · 재가속 ${throttle ? `${throttle.x.toFixed(0)}m` : '없음'} · 탈출속도 ${(last?.speed || 0).toFixed(1)} km/h`;
-        return `<td class="${isFastest ? 'sector-fastest' : ''}" title="${detail}"><b>${duration.toFixed(3)}s</b>${isFastest ? '<span class="sector-fastest-badge">★ FAST</span>' : ''}</td>`;
+        return Number.isFinite(duration)
+          ? `<td class="${isFastest ? 'sector-fastest' : ''}" title="${detail}"><b>${duration.toFixed(3)}s</b>${isFastest ? '<span class="sector-fastest-badge">★ FAST</span>' : ''}</td>`
+          : '<td title="해당 체크포인트의 실제 교차점을 찾지 못했습니다."><b>통과 기록 없음</b></td>';
       }).join('')}</tr>`;
     }).join('')}</tbody></table>`;
   }
@@ -456,13 +548,12 @@
     const bounds = sectorBounds(items);
     bounds.slice(0, -1).forEach((start, sectorIndex) => {
       const end = bounds[sectorIndex + 1];
-      const ranked = items.map((item, index) => ({ item, index, duration: sectorDuration(item, start, end) }))
-        .sort((a, b) => b.duration - a.duration);
-      ranked.forEach(({ item, index }) => {
-        const data = sampleLap(item);
-        const startTime = item.lap.startTime + interpolate(data, start, 'x', 'elapsed');
-        const endTime = item.lap.startTime + interpolate(data, end, 'x', 'elapsed');
-        const points = item.session.gpsPoints.filter(point => point.time >= startTime - .05 && point.time <= endTime + .05);
+      const ranked = items.map((item, index) => ({ item, index, timing: sectorTiming(item, sectorIndex, items) }))
+        .sort((a, b) => (b.timing?.duration ?? -Infinity) - (a.timing?.duration ?? -Infinity));
+      ranked.forEach(({ item, index, timing }) => {
+        if (!timing) return;
+        const interior = item.session.gpsPoints.filter(point => point.time > timing.start.time && point.time < timing.end.time);
+        const points = [timing.start, ...interior, timing.end];
         if (points.length < 2) return;
         ctx.beginPath(); points.forEach((point, i) => { const [x, y] = xy(point); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
         ctx.strokeStyle = COLORS[index];
@@ -604,7 +695,7 @@
   ui.files?.addEventListener('change', event => { const files = [...event.target.files]; event.target.value = ''; importFiles(files); });
   ui.clear?.addEventListener('click', () => {
     setPlaying(false);
-    state.sessions = []; state.selected.clear(); state.cache.clear(); state.viewMin = 0; state.viewMax = null; state.hoverDistance = null; state.activeSector = null; state.lastSector = 0; state.mapGeometry = null;
+    state.sessions = []; state.selected.clear(); state.cache.clear(); state.sectorCache.clear(); state.viewMin = 0; state.viewMax = null; state.hoverDistance = null; state.activeSector = null; state.lastSector = 0; state.mapGeometry = null;
     Object.values(state.charts).forEach(chart => chart.destroy()); state.charts = {};
     renderSessions(); render(); setStatus('CSV를 추가한 뒤 비교할 랩을 2~4개 선택하세요.');
   });
