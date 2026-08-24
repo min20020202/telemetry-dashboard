@@ -2147,14 +2147,16 @@ window.setPrimaryPage4Session = snapshot => {
   const file = snapshot?.file;
   if (!file) return;
   const sourceKey = `${file.name}:${file.size || 0}:${file.lastModified || 0}`;
-  if (page4PrimarySourceKey && page4PrimarySourceKey !== sourceKey) {
-    const previous = page4SessionStore.find(item => item.sourceKey === page4PrimarySourceKey);
-    if (previous) {
-      const index = page4SessionStore.indexOf(previous);
-      page4SessionStore.splice(index, 1);
-      page4SelectedSessionLaps = page4SelectedSessionLaps.filter(item => item.sessionId !== previous.id);
-    }
-  }
+  // 헤더의 `CSV 열기`는 현재 작업의 기준 CSV를 교체하는 동작이다.
+  // 페이지 4에서 별도로 추가했던 비교 세션과 선택 상태까지 모두 비워야
+  // 이전 파일의 랩이 새 기준 파일 왼쪽 목록에 남지 않는다.
+  setPage4Playback(false);
+  page4SessionStore.splice(0, page4SessionStore.length);
+  page4SelectedSessionLaps = [];
+  page4ActiveSessionId = null;
+  page4SelectedLapIndex = -1;
+  page4LapDistanceCache.clear();
+  invalidatePage4BoundariesCache();
   page4PrimarySourceKey = sourceKey;
   registerPage4Session(snapshot, true);
 };

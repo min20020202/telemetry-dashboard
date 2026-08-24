@@ -930,13 +930,22 @@
       const file = snapshot?.file;
       if (!file) return;
       const sourceKey = `${file.name}:${file.size || 0}:${file.lastModified || 0}`;
-      if (state.primarySourceKey && state.primarySourceKey !== sourceKey) {
-        const previous = state.sessions.find(item => item.sourceKey === state.primarySourceKey);
-        if (previous) {
-          state.sessions = state.sessions.filter(item => item !== previous);
-          [...state.selected].forEach(key => { if (key.startsWith(`${previous.id}:`)) state.selected.delete(key); });
-        }
-      }
+      // 헤더의 `CSV 열기`는 기준 CSV 교체다. 비교 CSV 추가 버튼으로
+      // 누적한 세션까지 초기화해 새 파일만 왼쪽 목록의 기본 상태로 만든다.
+      setPlaying(false);
+      state.sessions = [];
+      state.selected.clear();
+      state.cache.clear();
+      state.distanceMapCache.clear();
+      state.sourceSeriesCache.clear();
+      state.sectorCache.clear();
+      state.playElapsed = 0;
+      state.viewMin = 0;
+      state.viewMax = null;
+      state.hoverDistance = null;
+      state.activeSector = null;
+      state.activeSectorEnd = null;
+      state.mapGeometry = null;
       state.primarySourceKey = sourceKey;
       const session = addSession(snapshot, true);
       renderSessions();
