@@ -135,6 +135,28 @@ const tempMaxCoolant = document.getElementById('temp-max-coolant');
 const tempMaxOil = document.getElementById('temp-max-oil');
 const tempMaxIat = document.getElementById('temp-max-iat');
 const tempMaxEcu = document.getElementById('temp-max-ecu');
+
+function applyTemperatureSeriesToggleState(chart, chartKey) {
+  if (!chart) return;
+  document.querySelectorAll(`[data-temperature-chart="${chartKey}"]`).forEach(button => {
+    const datasetIndex = Number(button.dataset.dataset);
+    chart.setDatasetVisibility(datasetIndex, button.classList.contains('active'));
+  });
+  chart.update('none');
+}
+
+document.querySelectorAll('[data-temperature-chart]').forEach(button => {
+  button.addEventListener('click', () => {
+    const chart = button.dataset.temperatureChart === 'coolant' ? chartCoolantOil : chartIntakeEcu;
+    if (!chart) return;
+    const datasetIndex = Number(button.dataset.dataset);
+    const visible = chart.isDatasetVisible(datasetIndex);
+    chart.setDatasetVisibility(datasetIndex, !visible);
+    button.classList.toggle('active', !visible);
+    button.setAttribute('aria-pressed', String(!visible));
+    chart.update('none');
+  });
+});
 const p4LapSelect = document.getElementById('p4-lap-select');
 const p4SectorStart = document.getElementById('p4-sector-start');
 const p4SectorEnd = document.getElementById('p4-sector-end');
@@ -5985,6 +6007,7 @@ function renderMotecCharts(data) {
       ] },
       options: coolantOptions
     });
+    applyTemperatureSeriesToggleState(chartCoolantOil, 'coolant');
   }
 
   const intakeEcuCanvas = document.getElementById('chart-intake-ecu');
@@ -5997,6 +6020,7 @@ function renderMotecCharts(data) {
       ] },
       options: getCommonOptions(0, 150, { stepSize: 25 })
     });
+    applyTemperatureSeriesToggleState(chartIntakeEcu, 'intake');
   }
 
   const ctxSusFr = document.getElementById('chart-sus-fr').getContext('2d');

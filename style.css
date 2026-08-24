@@ -629,10 +629,21 @@ body {
   min-height: 0;
 }
 
+.temperature-chart-label { justify-content:flex-start; gap:10px; }
+.temperature-chart-label .signal-title { flex:0 1 auto; }
+.temperature-chart-label .signal-val { margin-left:auto; }
+.temperature-series-toggles { display:flex; align-items:center; gap:5px; min-width:0; }
+.temperature-series-toggles button { display:inline-flex; align-items:center; gap:4px; height:24px; padding:0 7px; border:1px solid var(--border-color); border-radius:6px; background:var(--panel-bg); color:var(--text-primary); opacity:1; font:800 8px var(--font-mono); white-space:nowrap; cursor:pointer; }
+.temperature-series-toggles button:not(.active) { opacity:.34; text-decoration:line-through; }
+.temperature-series-toggles i { width:8px; height:8px; flex:0 0 auto; border-radius:50%; background:currentColor; }
+.temperature-series-toggles .coolant { color:#2563eb; }.temperature-series-toggles .oil { color:#f97316; }.temperature-series-toggles .speed { color:#06b6d4; }.temperature-series-toggles .intake { color:#16a34a; }.temperature-series-toggles .ecu { color:#db2777; }
+
 @media (max-width: 1100px) {
   .temperature-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .temperature-chart-grid { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
 }
+
+@media (max-width: 700px) { .temperature-chart-label { flex-wrap:wrap; }.temperature-chart-label .signal-val { display:none; }.temperature-series-toggles { width:100%; } }
 
 /* Page 4 · MoTeC-style lap/sector workspace */
 .lap-workspace { display:grid; grid-template-columns:minmax(0, 1fr) 290px; align-items:stretch; gap:5px; height:auto; min-height:0; padding:3px; background:#eef2f6; }

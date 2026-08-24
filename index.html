@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260824-11">
+  <link rel="stylesheet" href="style.css?v=20260824-12">
 </head>
 <body>
 
@@ -667,11 +667,11 @@
         </div>
         <div class="temperature-chart-grid">
           <article class="motec-chart-card temperature-chart-card">
-            <div class="chart-label-bar"><span class="signal-title">Coolant / Oil Temperature &amp; Vehicle Speed</span><span class="signal-val">°C · km/h</span></div>
+            <div class="chart-label-bar temperature-chart-label"><span class="signal-title">Coolant / Oil Temperature &amp; Vehicle Speed</span><div class="temperature-series-toggles" aria-label="표시할 데이터 선택"><button type="button" class="active coolant" data-temperature-chart="coolant" data-dataset="0" aria-pressed="true"><i></i>수온</button><button type="button" class="active oil" data-temperature-chart="coolant" data-dataset="1" aria-pressed="true"><i></i>유온</button><button type="button" class="active speed" data-temperature-chart="coolant" data-dataset="2" aria-pressed="true"><i></i>FL 속도</button></div><span class="signal-val">°C · km/h</span></div>
             <div class="canvas-holder chart-wrapper"><canvas id="chart-coolant-oil"></canvas></div>
           </article>
           <article class="motec-chart-card temperature-chart-card">
-            <div class="chart-label-bar"><span class="signal-title">Intake Air / ECU Temperature</span><span class="signal-val">°C</span></div>
+            <div class="chart-label-bar temperature-chart-label"><span class="signal-title">Intake Air / ECU Temperature</span><div class="temperature-series-toggles" aria-label="표시할 데이터 선택"><button type="button" class="active intake" data-temperature-chart="intake" data-dataset="0" aria-pressed="true"><i></i>흡기온</button><button type="button" class="active ecu" data-temperature-chart="intake" data-dataset="1" aria-pressed="true"><i></i>ECU 온도</button></div><span class="signal-val">°C</span></div>
             <div class="canvas-holder chart-wrapper"><canvas id="chart-intake-ecu"></canvas></div>
           </article>
         </div>
@@ -875,7 +875,7 @@
 
             <section class="help-section" id="help-page5">
               <div class="help-section-title"><span>6</span><div><h2>냉각 및 온도 분석</h2><p>냉각수·유온·흡기온·ECU 온도의 변화와 최대값을 한 화면에서 확인합니다.</p></div><button type="button" data-help-tab="cooling">6페이지 열기</button></div>
-              <div class="help-grid two"><article class="help-card"><h3>온도 상태 카드</h3><p>현재 커서 시점의 네 가지 온도와 CSV 전체 구간의 최대 온도를 함께 표시합니다.</p></article><article class="help-card"><h3>온도 추세 차트</h3><p>냉각수·유온을 차량 속도와 비교하고, 흡기온·ECU 온도는 별도 차트에서 확인합니다. 하단 공통 타임라인과 확대·커서를 그대로 사용할 수 있습니다.</p></article></div>
+              <div class="help-grid two"><article class="help-card"><h3>온도 상태 카드</h3><p>현재 커서 시점의 네 가지 온도와 CSV 전체 구간의 최대 온도를 함께 표시합니다.</p></article><article class="help-card"><h3>온도 추세 차트</h3><p>냉각수·유온을 차량 속도와 비교하고, 흡기온·ECU 온도는 별도 차트에서 확인합니다. 그래프 제목 옆 색상 버튼으로 각 선을 개별 표시·숨김할 수 있으며, 하단 공통 타임라인과 확대·커서를 그대로 사용할 수 있습니다.</p></article></div>
             </section>
 
             <section class="help-section" id="help-page6">
@@ -984,7 +984,7 @@
   <script src="steering.js?v=20260820-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
-  <script src="app.js?v=20260824-13"></script>
+  <script src="app.js?v=20260824-14"></script>
   <script src="comparison.js?v=20260824-5"></script>
 </body>
 </html>
