@@ -2172,6 +2172,18 @@ function refreshPage4SectorOptions() {
 }
 
 function applyPage4Selection() {
+  // 비교 목록의 첫 번째 랩이 차트 정렬 기준이다. 다른 페이지에서 랩을
+  // 선택한 뒤 돌아왔을 때 우측 셀렉트가 이전 값을 유지하면 범례만 바뀌고
+  // 데이터는 현재 X축 밖에 놓이므로, 활성 세션의 기준 랩을 먼저 동기화한다.
+  const primarySelection = page4SelectedSessionLaps[0];
+  if (primarySelection && primarySelection.sessionId === page4ActiveSessionId
+      && gpsLapResults[primarySelection.lapIndex]
+      && page4SelectedLapIndex !== primarySelection.lapIndex) {
+    page4SelectedLapIndex = primarySelection.lapIndex;
+    if (p4LapSelect) p4LapSelect.value = String(page4SelectedLapIndex);
+    invalidatePage4BoundariesCache();
+    page4LapDistanceCache.clear();
+  }
   const boundaries = page4LapBoundaries(page4SelectedLapIndex);
   if (!boundaries.length || !page4Charts.length) return;
   const lap = gpsLapResults[page4SelectedLapIndex];
@@ -4107,6 +4119,9 @@ function switchTab(mode) {
     if (lblScrollType) {
       lblScrollType.textContent = '🏁 선택 구간 커서:';
     }
+    // 숨겨진 상태에서 세션·랩 선택이 바뀌었을 수 있으므로 페이지를
+    // 표시하는 순간 데이터셋과 축 범위를 현재 선택 기준으로 다시 만든다.
+    applyPage4Selection();
     setTimeout(() => {
       page4Charts.forEach(c => {
         if (c) {
