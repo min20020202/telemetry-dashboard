@@ -19,7 +19,7 @@
 .comparison-toolbar h2 { margin:0; font-size:14px; line-height:1; }
 .comparison-toolbar p { display:none; }
 .comparison-toolbar-actions { display:flex; flex:0 0 auto; gap:5px; margin-left:auto; }
-.comparison-file-button, #comparison-clear {
+.comparison-file-button {
   display:inline-flex; height:28px; align-items:center; border:1px solid var(--border-color); border-radius:6px; padding:0 9px;
   background:var(--panel-bg); color:var(--text-primary); font-size:9px; font-weight:800; cursor:pointer;
 }
@@ -36,7 +36,10 @@
 .comparison-panel-title span { color: var(--accent-orange); font: 700 11px monospace; }
 .comparison-sessions { display: flex; flex-direction: column; gap: 8px; }
 .comparison-session { border: 1px solid var(--border-color); border-radius: 7px; padding: 8px; }
-.comparison-session input[type="text"] { width: 100%; padding: 6px 7px; border: 1px solid var(--border-color); border-radius: 5px; color: var(--text-primary); background: var(--bg-color); font-weight: 800; }
+.comparison-session-header { display:flex; align-items:center; gap:5px; }
+.comparison-session input[type="text"] { width: 100%; min-width:0; padding: 6px 7px; border: 1px solid var(--border-color); border-radius: 5px; color: var(--text-primary); background: var(--bg-color); font-weight: 800; }
+.comparison-session-remove { display:grid; flex:0 0 27px; width:27px; height:27px; place-items:center; padding:0; border:1px solid var(--border-color); border-radius:5px; background:var(--panel-bg); color:var(--text-secondary); font-size:17px; line-height:1; cursor:pointer; }
+.comparison-session-remove:hover { border-color:#ef4444; background:rgba(239,68,68,.08); color:#ef4444; }
 .comparison-session small { display: block; margin: 4px 0 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
 .comparison-session-actions { display: flex; gap: 4px; margin-bottom: 7px; }
 .comparison-session-actions button { flex: 1 1 auto; min-width: 0; padding: 4px 3px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--panel-bg); color: var(--text-secondary); font-size: 9px; font-weight: 800; cursor: pointer; white-space: nowrap; }

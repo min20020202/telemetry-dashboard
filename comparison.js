@@ -6,7 +6,7 @@
   const boundChartCanvases = new WeakSet();
   const $ = id => document.getElementById(id);
   const ui = {
-    files: $('comparison-files'), clear: $('comparison-clear'), status: $('comparison-status'),
+    files: $('comparison-files'), status: $('comparison-status'),
     count: $('comparison-count'), sessions: $('comparison-sessions'), summary: $('comparison-summary'),
     sector: $('comparison-sector-table'), map: $('comparison-track-map'),
     play: $('comparison-play-toggle'), rate: $('comparison-play-rate'), slider: $('comparison-play-slider'), playTime: $('comparison-play-time'), playDistance: $('comparison-play-distance'),
@@ -87,7 +87,10 @@
     if (!ui.sessions) return;
     ui.sessions.innerHTML = state.sessions.length ? state.sessions.map(session => `
       <section class="comparison-session" data-session="${session.id}">
-        <input type="text" value="${escapeHtml(session.driver)}" aria-label="드라이버 이름" data-driver="${session.id}">
+        <div class="comparison-session-header">
+          <input type="text" value="${escapeHtml(session.driver)}" aria-label="드라이버 이름" data-driver="${session.id}">
+          <button type="button" class="comparison-session-remove" data-session-remove="${session.id}" aria-label="${escapeHtml(session.driver)} 세션 제거" title="이 세션 제거">×</button>
+        </div>
         <small title="${escapeHtml(session.fileName)}">${escapeHtml(session.fileName)} · ${session.laps.length}개 완성 랩</small>
         <div class="comparison-session-actions"><button type="button" data-session-pick="fast" data-session-id="${session.id}">빠른 4랩</button><button type="button" data-session-pick="best" data-session-id="${session.id}">베스트만</button><button type="button" data-session-pick="clear" data-session-id="${session.id}">해제</button></div>
         <div class="comparison-laps">${session.laps.map((lap, lapIndex) => {
@@ -874,12 +877,6 @@
   };
 
   ui.files?.addEventListener('change', event => { const files = [...event.target.files]; event.target.value = ''; importFiles(files); });
-  ui.clear?.addEventListener('click', () => {
-    setPlaying(false);
-    state.sessions = []; state.selected.clear(); state.cache.clear(); state.distanceMapCache.clear(); state.sourceSeriesCache.clear(); state.sectorCache.clear(); state.seriesEnabled.clear(); state.viewMin = 0; state.viewMax = null; state.hoverDistance = null; state.activeSector = null; state.lastSector = 0; state.mapGeometry = null;
-    Object.values(state.charts).forEach(chart => chart.destroy()); state.charts = {};
-    renderSessions(); render(); setStatus('CSV를 추가한 뒤 비교할 랩을 2~4개 선택하세요.');
-  });
   ui.sessions?.addEventListener('input', event => {
     const session = state.sessions.find(item => item.id === Number(event.target.dataset.driver));
     if (session) { session.driver = event.target.value.trim() || session.fileName.replace(/\.csv$/i, ''); render(); }
@@ -892,6 +889,20 @@
     event.target.checked ? state.selected.add(key) : state.selected.delete(key); render();
   });
   ui.sessions?.addEventListener('click', event => {
+    const removeButton = event.target.closest('[data-session-remove]');
+    if (removeButton) {
+      const sessionId = Number(removeButton.dataset.sessionRemove);
+      const session = state.sessions.find(item => item.id === sessionId);
+      if (!session || !window.confirm(`“${session.driver}” 세션(${session.fileName})을 제거하시겠습니까?`)) return;
+      setPlaying(false);
+      state.sessions = state.sessions.filter(item => item.id !== sessionId);
+      [...state.selected].forEach(key => { if (key.startsWith(`${sessionId}:`)) state.selected.delete(key); });
+      state.cache.clear(); state.distanceMapCache.clear(); state.sourceSeriesCache.clear(); state.sectorCache.clear(); state.seriesEnabled.clear();
+      state.playElapsed = 0; state.viewMin = 0; state.viewMax = null; state.hoverDistance = null; state.activeSector = null; state.lastSector = 0; state.mapGeometry = null;
+      renderSessions(); render();
+      setStatus(`${session.fileName} 세션을 제거했습니다.`);
+      return;
+    }
     const button = event.target.closest('[data-session-pick]');
     if (!button) return;
     const session = state.sessions.find(item => item.id === Number(button.dataset.sessionId));
