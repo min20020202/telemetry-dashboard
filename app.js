@@ -2384,17 +2384,29 @@ function drawPage4GTrace(targetTime = page4CursorTime) {
   ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   ctx.clearRect(0, 0, size, size);
   const mapGPoint = (gx, gy) => ({ x: size * (0.5 - Math.max(-2, Math.min(2, gy)) * 0.22), y: size * (0.5 - Math.max(-2, Math.min(2, gx)) * 0.22) });
-  const cacheKey = `${Math.round(size * pixelRatio)}:${items.map(item => `${item.session.id}:${item.selection.lapIndex}`).join('|')}`;
+  const validRange = page4RangeEnd > page4RangeStart;
+  const primaryRangeStart = validRange ? page4RangeStart : primary.lap.startTime;
+  const primaryRangeEnd = validRange ? page4RangeEnd : primary.lap.endTime;
+  const traceRanges = items.map(item => {
+    const alignedStart = page4AlignedItemTime(item, primary.lap, primaryRangeStart);
+    const alignedEnd = page4AlignedItemTime(item, primary.lap, primaryRangeEnd);
+    return {
+      item,
+      start: Math.max(item.lap.startTime, Math.min(alignedStart, alignedEnd)),
+      end: Math.min(item.lap.endTime, Math.max(alignedStart, alignedEnd))
+    };
+  });
+  const cacheKey = `${Math.round(size * pixelRatio)}:${page4AxisMode}:${traceRanges.map(({ item, start, end }) => `${item.session.id}:${item.selection.lapIndex}:${start.toFixed(3)}-${end.toFixed(3)}`).join('|')}`;
   if (!page4GTraceCache || page4GTraceCache.key !== cacheKey) {
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(size * pixelRatio);
     canvas.height = Math.round(size * pixelRatio);
     const traceContext = canvas.getContext('2d');
     traceContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    items.forEach(item => {
+    traceRanges.forEach(({ item, start, end }) => {
       const rows = item.session.rows || [];
-      const first = page4RowIndexAtTime(rows, item.lap.startTime);
-      const last = page4RowIndexAtTime(rows, item.lap.endTime);
+      const first = page4RowIndexAtTime(rows, start);
+      const last = page4RowIndexAtTime(rows, end);
       const points = [];
       let previousTime = -Infinity;
       for (let index = first; index <= last; index += 1) {
@@ -2578,7 +2590,9 @@ function setPage4Playback(active) {
       const dt = Math.min(0.1, (stamp - page4PlaybackLastStamp) / 1000) * rate;
       let nextTime = page4CursorTime + dt;
       if (nextTime >= rangeEnd) {
-        nextTime = rangeStart;
+        updatePage4PlaybackCursor(rangeEnd);
+        setPage4Playback(false);
+        return;
       }
       updatePage4PlaybackCursor(nextTime);
     }
