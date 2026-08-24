@@ -214,7 +214,15 @@
     const min = state.viewMin;
     const max = state.viewMax ?? totalDistance();
     const source = fullComparisonSourceSeries(item, key, sourceHz);
-    const visible = source.filter(point => point.x >= min - 1e-6 && point.x <= max + 1e-6);
+    if (!source.length) return [];
+    // Every path must begin and end at the exact same chart coordinates.
+    // Otherwise Chart.js starts each canvas dash at a different phase and
+    // overlapping dashed runs can fill each other's gaps like a solid line.
+    const visible = [
+      { x: min, y: seriesValueAt(source, min) },
+      ...source.filter(point => point.x > min + 1e-6 && point.x < max - 1e-6),
+      { x: max, y: seriesValueAt(source, max) }
+    ];
     if (visible.length <= COMPARISON_MAX_VISIBLE_POINTS) return visible;
     const result = [];
     const step = (visible.length - 1) / (COMPARISON_MAX_VISIBLE_POINTS - 1);
@@ -472,7 +480,7 @@
       comparisonSeriesId: `${item.key}|${key}`,
       data: visibleComparisonSourceSeries(item, key, sourceHz),
       borderColor: color, backgroundColor: color, borderWidth: dashed ? 2 : 1.7,
-      borderDash: dashed ? [9, 6] : [], pointRadius: 0, fill: false
+      borderDash: dashed ? [12, 8] : [], borderDashOffset: 0, pointRadius: 0, fill: false
     };
   }
 
