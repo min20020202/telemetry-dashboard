@@ -75,10 +75,12 @@
 .comparison-play-distance span { font:800 10px var(--font-mono); }
 .comparison-sector-table { overflow: auto; max-height: 360px; }
 .comparison-sector-table table { width: 100%; border-collapse: collapse; font-size: 10px; white-space: nowrap; }
+.comparison-sector-table thead th { position:sticky; top:var(--sector-controls-height, 31px); z-index:2; background:var(--panel-bg); box-shadow:0 1px 0 var(--border-color),0 3px 7px rgba(15,23,42,.08); }
 .comparison-sector-table th, .comparison-sector-table td { height:24px; padding:2px 6px; border-bottom:1px solid var(--border-color); text-align:right; line-height:1.05; }
 .comparison-sector-table td b { font-size:10px; }
 .comparison-sector-table td:first-child small { font-size:7px; opacity:.7; }
 .comparison-sector-table th:first-child, .comparison-sector-table td:first-child { text-align: left; position: sticky; left: 0; background: var(--panel-bg); }
+.comparison-sector-table thead th:first-child { z-index:4; }
 .comparison-sector-controls { display:flex; flex-wrap:wrap; gap:4px; position:sticky; top:0; z-index:3; padding:2px 0 6px; background:var(--panel-bg); }
 .comparison-sector-controls button,.comparison-sector-table td:first-child button { border:1px solid var(--border-color); border-radius:5px; background:var(--panel-bg); color:var(--text-secondary); font:800 8px var(--font-mono); cursor:pointer; }
 .comparison-sector-controls button { min-width:35px; height:23px; padding:0 7px; }

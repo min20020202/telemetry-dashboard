@@ -568,6 +568,11 @@
     });
   }
 
+  function updateSectorStickyOffset() {
+    const controlsElement = ui.sector?.querySelector('.comparison-sector-controls');
+    ui.sector?.style.setProperty('--sector-controls-height', `${controlsElement?.offsetHeight || 0}px`);
+  }
+
   function selectSector(index) {
     const items = selectedLaps(), bounds = sectorBounds(items);
     state.activeSector = Number.isInteger(index) && index >= 0 && index < bounds.length - 1 ? index : null;
@@ -612,6 +617,7 @@
           : '<td title="해당 체크포인트의 실제 교차점을 찾지 못했습니다."><b>통과 기록 없음</b></td>';
       }).join('')}</tr>`;
     }).join('')}</tbody></table>`;
+    requestAnimationFrame(updateSectorStickyOffset);
   }
 
   function renderMap(items) {
@@ -849,5 +855,9 @@
     if (event.target.matches('input, textarea, select, button') || event.target.isContentEditable) return;
     event.preventDefault(); setPlaying(!state.playing);
   });
-  window.addEventListener('resize', () => { if ($('page-comparison')?.classList.contains('active')) renderMap(selectedLaps()); });
+  window.addEventListener('resize', () => {
+    if (!$('page-comparison')?.classList.contains('active')) return;
+    updateSectorStickyOffset();
+    renderMap(selectedLaps());
+  });
 })();
