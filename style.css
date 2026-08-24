@@ -58,8 +58,10 @@
 .comparison-playback-heading span { color:var(--text-secondary); font-size:8px; }
 .comparison-chart-stack { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); min-height:0; gap:10px; }
 .comparison-chart-stack article { display:grid; grid-template-rows:auto auto minmax(0,1fr); min-width:0; min-height:0; padding:8px; overflow:hidden; }
-.comparison-chart-stack header, .comparison-bottom-grid header { display: flex; justify-content: space-between; gap: 8px; padding: 0 3px 5px; font-size: 12px; }
+.comparison-chart-stack header, .comparison-bottom-grid header { display: flex; align-items:center; justify-content: flex-start; gap: 7px; padding: 0 3px 3px; font-size: 12px; }
+.comparison-axis-meta { color:var(--text-secondary); font:700 8px var(--font-mono); white-space:nowrap; }
 .comparison-chart-stack output { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:2px 5px; color:var(--accent-orange); font-family:monospace; font-size:10px; text-align:right; }
+.comparison-chart-stack header output { margin-left:auto; }
 .comparison-series-toggles { display:flex; min-width:0; min-height:22px; align-items:center; gap:4px; padding:0 2px 3px; overflow-x:auto; overflow-y:hidden; scrollbar-width:thin; }
 .comparison-series-toggles button { display:inline-flex; flex:0 0 auto; height:19px; align-items:center; gap:4px; padding:0 6px; border:1px solid var(--border-color); border-radius:5px; background:var(--panel-bg); color:var(--text-secondary); opacity:.42; font:800 7px var(--font-mono); white-space:nowrap; cursor:pointer; }
 .comparison-series-toggles button.active { color:var(--text-primary); opacity:1; background:rgba(128,128,128,.07); }

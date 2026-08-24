@@ -327,8 +327,8 @@
       interaction: { mode: 'index', intersect: false },
       plugins: { legend: { display: false }, tooltip: { enabled: true } },
       scales: {
-        x: { type: 'linear', min: state.viewMin, max: state.viewMax ?? distance, title: { display: true, text: '공통 중심선 거리 [m]', font: { size: 9 }, padding: { top: 2 } }, ticks: { display: true, autoSkip: true, maxTicksLimit: 7, padding: 3, font: { size: 9 } } },
-        y: { title: { display: true, text: yTitle, font: { size: 9 } }, ticks: { maxTicksLimit: 6, font: { size: 9 } } }
+        x: { type: 'linear', min: state.viewMin, max: state.viewMax ?? distance, title: { display: false }, ticks: { display: true, autoSkip: true, maxTicksLimit: 7, padding: 1, font: { size: 8 } } },
+        y: { title: { display: false, text: yTitle }, ticks: { maxTicksLimit: 6, padding: 2, font: { size: 8 } } }
       }
     };
   }
