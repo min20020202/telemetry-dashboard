@@ -2,7 +2,7 @@
   'use strict';
 
   const COLORS = ['#06b6d4', '#ff3d9a', '#76ff03', '#ffca28'];
-  const state = { sessions: [], selected: new Set(), cache: new Map(), distanceMapCache: new Map(), sourceSeriesCache: new Map(), sectorCache: new Map(), charts: {}, seriesEnabled: new Map(), serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, playRenderStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, activeSectorEnd: null, lastSector: 0, mapGeometry: null };
+  const state = { sessions: [], selected: new Set(), primarySourceKey: null, cache: new Map(), distanceMapCache: new Map(), sourceSeriesCache: new Map(), sectorCache: new Map(), charts: {}, seriesEnabled: new Map(), serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, playRenderStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, activeSectorEnd: null, lastSector: 0, mapGeometry: null };
   const boundChartCanvases = new WeakSet();
   const $ = id => document.getElementById(id);
   const ui = {
@@ -921,6 +921,27 @@
       renderSessions();
       render();
       setStatus(`${session.fileName}의 ${session.laps.length}개 랩을 불러왔습니다. 같은 CSV 안에서 바로 비교할 수 있습니다.`);
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  };
+  window.setPrimaryComparisonSession = snapshot => {
+    try {
+      const file = snapshot?.file;
+      if (!file) return;
+      const sourceKey = `${file.name}:${file.size || 0}:${file.lastModified || 0}`;
+      if (state.primarySourceKey && state.primarySourceKey !== sourceKey) {
+        const previous = state.sessions.find(item => item.sourceKey === state.primarySourceKey);
+        if (previous) {
+          state.sessions = state.sessions.filter(item => item !== previous);
+          [...state.selected].forEach(key => { if (key.startsWith(`${previous.id}:`)) state.selected.delete(key); });
+        }
+      }
+      state.primarySourceKey = sourceKey;
+      const session = addSession(snapshot, true);
+      renderSessions();
+      render();
+      setStatus(`${session.fileName}을 기준 세션으로 불러왔습니다. 비교 CSV를 추가할 수 있습니다.`);
     } catch (error) {
       setStatus(error.message, true);
     }

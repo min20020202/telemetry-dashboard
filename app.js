@@ -35,6 +35,7 @@ const page4LapDistanceCache = new Map();
 const page4SessionStore = [];
 let page4SessionSerial = 0;
 let page4ActiveSessionId = null;
+let page4PrimarySourceKey = null;
 let page4SelectedSessionLaps = [];
 const PAGE4_LAP_COLORS = ['#06b6d4', '#ec4899'];
 const page4HiddenSeries = new Set();
@@ -2142,6 +2143,21 @@ function importPage4SessionFile(file) {
 }
 
 window.registerPage4ComparisonSession = snapshot => registerPage4Session(snapshot, false);
+window.setPrimaryPage4Session = snapshot => {
+  const file = snapshot?.file;
+  if (!file) return;
+  const sourceKey = `${file.name}:${file.size || 0}:${file.lastModified || 0}`;
+  if (page4PrimarySourceKey && page4PrimarySourceKey !== sourceKey) {
+    const previous = page4SessionStore.find(item => item.sourceKey === page4PrimarySourceKey);
+    if (previous) {
+      const index = page4SessionStore.indexOf(previous);
+      page4SessionStore.splice(index, 1);
+      page4SelectedSessionLaps = page4SelectedSessionLaps.filter(item => item.sessionId !== previous.id);
+    }
+  }
+  page4PrimarySourceKey = sourceKey;
+  registerPage4Session(snapshot, true);
+};
 
 function refreshPage4SectorOptions() {
   if (!p4SectorStart || !p4SectorEnd) return;
@@ -5271,6 +5287,10 @@ function handleFile(file, options = {}) {
       };
       if (typeof options.onComplete === 'function') {
         options.onComplete(snapshot);
+      }
+      if (!options.skipUpload) {
+        window.setPrimaryPage4Session?.(snapshot);
+        window.setPrimaryComparisonSession?.(snapshot);
       }
     },
     error: function (err) {
