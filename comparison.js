@@ -229,7 +229,13 @@
     const baseline = sampleLap(items[0]);
     const elapsed = interpolate(baseline, target, 'x', 'elapsed');
     setPlaying(false);
-    state.playElapsed = Math.max(0, Math.min(items[0].lap.duration, elapsed));
+    if (state.activeSector === null) {
+      state.playElapsed = Math.max(0, Math.min(items[0].lap.duration, elapsed));
+    } else {
+      const timing = sectorTiming(items[0], state.activeSector, items);
+      const sectorStartElapsed = timing ? timing.start.time - items[0].lap.startTime : 0;
+      state.playElapsed = Math.max(0, Math.min(timing?.duration || 0, elapsed - sectorStartElapsed));
+    }
     state.hoverDistance = null;
     syncPlaybackUi(items);
     renderMap(items);
@@ -332,12 +338,17 @@
   function cursorElapsedForItem(item, items = selectedLaps()) {
     if (state.activeSector === null) return state.playElapsed;
     const timing = sectorTiming(item, state.activeSector, items);
-    return timing ? timing.start.time - item.lap.startTime : 0;
+    return timing ? timing.start.time - item.lap.startTime + Math.min(state.playElapsed, timing.duration) : 0;
   }
 
   function cursorSampleForItem(item, items = selectedLaps()) {
     const sample = sampleAtElapsed(item, cursorElapsedForItem(item, items));
-    if (sample && state.activeSector !== null) sample.x = sectorBounds(items)[state.activeSector];
+    if (sample && state.activeSector !== null) {
+      const bounds = sectorBounds(items);
+      const timing = sectorTiming(item, state.activeSector, items);
+      if (state.playElapsed <= .001) sample.x = bounds[state.activeSector];
+      else if (timing && state.playElapsed >= timing.duration - .001) sample.x = bounds[state.activeSector + 1];
+    }
     return sample;
   }
 
@@ -542,8 +553,7 @@
       const start = bounds[state.activeSector], end = bounds[state.activeSector + 1];
       setChartViewRange(start, end);
       setPlaying(false);
-      const baselineTiming = sectorTiming(items[0], state.activeSector, items);
-      state.playElapsed = baselineTiming ? baselineTiming.start.time - items[0].lap.startTime : 0;
+      state.playElapsed = 0;
       state.hoverDistance = null;
     }
     syncPlaybackUi(items);
@@ -648,7 +658,12 @@
     return { lat: left.lat + (right.lat - left.lat) * ratio, lon: left.lon + (right.lon - left.lon) * ratio };
   }
 
-  function playbackDuration(items = selectedLaps()) { return items.length ? Math.max(...items.map(item => item.lap.duration)) : 0; }
+  function playbackDuration(items = selectedLaps()) {
+    if (!items.length) return 0;
+    if (state.activeSector === null) return Math.max(...items.map(item => item.lap.duration));
+    const durations = items.map(item => sectorDuration(item, state.activeSector, items)).filter(Number.isFinite);
+    return durations.length ? Math.max(...durations) : 0;
+  }
   function playbackValueMarkup(values, emptyText) {
     return values.length ? values.map(({ index, text }) =>
       `<span class="comparison-live-item" style="color:${COLORS[index]}">${text}</span>`
@@ -692,19 +707,19 @@
   function syncPlaybackUi(items = selectedLaps()) {
     const duration = playbackDuration(items);
     state.playElapsed = Math.max(0, Math.min(duration, state.playElapsed));
-    if (ui.slider) { ui.slider.max = String(Math.max(.01, duration)); ui.slider.value = String(state.playElapsed); ui.slider.disabled = !duration || state.activeSector !== null; }
-    if (ui.playTime) ui.playTime.textContent = state.activeSector === null ? `${state.playElapsed.toFixed(2)} s` : `${state.playElapsed.toFixed(2)} s · 구간 시작`;
+    if (ui.slider) { ui.slider.max = String(Math.max(.01, duration)); ui.slider.value = String(state.playElapsed); ui.slider.disabled = !duration; }
+    if (ui.playTime) ui.playTime.textContent = state.activeSector === null ? `${state.playElapsed.toFixed(2)} s` : `구간 +${state.playElapsed.toFixed(2)} s`;
     if (ui.playDistance) ui.playDistance.innerHTML = items.length ? items.map((item, index) => {
       const sample = cursorSampleForItem(item, items);
       return `<span style="color:${COLORS[index]}">L${item.lap.number} ${(sample?.x || 0).toFixed(1)} m</span>`;
     }).join('') : '-- m';
     updatePlaybackValues(items, state.hoverDistance);
-    if (ui.play) { ui.play.textContent = state.playing ? 'Ⅱ 일시정지' : '▶ 재생'; ui.play.disabled = !duration || state.activeSector !== null; }
+    if (ui.play) { ui.play.textContent = state.playing ? 'Ⅱ 일시정지' : '▶ 재생'; ui.play.disabled = !duration; }
     Object.values(state.charts).forEach(chart => chart.draw());
   }
   function setPlaying(active) {
     const items = selectedLaps(), duration = playbackDuration(items);
-    if (!duration || state.activeSector !== null) active = false;
+    if (!duration) active = false;
     if (active && state.playElapsed >= duration - .001) state.playElapsed = 0;
     state.playing = active;
     state.playStamp = 0;
