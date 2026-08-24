@@ -22,6 +22,30 @@
   const selectionKey = (sessionId, lapIndex) => `${sessionId}:${lapIndex}`;
   const reference = () => window.NSSUR_TRACK_REFERENCE?.points || [];
   const totalDistance = () => Number(window.NSSUR_TRACK_REFERENCE?.totalDistanceMeters) || Number(reference().at(-1)?.[2]) || 0;
+  const COMPARISON_IMU_FIELDS = [
+    ['imu_accel_x_g', 'imu_filtered_ax_g'], ['imu_accel_y_g', 'imu_filtered_ay_g'],
+    ['imu_gyro_x_dps', 'imu_filtered_gx_dps'], ['imu_gyro_y_dps', 'imu_filtered_gy_dps'], ['imu_gyro_z_dps', 'imu_filtered_gz_dps']
+  ];
+
+  function applyComparisonImuFilter(session) {
+    const rows = session?.rows || [];
+    if (!rows.length) return;
+    const enabled = $('gps-imu-lpf')?.checked !== false;
+    const cutoff = 5;
+    const span = Number(rows.at(-1)?.time_sec) - Number(rows[0]?.time_sec);
+    const rate = span > 0 ? Math.max(1, Math.round((rows.length - 1) / span)) : 100;
+    COMPARISON_IMU_FIELDS.forEach(([rawField, filteredField]) => {
+      const raw = Float64Array.from(rows, row => Number(row[rawField]) || 0);
+      const values = enabled && typeof fltButterworth === 'function' ? fltButterworth(raw, cutoff, rate, 2) : raw;
+      rows.forEach((row, index) => { row[filteredField] = values[index]; });
+    });
+  }
+
+  function refreshComparisonImuFilters() {
+    state.sessions.forEach(applyComparisonImuFilter);
+    state.sourceSeriesCache.clear(); state.cache.clear();
+    if (state.sessions.length) render();
+  }
 
   function setStatus(message, error = false) {
     if (!ui.status) return;
@@ -47,6 +71,7 @@
         laps,
         checkpoints: (snapshot.checkpoints || []).map(line => line.map(point => ({ ...point })))
       };
+      applyComparisonImuFilter(session);
       state.sessions.push(session);
     }
     if (autoSelect && isNew && state.selected.size < 4) {
@@ -72,12 +97,14 @@
   async function importFiles(files) {
     if (!files.length) return;
     switchTab('comparison');
+    window.ensurePrimaryDashboardFile?.(files[0]);
     let failures = [];
     for (let index = 0; index < files.length; index += 1) {
       setStatus(`${index + 1} / ${files.length} · ${files[index].name} 분석 중…`);
       try { await importOne(files[index]); }
       catch (error) { failures.push(error.message); }
     }
+    if (typeof window.restorePrimaryDashboardFile === 'function') await window.restorePrimaryDashboardFile();
     renderSessions();
     if (state.selected.size >= 1) render();
     else setStatus(failures.length ? failures.join(' / ') : `${files.length}개 CSV 추가 완료 · 같은 파일 안에서도 비교할 랩을 선택할 수 있습니다.`, failures.length > 0);
@@ -192,7 +219,7 @@
     if (key === 'tps') return Number(row.decoded_tps) || 0;
     if (key === 'brake') return getCalibratedBrake(row.front_brake_raw);
     if (key === 'steering') return Number.isFinite(Number(row.steering_filtered_deg)) ? Number(row.steering_filtered_deg) : getCalibratedSteering(row.steering_raw);
-    if (key === 'yaw') return Number(row.imu_gyro_z_dps) || 0;
+    if (key === 'yaw') return Number.isFinite(Number(row.imu_filtered_gz_dps)) ? Number(row.imu_filtered_gz_dps) : (Number(row.imu_gyro_z_dps) || 0);
     return 0;
   }
 
@@ -245,7 +272,7 @@
         tps: Number(row.decoded_tps) || 0,
         brake: getCalibratedBrake(row.front_brake_raw),
         steering: Number.isFinite(Number(row.steering_filtered_deg)) ? Number(row.steering_filtered_deg) : getCalibratedSteering(row.steering_raw),
-        yaw: Number(row.imu_gyro_z_dps) || 0
+        yaw: Number.isFinite(Number(row.imu_filtered_gz_dps)) ? Number(row.imu_filtered_gz_dps) : (Number(row.imu_gyro_z_dps) || 0)
       });
     }
     state.cache.set(item.key, samples);
@@ -989,6 +1016,7 @@
     if (!hit || Math.sqrt(hit.error2) > 40) return;
     jumpToDistance(hit.distance);
   });
+  $('gps-imu-lpf')?.addEventListener('change', refreshComparisonImuFilters);
   document.addEventListener('keydown', event => {
     if (event.code !== 'Space' || !$('page-comparison')?.classList.contains('active')) return;
     if (event.target.matches('input, textarea, select, button') || event.target.isContentEditable) return;

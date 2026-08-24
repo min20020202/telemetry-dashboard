@@ -44,6 +44,7 @@ let gpsImuCursorDragging = false;
 
 // Zoom, Slicing & Scroll configurations
 let globalData = [];
+let primaryDashboardFile = null;
 let currentStartSec = 0;
 let currentEndSec = 30;
 let totalDurationSec = 0;
@@ -5165,6 +5166,7 @@ function handleFile(file, options = {}) {
     alert('CSV 형식의 로그 파일만 업로드할 수 있습니다.');
     return;
   }
+  if (!options.skipUpload) primaryDashboardFile = file;
 
   if (loadedFileBadge) {
     loadedFileBadge.textContent = '📄 ' + file.name;
@@ -5211,6 +5213,20 @@ function handleFile(file, options = {}) {
     }
   });
 }
+
+window.restorePrimaryDashboardFile = function () {
+  return new Promise(resolve => {
+    if (!primaryDashboardFile) { resolve(false); return; }
+    handleFile(primaryDashboardFile, {
+      skipUpload: true,
+      onComplete: () => resolve(true),
+      onError: () => resolve(false)
+    });
+  });
+};
+window.ensurePrimaryDashboardFile = function (file) {
+  if (!primaryDashboardFile && file) primaryDashboardFile = file;
+};
 
 function uploadFileToServer(file) {
   const formData = new FormData();

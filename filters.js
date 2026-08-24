@@ -459,6 +459,18 @@ const filterState = {};   // key → { dropout:{on,lo,hi,gap}, type, params:{} }
 const rawChannel = {};    // key → Float64Array (100Hz 원본 전체)
 const filteredChannel = {}; // key → Float64Array (100Hz 필터 적용본)
 let sampleRateHz = 100;
+const ROW_FILTER_FIELDS = {
+  steering: 'steering_filtered_deg',
+  imu_ax: 'imu_filtered_ax_g', imu_ay: 'imu_filtered_ay_g',
+  imu_gx: 'imu_filtered_gx_dps', imu_gy: 'imu_filtered_gy_dps', imu_gz: 'imu_filtered_gz_dps'
+};
+
+function writeFilteredChannelToRows(key, rows) {
+  const field = ROW_FILTER_FIELDS[key];
+  const values = filteredChannel[key];
+  if (!field || !values || !rows) return;
+  for (let i = 0; i < rows.length; i++) rows[i][field] = values[i];
+}
 
 function defaultFilterFor(key) {
   const ch = CHANNELS[key];
@@ -537,18 +549,14 @@ function buildRawChannels(rows) {
     }
     rawChannel[key] = arr;
     filteredChannel[key] = applyFilterChain(key, arr);
-    if (key === 'steering') {
-      for (let i = 0; i < n; i++) rows[i].steering_filtered_deg = filteredChannel[key][i];
-    }
+    writeFilteredChannelToRows(key, rows);
   });
 }
 
 function recomputeChannel(key) {
   if (!rawChannel[key]) return;
   filteredChannel[key] = applyFilterChain(key, rawChannel[key]);
-  if (key === 'steering' && typeof globalData !== 'undefined') {
-    for (let i = 0; i < globalData.length; i++) globalData[i].steering_filtered_deg = filteredChannel[key][i];
-  }
+  if (typeof globalData !== 'undefined') writeFilteredChannelToRows(key, globalData);
 }
 
 /**
