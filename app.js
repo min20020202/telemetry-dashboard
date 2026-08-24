@@ -1904,7 +1904,9 @@ function page4ChartDatasets(spec, startTime = page4ViewStart, endTime = page4Vie
       borderWidth: item.selectionIndex === 0 ? 1.45 : 1.3,
       borderDash: series[4]?.length ? series[4] : (seriesIndex === 0 ? [] : [7, 3 + seriesIndex]),
       pointRadius: 0,
-      clip: 4,
+      // Keep out-of-range peaks strictly inside this strip's plot area so a
+      // signal can never cover the header or appear to enter an adjacent chart.
+      clip: { left: 0, right: 0, top: 0, bottom: 0 },
       stepped: spec.stepped ? 'before' : false,
       fill: false,
       hidden: page4HiddenSeries.has(label),
