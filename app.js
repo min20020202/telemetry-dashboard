@@ -2133,6 +2133,7 @@ function importPage4SessionFile(file) {
       skipUpload: true,
       onComplete: snapshot => {
         const session = registerPage4Session(snapshot, true);
+        window.registerComparisonSession?.(snapshot, true);
         session ? resolve(session) : reject(new Error(`${file.name}: 완성 랩이 없습니다.`));
       },
       onError: reject
@@ -2140,7 +2141,7 @@ function importPage4SessionFile(file) {
   });
 }
 
-window.registerCurrentPage4Session = snapshot => registerPage4Session(snapshot, true);
+window.registerPage4ComparisonSession = snapshot => registerPage4Session(snapshot, false);
 
 function refreshPage4SectorOptions() {
   if (!p4SectorStart || !p4SectorEnd) return;
@@ -5270,10 +5271,6 @@ function handleFile(file, options = {}) {
       };
       if (typeof options.onComplete === 'function') {
         options.onComplete(snapshot);
-      }
-      if (!options.skipUpload) {
-        window.registerCurrentPage4Session?.(snapshot);
-        window.registerCurrentComparisonSession?.(snapshot);
       }
     },
     error: function (err) {

@@ -86,7 +86,11 @@
       handleFile(file, {
         skipUpload: true,
         onComplete: snapshot => {
-          try { addSession(snapshot, true); resolve(); }
+          try {
+            addSession(snapshot, true);
+            window.registerPage4ComparisonSession?.(snapshot);
+            resolve();
+          }
           catch (error) { reject(error); }
         },
         onError: reject
@@ -911,9 +915,9 @@
   }
   window.renderDriverComparison = render;
   window.stopDriverComparisonPlayback = () => setPlaying(false);
-  window.registerCurrentComparisonSession = snapshot => {
+  window.registerComparisonSession = (snapshot, autoSelect = true) => {
     try {
-      const session = addSession(snapshot, true);
+      const session = addSession(snapshot, autoSelect);
       renderSessions();
       render();
       setStatus(`${session.fileName}의 ${session.laps.length}개 랩을 불러왔습니다. 같은 CSV 안에서 바로 비교할 수 있습니다.`);
