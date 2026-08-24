@@ -10,20 +10,20 @@
   background: var(--bg-color);
   color: var(--text-primary);
   overflow: auto;
-  padding: 12px;
+  padding: 6px 8px 8px;
 }
 
-.comparison-page.active { display: flex !important; flex-direction: column; gap: 10px; }
-.comparison-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 0 0 auto; }
-.comparison-toolbar h2 { margin: 0 0 3px; font-size: 20px; }
-.comparison-toolbar p { margin: 0; color: var(--text-secondary); font-size: 12px; }
-.comparison-toolbar-actions { display: flex; gap: 8px; }
+.comparison-page.active { display: flex !important; flex-direction: column; gap: 5px; }
+.comparison-toolbar { display:flex; min-height:30px; align-items:center; justify-content:space-between; gap:10px; flex:0 0 auto; }
+.comparison-toolbar h2 { margin:0; font-size:14px; line-height:1; }
+.comparison-toolbar p { display:none; }
+.comparison-toolbar-actions { display:flex; gap:5px; }
 .comparison-file-button, #comparison-clear {
-  border: 1px solid var(--border-color); border-radius: 7px; padding: 8px 12px;
-  background: var(--panel-bg); color: var(--text-primary); font-weight: 800; cursor: pointer;
+  display:inline-flex; height:28px; align-items:center; border:1px solid var(--border-color); border-radius:6px; padding:0 9px;
+  background:var(--panel-bg); color:var(--text-primary); font-size:9px; font-weight:800; cursor:pointer;
 }
 .comparison-file-button { color: var(--accent-orange); border-color: var(--accent-orange); }
-.comparison-status { flex: 0 0 auto; padding: 7px 10px; border-radius: 7px; background: rgba(14,165,233,.08); color: var(--text-secondary); font-size: 12px; font-weight: 700; }
+.comparison-status { display:flex; min-height:22px; flex:0 0 auto; align-items:center; padding:2px 7px; border-radius:5px; background:rgba(14,165,233,.08); color:var(--text-secondary); font-size:9px; font-weight:700; }
 .comparison-status.error { background: rgba(239,68,68,.1); color: #ef4444; }
 .comparison-layout { display: grid; grid-template-columns: minmax(220px, 270px) minmax(0, 1fr); gap: 10px; min-height: 0; }
 .comparison-sidebar { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
