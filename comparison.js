@@ -385,6 +385,19 @@
     return interpolate(data, end, 'x', 'elapsed') - interpolate(data, start, 'x', 'elapsed');
   }
 
+  function scrollSelectedSectorIntoView(index) {
+    if (!ui.sector || !Number.isInteger(index)) return;
+    requestAnimationFrame(() => {
+      const row = ui.sector.querySelector(`[data-sector-row="${index}"]`);
+      if (!row) return;
+      const containerRect = ui.sector.getBoundingClientRect();
+      const rowRect = row.getBoundingClientRect();
+      const controlsHeight = ui.sector.querySelector('.comparison-sector-controls')?.offsetHeight || 0;
+      const target = ui.sector.scrollTop + rowRect.top - containerRect.top - controlsHeight - 25;
+      ui.sector.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+    });
+  }
+
   function selectSector(index) {
     const items = selectedLaps(), bounds = sectorBounds(items);
     state.activeSector = Number.isInteger(index) && index >= 0 && index < bounds.length - 1 ? index : null;
@@ -396,6 +409,7 @@
     }
     renderSectors(items);
     renderMap(items);
+    scrollSelectedSectorIntoView(state.activeSector);
   }
 
   function renderSectors(items) {
