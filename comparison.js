@@ -730,7 +730,7 @@
       const timing = sectorRangeTiming(cell.item, state.activeSector, state.activeSectorEnd, items);
       return `<span style="--session-color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)} L${cell.item.lap.number} <strong>${timing ? `${timing.duration.toFixed(3)}s` : '통과 기록 없음'}</strong></span>`;
     }).join('')}</div>`;
-    const controls = `<div class="comparison-sector-controls"><div class="comparison-sector-buttons">${bounds.slice(0, -1).map((_, index) => `<button type="button" data-sector="${index}" aria-pressed="${isActive(index)}" class="${isActive(index) ? 'active' : ''}">S${index + 1}</button>`).join('')}</div><div class="comparison-sector-range"><span>다중 구간</span><label>시작 <select data-sector-range-start>${options}</select></label><i>→</i><label>종료 <select data-sector-range-end>${endOptions}</select></label><button type="button" data-sector-range-apply>적용</button></div>${rangeSummary}</div>`;
+    const controls = `<div class="comparison-sector-controls"><div class="comparison-sector-buttons">${bounds.slice(0, -1).map((_, index) => `<button type="button" data-sector="${index}" aria-pressed="${isActive(index)}" class="${isActive(index) ? 'active' : ''}">S${index + 1}</button>`).join('')}</div><div class="comparison-sector-range"><span>다중 구간</span><label>시작 <select data-sector-range-start>${options}</select></label><i>→</i><label>종료 <select data-sector-range-end>${endOptions}</select></label><button type="button" data-sector-range-reset>초기화</button></div>${rangeSummary}</div>`;
     ui.sector.innerHTML = `${controls}<table><thead><tr><th>구간</th>${cells.map(cell => `<th style="color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)} L${cell.item.lap.number}</th>`).join('')}</tr></thead><tbody>${bounds.slice(0, -1).map((start, sectorIndex) => {
       const end = bounds[sectorIndex + 1];
       const durations = cells.map(cell => sectorDuration(cell.item, sectorIndex, items));
@@ -992,11 +992,9 @@
     renderMap(selectedLaps());
   });
   ui.sector?.addEventListener('click', event => {
-    const apply = event.target.closest('[data-sector-range-apply]');
-    if (apply) {
-      const start = Number(ui.sector.querySelector('[data-sector-range-start]')?.value);
-      const end = Number(ui.sector.querySelector('[data-sector-range-end]')?.value);
-      selectSectorRange(start, end);
+    const reset = event.target.closest('[data-sector-range-reset]');
+    if (reset) {
+      selectSectorRange(null);
       return;
     }
     const button = event.target.closest('[data-sector]');
@@ -1011,8 +1009,12 @@
     const end = Number(ui.sector.querySelector('[data-sector-range-end]')?.value);
     if (event.target.matches('[data-sector-range-start]') && end < start) {
       ui.sector.querySelector('[data-sector-range-end]').value = String(start);
+      selectSectorRange(start, start);
     } else if (event.target.matches('[data-sector-range-end]') && start > end) {
       ui.sector.querySelector('[data-sector-range-start]').value = String(end);
+      selectSectorRange(end, end);
+    } else {
+      selectSectorRange(start, end);
     }
   });
   ui.map?.addEventListener('click', event => {
