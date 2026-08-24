@@ -185,13 +185,13 @@
   }
 
   const COMPARISON_MAX_VISIBLE_POINTS = 4500;
-  const COMPARISON_SOURCE_HZ = { speed: 10, tps: 25, brake: 100, steering: 100, yaw: 50 };
+  const COMPARISON_SOURCE_HZ = { speed: 100, tps: 100, brake: 100, steering: 100, yaw: 100 };
 
   function comparisonSourceValue(key, row) {
     if (key === 'speed') return vehicleSpeed(row);
     if (key === 'tps') return Number(row.decoded_tps) || 0;
     if (key === 'brake') return getCalibratedBrake(row.front_brake_raw);
-    if (key === 'steering') return getCalibratedSteering(row.steering_raw);
+    if (key === 'steering') return Number.isFinite(Number(row.steering_filtered_deg)) ? Number(row.steering_filtered_deg) : getCalibratedSteering(row.steering_raw);
     if (key === 'yaw') return Number(row.imu_gyro_z_dps) || 0;
     return 0;
   }
@@ -200,15 +200,15 @@
     const cacheKey = `${item.key}|${key}|${sourceHz}`;
     if (state.sourceSeriesCache.has(cacheKey)) return state.sourceSeriesCache.get(cacheKey);
     const map = [...buildDistanceMap(item)].sort((a, b) => a.time - b.time || a.distance - b.distance);
-    const interval = 1 / Math.max(1, sourceHz);
     const points = [];
-    let nextTime = item.lap.startTime;
     item.session.rows.forEach(row => {
       const time = Number(row.time_sec);
-      if (!Number.isFinite(time) || time < item.lap.startTime || time > item.lap.endTime || time + 1e-9 < nextTime) return;
-      points.push({ x: interpolate(map, time, 'time', 'distance'), y: comparisonSourceValue(key, row) });
-      nextTime = time + interval;
+      if (!Number.isFinite(time) || time < item.lap.startTime || time > item.lap.endTime) return;
+      const x = interpolate(map, time, 'time', 'distance');
+      const y = comparisonSourceValue(key, row);
+      if (Number.isFinite(x) && Number.isFinite(y)) points.push({ x, y });
     });
+    points.sort((a, b) => a.x - b.x);
     state.sourceSeriesCache.set(cacheKey, points);
     return points;
   }
@@ -244,7 +244,7 @@
         speed: vehicleSpeed(row),
         tps: Number(row.decoded_tps) || 0,
         brake: getCalibratedBrake(row.front_brake_raw),
-        steering: getCalibratedSteering(row.steering_raw),
+        steering: Number.isFinite(Number(row.steering_filtered_deg)) ? Number(row.steering_filtered_deg) : getCalibratedSteering(row.steering_raw),
         yaw: Number(row.imu_gyro_z_dps) || 0
       });
     }
@@ -255,7 +255,7 @@
   function chartOptions(yTitle) {
     const distance = totalDistance();
     return {
-      responsive: true, maintainAspectRatio: false, animation: false, normalized: true, parsing: false,
+      responsive: true, maintainAspectRatio: false, animation: false, normalized: false, parsing: false,
       interaction: { mode: 'index', intersect: false },
       plugins: { legend: { display: false }, tooltip: { enabled: true } },
       scales: {
@@ -483,7 +483,7 @@
       comparisonSeriesId: `${item.key}|${key}`,
       data: visibleComparisonSourceSeries(item, key, sourceHz),
       borderColor: color, backgroundColor: color, borderWidth: dashed ? 2 : 1.7,
-      borderDash: dashed ? [12, 8] : [], borderDashOffset: 0, pointRadius: 0, fill: false
+      borderDash: dashed ? [12, 8] : [], borderDashOffset: 0, pointRadius: 0, spanGaps: true, fill: false
     };
   }
 

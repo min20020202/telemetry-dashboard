@@ -463,6 +463,9 @@ let sampleRateHz = 100;
 function defaultFilterFor(key) {
   const ch = CHANNELS[key];
   const d = ch.dropoutDef || { on: false, lo: null, hi: null, gap: 20 };
+  if (key === 'steering') {
+    return { dropout: { on: false, lo: d.lo, hi: d.hi, gap: d.gap }, type: 'butter', params: { fc: 5, order: 2 } };
+  }
   return { dropout: { on: false, lo: d.lo, hi: d.hi, gap: d.gap }, type: 'none', params: {} };
 }
 
@@ -534,12 +537,18 @@ function buildRawChannels(rows) {
     }
     rawChannel[key] = arr;
     filteredChannel[key] = applyFilterChain(key, arr);
+    if (key === 'steering') {
+      for (let i = 0; i < n; i++) rows[i].steering_filtered_deg = filteredChannel[key][i];
+    }
   });
 }
 
 function recomputeChannel(key) {
   if (!rawChannel[key]) return;
   filteredChannel[key] = applyFilterChain(key, rawChannel[key]);
+  if (key === 'steering' && typeof globalData !== 'undefined') {
+    for (let i = 0; i < globalData.length; i++) globalData[i].steering_filtered_deg = filteredChannel[key][i];
+  }
 }
 
 /**

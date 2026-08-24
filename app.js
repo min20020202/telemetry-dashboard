@@ -1538,7 +1538,7 @@ function analyzeGpsHandlingBalance() {
     const time = Number(row.time_sec);
     if (!gpsLapResults.some(lap => time >= lap.startTime && time <= lap.endTime)) continue;
     const speed = Number(row.gps_speed_kmh) / 3.6;
-    const steering = getCalibratedSteering(row.steering_raw);
+    const steering = channelValueAt('steering', index) ?? getCalibratedSteering(row.steering_raw);
     const yaw = Number(row.imu_gyro_z_dps);
     const lateral = Number(row.imu_accel_y_g);
     if (speed < 7 || Math.abs(steering) < 8 || Math.abs(yaw) < 3 || Math.abs(lateral) < 0.12) continue;
@@ -1557,7 +1557,7 @@ function analyzeGpsHandlingBalance() {
     if (!gpsLapResults.some(lap => time >= lap.startTime && time <= lap.endTime)) return;
     const speedKmh = Number(row.gps_speed_kmh) || 0;
     const speed = speedKmh / 3.6;
-    const steering = getCalibratedSteering(row.steering_raw);
+    const steering = channelValueAt('steering', index) ?? getCalibratedSteering(row.steering_raw);
     const measuredYaw = (Number(row.imu_gyro_z_dps) || 0) * yawSign;
     const lateral = Number(row.imu_accel_y_g) || 0;
     smoothYaw += 0.08 * (measuredYaw - smoothYaw);
@@ -1783,7 +1783,7 @@ const PAGE4_CHART_SPECS = [
     ['Brake', '#ef4444', r => getCalibratedBrake(r.front_brake_raw)]
   ]},
   { id: 'p4-chart-steering-yaw', min: -180, max: 180, series: [
-    ['Steering', '#db2777', r => getCalibratedSteering(r.steering_raw), 'y'],
+    ['Steering', '#db2777', r => getCalibratedSteering(r.steering_raw), 'y', [], 'steering'],
     ['Yaw Rate', '#22c55e', r => Number(r.imu_gyro_z_dps) || 0, 'y2', [7, 4], 'imu_gz']
   ], second: [-100, 100]},
   { id: 'p4-chart-imu', min: -2.5, max: 2.5, series: [
@@ -2463,8 +2463,9 @@ function updatePage4Widgets(row) {
   if (!row) return;
   const set = (id, text) => { const element = document.getElementById(id); if (element) element.textContent = text; };
   const speed = Number(row.gps_speed_kmh) || 0, rpm = Number(row.rpm) || 0, tps = Number(row.decoded_tps) || 0;
-  const brake = getCalibratedBrake(row.front_brake_raw), steering = getCalibratedSteering(row.steering_raw);
+  const brake = getCalibratedBrake(row.front_brake_raw);
   const rowIndex = findGlobalIndexAtTime(Number(row.time_sec));
+  const steering = channelValueAt('steering', rowIndex) ?? getCalibratedSteering(row.steering_raw);
   const yaw = page4SeriesValue(PAGE4_CHART_SPECS[4].series[1], row, rowIndex);
   const gx = page4SeriesValue(PAGE4_CHART_SPECS[5].series[0], row, rowIndex), gy = page4SeriesValue(PAGE4_CHART_SPECS[5].series[1], row, rowIndex);
   set('p4-speed', `GPS ${speed.toFixed(1)} · FL ${(Number(row.fl_speed_kmh) || 0).toFixed(1)} · RL ${(Number(row.rl_speed_kmh) || 0).toFixed(1)} · RR ${(Number(row.rr_speed_kmh) || 0).toFixed(1)} km/h`); set('p4-rpm-tps', `${Math.round(rpm)} rpm · ${tps.toFixed(1)}%`);
