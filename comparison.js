@@ -421,7 +421,8 @@
     ui.summary.innerHTML = items.map((item, index) => {
       const delta = item.lap.duration - baseline.lap.duration;
       const maxSpeed = Math.max(...sampleLap(item).map(point => point.speed));
-      return `<div class="comparison-summary-card" style="border-color:${COLORS[index]}"><b>${escapeHtml(item.session.driver)} · LAP ${item.lap.number}${item === fastest ? ' ★' : ''}</b><span>${formatLap(item.lap.duration)} · 기준 대비 ${delta >= 0 ? '+' : ''}${delta.toFixed(3)}초 · 최고 ${maxSpeed.toFixed(1)} km/h</span></div>`;
+      const comparisonText = item === baseline ? '기준' : `기준 대비 ${delta >= 0 ? '+' : ''}${delta.toFixed(3)}초`;
+      return `<div class="comparison-summary-card" style="border-color:${COLORS[index]}"><b>${escapeHtml(item.session.driver)} · LAP ${item.lap.number}${item === fastest ? ' ★' : ''}</b><span>${formatLap(item.lap.duration)} · ${comparisonText} · 최고 ${maxSpeed.toFixed(1)} km/h</span></div>`;
     }).join('');
   }
 
