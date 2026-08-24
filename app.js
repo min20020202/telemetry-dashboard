@@ -1807,6 +1807,16 @@ function page4SeriesValue(series, row, globalIndex) {
     const filtered = channelValueAt(channelKey, globalIndex);
     if (Number.isFinite(filtered)) return filtered;
   }
+  // 비교용으로 추가한 세션은 전역 채널 인덱스를 공유하지 않으므로,
+  // CSV를 읽을 때 각 행에 저장해 둔 동일 필터 결과를 사용한다.
+  const filteredField = {
+    steering: 'steering_filtered_deg',
+    imu_ax: 'imu_filtered_ax_g',
+    imu_ay: 'imu_filtered_ay_g',
+    imu_gz: 'imu_filtered_gz_dps'
+  }[channelKey];
+  const storedFiltered = filteredField ? Number(row?.[filteredField]) : NaN;
+  if (Number.isFinite(storedFiltered)) return storedFiltered;
   return series[2](row);
 }
 
@@ -1844,10 +1854,13 @@ function page4ChartDatasets(spec, startTime = page4ViewStart, endTime = page4Vie
   const items = page4SelectedItems();
   const primary = items[0];
   if (!primary) return [];
+  const useSeriesColors = items.length === 1;
   return items.flatMap(item => spec.series.map((series, seriesIndex) => ({
     label: `${item.session.driver} · L${item.lap.number} ${series[0]}`,
     data: page4AlignedSeries(item, series, primary.lap, startTime, endTime),
-    borderColor: PAGE4_LAP_COLORS[item.selectionIndex],
+    // 한 랩만 볼 때는 한 패널 안의 신호를 고유 색상으로 구분한다.
+    // 여러 랩 비교에서는 기존처럼 각 랩의 색을 모든 신호에 유지한다.
+    borderColor: useSeriesColors ? series[1] : PAGE4_LAP_COLORS[item.selectionIndex],
     borderWidth: item.selectionIndex === 0 ? 1.45 : 1.3,
     borderDash: series[4]?.length ? series[4] : (seriesIndex === 0 ? [] : [7, 3 + seriesIndex]),
     pointRadius: 0,

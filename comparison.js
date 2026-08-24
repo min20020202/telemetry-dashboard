@@ -538,9 +538,16 @@
 
   function renderCharts(items) {
     const sampled = items.map((item, index) => ({ item, color: COLORS[index], data: sampleLap(item), label: `${item.session.driver} · L${item.lap.number}` }));
+    const singleLap = sampled.length === 1;
     rebuildChart('speed', 'comparison-speed-chart', sampled.map((s, i) => sourceLine(s.label, s.color, s.item, 'speed', false, i)), 'km/h', { min: 0 });
-    rebuildChart('pedal', 'comparison-pedal-chart', sampled.flatMap((s, i) => [sourceLine(`${s.label} TPS`, s.color, s.item, 'tps', false, i), sourceLine(`${s.label} Brake`, s.color, s.item, 'brake', true, i)]), '%', { min: 0, max: 100 });
-    rebuildChart('steering', 'comparison-steering-chart', sampled.flatMap((s, i) => [sourceLine(`${s.label} Steering`, s.color, s.item, 'steering', false, i), sourceLine(`${s.label} Yaw`, s.color, s.item, 'yaw', true, i)]), '° / °/s');
+    rebuildChart('pedal', 'comparison-pedal-chart', sampled.flatMap((s, i) => [
+      sourceLine(`${s.label} TPS`, singleLap ? '#16a34a' : s.color, s.item, 'tps', false, i),
+      sourceLine(`${s.label} Brake`, singleLap ? '#ef4444' : s.color, s.item, 'brake', true, i)
+    ]), '%', { min: 0, max: 100 });
+    rebuildChart('steering', 'comparison-steering-chart', sampled.flatMap((s, i) => [
+      sourceLine(`${s.label} Steering`, singleLap ? '#db2777' : s.color, s.item, 'steering', false, i),
+      sourceLine(`${s.label} Yaw`, singleLap ? '#22c55e' : s.color, s.item, 'yaw', true, i)
+    ]), '° / °/s');
     const baseline = sampled[0]?.data || [];
     rebuildChart('delta', 'comparison-delta-chart', sampled.map(s => ({
       label: s.label, data: s.data.map((point, index) => ({ x: point.x, y: point.elapsed - (baseline[index]?.elapsed || 0) })),
