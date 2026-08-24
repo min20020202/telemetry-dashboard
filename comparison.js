@@ -844,8 +844,20 @@
       events,
       activeTime: events.reduce((sum, event) => sum + event.endTime - event.startTime, 0),
       average: totalTime > 0 ? weighted / totalTime : Number(points[0]?.[key]) || 0,
-      maximum: Math.max(...points.map(point => Number(point[key]) || 0))
+      maximum: Math.max(...points.map(point => Number(point[key]) || 0)),
+      dose: weighted / 100
     };
+  }
+
+  function coastDuration(points) {
+    let duration = 0;
+    for (let index = 1; index < points.length; index += 1) {
+      const previous = points[index - 1], current = points[index];
+      if ((Number(previous.tps) || 0) < 5 && (Number(current.tps) || 0) < 5 && (Number(previous.brake) || 0) < 5 && (Number(current.brake) || 0) < 5) {
+        duration += Math.max(0, current.elapsed - previous.elapsed);
+      }
+    }
+    return duration;
   }
 
   function sectorLapAnalysis(cell, sectorIndex, items, start, end, duration) {
@@ -859,7 +871,8 @@
       metrics: sectorPathMetrics(cell.item, sectorIndex, items, start, end),
       brake: pedalEventSummary(points, 'brake', 5),
       throttle: pedalEventSummary(points, 'tps', 20),
-      fullThrottle: pedalEventSummary(points, 'tps', 90)
+      fullThrottle: pedalEventSummary(points, 'tps', 90),
+      coastTime: coastDuration(points)
     };
   }
 
@@ -900,26 +913,51 @@
         <em class="${distanceDelta < 0 ? 'gain' : distanceDelta > 0 ? 'loss' : ''}">거리 ${signed(distanceDelta, 1, 'm')}</em>
         <em class="${speedDelta > 0 ? 'gain' : speedDelta < 0 ? 'loss' : ''}">평균속도 ${signed(speedDelta, 1)}</em>
       </span>
-      <small class="comparison-pedal-delta brake">B ${referenceAnalysis.brake.events.length}→${analysis.brake.events.length}회 · 시간 ${signed(analysis.brake.activeTime - referenceAnalysis.brake.activeTime, 2, 's')} · MAX ${signed(analysis.brake.maximum - referenceAnalysis.brake.maximum, 0, '%')}</small>
-      <small class="comparison-pedal-delta throttle">T ${referenceAnalysis.throttle.events.length}→${analysis.throttle.events.length}회 · 평균 ${signed(analysis.throttle.average - referenceAnalysis.throttle.average, 0, '%')} · FULL ${signed(analysis.fullThrottle.activeTime - referenceAnalysis.fullThrottle.activeTime, 2, 's')}</small>
+      <small class="comparison-pedal-delta brake">브레이크 시간 ${signed(analysis.brake.activeTime - referenceAnalysis.brake.activeTime, 2, 's')} · 제동량 ${signed(analysis.brake.dose - referenceAnalysis.brake.dose, 2)} · MAX ${signed(analysis.brake.maximum - referenceAnalysis.brake.maximum, 0, '%')}</small>
+      <small class="comparison-pedal-delta throttle">평균 TPS ${signed(analysis.throttle.average - referenceAnalysis.throttle.average, 0, '%')} · 풀가속 ${signed(analysis.fullThrottle.activeTime - referenceAnalysis.fullThrottle.activeTime, 2, 's')} · 코스팅 ${signed(analysis.coastTime - referenceAnalysis.coastTime, 2, 's')}</small>
     </span>`;
   }
 
   function sectorAnalysisCard(cell, analysis, color) {
     const metrics = analysis.metrics;
-    const positions = events => events.length ? events.map(event => `${event.start.toFixed(0)}m`).join(', ') : '없음';
     return `<section class="sector-detail-lap" style="--lap-color:${color}">
       <h3><i></i><span>${escapeHtml(cell.item.session.driver)}&nbsp;L${cell.item.lap.number}</span><strong>${analysis.duration.toFixed(3)}s</strong></h3>
       <dl>
         <div><dt>실제 주행거리</dt><dd>${metrics?.actualDistance.toFixed(1) ?? '—'}m <small>중심선 대비 ${metrics ? signed(metrics.extraDistance, 1, 'm') : '—'}</small></dd></div>
         <div><dt>속도</dt><dd>평균 ${metrics?.averageSpeed.toFixed(1) ?? '—'} · 최저 ${analysis.minSpeed.toFixed(1)} · 탈출 ${analysis.exitSpeed.toFixed(1)} km/h</dd></div>
-        <div><dt>브레이크</dt><dd>${analysis.brake.events.length}회 · ${analysis.brake.activeTime.toFixed(2)}s · MAX ${analysis.brake.maximum.toFixed(0)}%</dd></div>
-        <div><dt>브레이크 시작</dt><dd>${positions(analysis.brake.events)}</dd></div>
-        <div><dt>가속</dt><dd>${analysis.throttle.events.length}회 · 평균 ${analysis.throttle.average.toFixed(0)}% · FULL ${analysis.fullThrottle.activeTime.toFixed(2)}s</dd></div>
-        <div><dt>가속 시작</dt><dd>${positions(analysis.throttle.events)}</dd></div>
+        <div><dt>브레이크</dt><dd>사용 ${analysis.brake.activeTime.toFixed(2)}s · 제동량 ${analysis.brake.dose.toFixed(2)} · MAX ${analysis.brake.maximum.toFixed(0)}%</dd></div>
+        <div><dt>가속</dt><dd>평균 ${analysis.throttle.average.toFixed(0)}% · 풀가속 ${analysis.fullThrottle.activeTime.toFixed(2)}s · 입력량 ${analysis.throttle.dose.toFixed(2)}</dd></div>
+        <div><dt>코스팅</dt><dd>${analysis.coastTime.toFixed(2)}s <small>TPS·브레이크 모두 5% 미만</small></dd></div>
         <div><dt>중심선 이탈</dt><dd>평균 ${metrics?.meanDeviation.toFixed(1) ?? '—'}m · 최대 ${metrics?.maxDeviation.toFixed(1) ?? '—'}m</dd></div>
       </dl>
     </section>`;
+  }
+
+  function drawSectorPedalTimeline(dialog, cells, analyses, start, end) {
+    const canvas = dialog.querySelector('.sector-pedal-timeline');
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect(), ratio = window.devicePixelRatio || 1;
+    const width = Math.max(320, rect.width), height = 164;
+    canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio);
+    const ctx = canvas.getContext('2d'); ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    const left = 86, right = 12, plotWidth = width - left - right;
+    const x = distance => left + (distance - start) / Math.max(1e-6, end - start) * plotWidth;
+    analyses.forEach((analysis, index) => {
+      const top = 12 + index * 75, color = COLORS[cells[index === 0 ? 0 : cells.length - 1].index];
+      ctx.fillStyle = color; ctx.font = '800 10px monospace';
+      const cell = cells[index === 0 ? 0 : cells.length - 1];
+      ctx.fillText(`${cell.item.session.driver} L${cell.item.lap.number}`, 7, top + 29);
+      [['tps', '#16a34a', top + 29], ['brake', '#ef4444', top + 61]].forEach(([key, lineColor, baseline]) => {
+        ctx.beginPath(); ctx.moveTo(x(start), baseline);
+        analysis.points.forEach(point => ctx.lineTo(x(point.x), baseline - Math.max(0, Math.min(100, Number(point[key]) || 0)) * .24));
+        ctx.lineTo(x(end), baseline); ctx.closePath(); ctx.fillStyle = `${lineColor}26`; ctx.fill();
+        ctx.beginPath(); analysis.points.forEach((point, pointIndex) => { const px = x(point.x), py = baseline - Math.max(0, Math.min(100, Number(point[key]) || 0)) * .24; pointIndex ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
+        ctx.strokeStyle = lineColor; ctx.lineWidth = 1.6; ctx.stroke();
+      });
+      ctx.strokeStyle = 'rgba(148,163,184,.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(left, top + 68); ctx.lineTo(width - right, top + 68); ctx.stroke();
+    });
+    ctx.fillStyle = '#64748b'; ctx.font = '700 8px monospace'; ctx.fillText(`${start.toFixed(0)}m`, left, height - 3); ctx.textAlign = 'right'; ctx.fillText(`${end.toFixed(0)}m`, width - right, height - 3); ctx.textAlign = 'left';
   }
 
   function openSectorDetail(sectorIndex, comparisonIndex) {
@@ -941,17 +979,16 @@
     }
     const referenceLabel = `${cells[0].item.session.driver} L${cells[0].item.lap.number}`;
     const comparisonLabel = `${cells[comparisonIndex].item.session.driver} L${cells[comparisonIndex].item.lap.number}`;
-    const brakeComparison = eventStartComparison(referenceAnalysis.brake.events, comparisonAnalysis.brake.events);
-    const throttleComparison = eventStartComparison(referenceAnalysis.throttle.events, comparisonAnalysis.throttle.events);
     dialog.innerHTML = `<div class="sector-detail-shell">
       <header><div><span>CHECKPOINT ANALYSIS</span><h2>S${sectorIndex + 1} 상세 비교</h2><p>${start.toFixed(0)}–${end.toFixed(0)}m · 첫 번째 선택 랩 기준</p></div><button type="button" data-sector-detail-close aria-label="닫기">×</button></header>
       <div class="sector-detail-body">
         <div class="sector-detail-summary">${sectorComparisonMarkup(referenceAnalysis, comparisonAnalysis, referenceLabel, comparisonLabel)}</div>
         <div class="sector-detail-laps">${sectorAnalysisCard(cells[0], referenceAnalysis, COLORS[0])}${sectorAnalysisCard(cells[comparisonIndex], comparisonAnalysis, COLORS[comparisonIndex])}</div>
-        <section class="sector-event-comparison"><h3>조작 시작 위치 비교</h3><p><b>브레이크</b>${brakeComparison}</p><p><b>가속</b>${throttleComparison}</p><small>화살표는 ${escapeHtml(referenceLabel)} → ${escapeHtml(comparisonLabel)} 순서입니다. 0.2초 이내로 잠깐 끊긴 신호는 한 번의 조작으로 합치고, 0.12초 미만 신호는 제외합니다.</small></section>
+        <section class="sector-event-comparison"><h3>거리별 페달 입력 비교</h3><div class="sector-timeline-legend"><span class="tps">TPS</span><span class="brake">브레이크</span></div><canvas class="sector-pedal-timeline"></canvas><small>두 랩을 같은 공통 중심선 거리축에 정렬했습니다. 선의 높이가 해당 위치의 페달 입력률입니다.</small></section>
       </div>
     </div>`;
     dialog.showModal();
+    requestAnimationFrame(() => drawSectorPedalTimeline(dialog, [cells[0], cells[comparisonIndex]], [referenceAnalysis, comparisonAnalysis], start, end));
   }
 
   function renderSectors(items) {
