@@ -2,7 +2,7 @@
   'use strict';
 
   const COLORS = ['#06b6d4', '#ff3d9a', '#76ff03', '#ffca28'];
-  const state = { sessions: [], selected: new Set(), cache: new Map(), distanceMapCache: new Map(), sourceSeriesCache: new Map(), sectorCache: new Map(), charts: {}, seriesEnabled: new Map(), serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, playRenderStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, lastSector: 0, mapGeometry: null };
+  const state = { sessions: [], selected: new Set(), cache: new Map(), distanceMapCache: new Map(), sourceSeriesCache: new Map(), sectorCache: new Map(), charts: {}, seriesEnabled: new Map(), serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, playRenderStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, activeSectorEnd: null, lastSector: 0, mapGeometry: null };
   const boundChartCanvases = new WeakSet();
   const $ = id => document.getElementById(id);
   const ui = {
@@ -291,7 +291,7 @@
     if (state.activeSector === null) {
       state.playElapsed = Math.max(0, Math.min(items[0].lap.duration, elapsed));
     } else {
-      const timing = sectorTiming(items[0], state.activeSector, items);
+      const timing = sectorRangeTiming(items[0], state.activeSector, state.activeSectorEnd, items);
       const sectorStartElapsed = timing ? timing.start.time - items[0].lap.startTime : 0;
       state.playElapsed = Math.max(0, Math.min(timing?.duration || 0, elapsed - sectorStartElapsed));
     }
@@ -377,7 +377,7 @@
       if (px < chart.chartArea.left || px > chart.chartArea.right || py < chart.chartArea.top || py > chart.chartArea.bottom) return;
       jumpToDistance(chart.scales.x.getValueForPixel(px));
     });
-    canvas.addEventListener('dblclick', () => { state.activeSector = null; setChartViewRange(0, totalDistance()); renderSectors(selectedLaps()); renderMap(selectedLaps()); });
+    canvas.addEventListener('dblclick', () => { state.activeSector = null; state.activeSectorEnd = null; setChartViewRange(0, totalDistance()); renderSectors(selectedLaps()); renderMap(selectedLaps()); });
   }
 
   function sampleAtElapsed(item, elapsed) {
@@ -396,7 +396,7 @@
 
   function cursorElapsedForItem(item, items = selectedLaps()) {
     if (state.activeSector === null) return state.playElapsed;
-    const timing = sectorTiming(item, state.activeSector, items);
+    const timing = sectorRangeTiming(item, state.activeSector, state.activeSectorEnd, items);
     return timing ? timing.start.time - item.lap.startTime + Math.min(state.playElapsed, timing.duration) : 0;
   }
 
@@ -404,9 +404,9 @@
     const sample = sampleAtElapsed(item, cursorElapsedForItem(item, items));
     if (sample && state.activeSector !== null) {
       const bounds = sectorBounds(items);
-      const timing = sectorTiming(item, state.activeSector, items);
+      const timing = sectorRangeTiming(item, state.activeSector, state.activeSectorEnd, items);
       if (state.playElapsed <= .001) sample.x = bounds[state.activeSector];
-      else if (timing && state.playElapsed >= timing.duration - .001) sample.x = bounds[state.activeSector + 1];
+      else if (timing && state.playElapsed >= timing.duration - .001) sample.x = bounds[(state.activeSectorEnd ?? state.activeSector) + 1];
     }
     return sample;
   }
@@ -640,6 +640,14 @@
     return sectorTiming(item, sectorIndex, items)?.duration ?? NaN;
   }
 
+  function sectorRangeTiming(item, startIndex, endIndex, items) {
+    if (!Number.isInteger(startIndex)) return null;
+    const boundaries = lapSectorBoundaries(item, items);
+    const end = Number.isInteger(endIndex) ? endIndex : startIndex;
+    const startPoint = boundaries[startIndex], endPoint = boundaries[end + 1];
+    return startPoint && endPoint ? { start: startPoint, end: endPoint, duration: endPoint.time - startPoint.time } : null;
+  }
+
   function scrollSelectedSectorIntoView(index) {
     if (!ui.sector || !Number.isInteger(index)) return;
     requestAnimationFrame(() => {
@@ -658,13 +666,16 @@
     ui.sector?.style.setProperty('--sector-controls-height', `${controlsElement?.offsetHeight || 0}px`);
   }
 
-  function selectSector(index) {
+  function selectSectorRange(startIndex, endIndex = startIndex) {
     const items = selectedLaps(), bounds = sectorBounds(items);
-    state.activeSector = Number.isInteger(index) && index >= 0 && index < bounds.length - 1 ? index : null;
+    const maximum = bounds.length - 2;
+    const valid = Number.isInteger(startIndex) && startIndex >= 0 && startIndex <= maximum;
+    state.activeSector = valid ? Math.min(startIndex, endIndex) : null;
+    state.activeSectorEnd = valid ? Math.max(startIndex, Math.min(maximum, endIndex)) : null;
     if (state.activeSector !== null) state.lastSector = state.activeSector;
     if (state.activeSector === null) setChartViewRange(0, totalDistance());
     else {
-      const start = bounds[state.activeSector], end = bounds[state.activeSector + 1];
+      const start = bounds[state.activeSector], end = bounds[state.activeSectorEnd + 1];
       setChartViewRange(start, end);
       setPlaying(false);
       state.playElapsed = 0;
@@ -681,13 +692,16 @@
     if (items.length < 2) { ui.sector.innerHTML = '<p class="comparison-empty">두 개 이상의 랩을 선택하세요.</p>'; return; }
     const bounds = sectorBounds(items);
     const cells = items.map((item, index) => ({ item, index, data: sampleLap(item) }));
-    const controls = `<div class="comparison-sector-controls">${bounds.slice(0, -1).map((_, index) => `<button type="button" data-sector="${index}" aria-pressed="${state.activeSector === index}" class="${state.activeSector === index ? 'active' : ''}">S${index + 1}</button>`).join('')}</div>`;
+    const isActive = index => state.activeSector !== null && index >= state.activeSector && index <= state.activeSectorEnd;
+    const options = bounds.slice(0, -1).map((_, index) => `<option value="${index}" ${index === state.activeSector ? 'selected' : ''}>S${index + 1}</option>`).join('');
+    const endOptions = bounds.slice(0, -1).map((_, index) => `<option value="${index}" ${index === state.activeSectorEnd ? 'selected' : ''}>S${index + 1}</option>`).join('');
+    const controls = `<div class="comparison-sector-controls"><div class="comparison-sector-buttons">${bounds.slice(0, -1).map((_, index) => `<button type="button" data-sector="${index}" aria-pressed="${isActive(index)}" class="${isActive(index) ? 'active' : ''}">S${index + 1}</button>`).join('')}</div><div class="comparison-sector-range"><span>다중 구간</span><label>시작 <select data-sector-range-start>${options}</select></label><i>→</i><label>종료 <select data-sector-range-end>${endOptions}</select></label><button type="button" data-sector-range-apply>적용</button></div></div>`;
     ui.sector.innerHTML = `${controls}<table><thead><tr><th>구간</th>${cells.map(cell => `<th style="color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)} L${cell.item.lap.number}</th>`).join('')}</tr></thead><tbody>${bounds.slice(0, -1).map((start, sectorIndex) => {
       const end = bounds[sectorIndex + 1];
       const durations = cells.map(cell => sectorDuration(cell.item, sectorIndex, items));
       const validDurations = durations.filter(Number.isFinite);
       const fastest = validDurations.length ? Math.min(...validDurations) : NaN;
-      return `<tr class="${state.activeSector === sectorIndex ? 'active' : ''}" data-sector-row="${sectorIndex}"><td><button type="button" data-sector="${sectorIndex}">S${sectorIndex + 1}</button><br><small>${start.toFixed(0)}–${end.toFixed(0)}m</small></td>${cells.map(cell => {
+      return `<tr class="${isActive(sectorIndex) ? 'active' : ''}" data-sector-row="${sectorIndex}"><td><button type="button" data-sector="${sectorIndex}">S${sectorIndex + 1}</button><br><small>${start.toFixed(0)}–${end.toFixed(0)}m</small></td>${cells.map(cell => {
         const points = cell.data.filter(point => point.x >= start && point.x <= end);
         const first = points[0], last = points.at(-1);
         const duration = durations[cell.index];
@@ -732,8 +746,9 @@
         if (points.length < 2) return;
         ctx.beginPath(); points.forEach((point, i) => { const [x, y] = xy(point); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
         ctx.strokeStyle = COLORS[index];
-        ctx.lineWidth = state.activeSector === sectorIndex ? 4 : 2.5;
-        ctx.globalAlpha = state.activeSector === null || state.activeSector === sectorIndex ? .92 : .14;
+        const inActiveRange = state.activeSector !== null && sectorIndex >= state.activeSector && sectorIndex <= state.activeSectorEnd;
+        ctx.lineWidth = inActiveRange ? 4 : 2.5;
+        ctx.globalAlpha = state.activeSector === null || inActiveRange ? .92 : .14;
         ctx.stroke();
       });
     });
@@ -776,7 +791,7 @@
   function playbackDuration(items = selectedLaps()) {
     if (!items.length) return 0;
     if (state.activeSector === null) return Math.max(...items.map(item => item.lap.duration));
-    const durations = items.map(item => sectorDuration(item, state.activeSector, items)).filter(Number.isFinite);
+    const durations = items.map(item => sectorRangeTiming(item, state.activeSector, state.activeSectorEnd, items)?.duration).filter(Number.isFinite);
     return durations.length ? Math.max(...durations) : 0;
   }
   function playbackValueMarkup(values, emptyText) {
@@ -885,7 +900,7 @@
     const key = event.target.dataset.lapKey;
     if (!key) return;
     if (event.target.checked && state.selected.size >= 4) { event.target.checked = false; setStatus('동시에 비교할 수 있는 랩은 최대 4개입니다.', true); return; }
-    setPlaying(false); state.playElapsed = 0; state.activeSector = null;
+    setPlaying(false); state.playElapsed = 0; state.activeSector = null; state.activeSectorEnd = null;
     event.target.checked ? state.selected.add(key) : state.selected.delete(key); render();
   });
   ui.sessions?.addEventListener('click', event => {
@@ -898,7 +913,7 @@
       state.sessions = state.sessions.filter(item => item.id !== sessionId);
       [...state.selected].forEach(key => { if (key.startsWith(`${sessionId}:`)) state.selected.delete(key); });
       state.cache.clear(); state.distanceMapCache.clear(); state.sourceSeriesCache.clear(); state.sectorCache.clear(); state.seriesEnabled.clear();
-      state.playElapsed = 0; state.viewMin = 0; state.viewMax = null; state.hoverDistance = null; state.activeSector = null; state.lastSector = 0; state.mapGeometry = null;
+      state.playElapsed = 0; state.viewMin = 0; state.viewMax = null; state.hoverDistance = null; state.activeSector = null; state.activeSectorEnd = null; state.lastSector = 0; state.mapGeometry = null;
       renderSessions(); render();
       setStatus(`${session.fileName} 세션을 제거했습니다.`);
       return;
@@ -907,7 +922,7 @@
     if (!button) return;
     const session = state.sessions.find(item => item.id === Number(button.dataset.sessionId));
     if (!session) return;
-    setPlaying(false); state.playElapsed = 0; state.activeSector = null;
+    setPlaying(false); state.playElapsed = 0; state.activeSector = null; state.activeSectorEnd = null;
     session.laps.forEach((_, lapIndex) => state.selected.delete(selectionKey(session.id, lapIndex)));
     const ordered = session.laps.map((lap, lapIndex) => ({ lap, lapIndex })).sort((a, b) => a.lap.duration - b.lap.duration);
     let picks = [];
@@ -942,11 +957,28 @@
     renderMap(selectedLaps());
   });
   ui.sector?.addEventListener('click', event => {
+    const apply = event.target.closest('[data-sector-range-apply]');
+    if (apply) {
+      const start = Number(ui.sector.querySelector('[data-sector-range-start]')?.value);
+      const end = Number(ui.sector.querySelector('[data-sector-range-end]')?.value);
+      selectSectorRange(start, end);
+      return;
+    }
     const button = event.target.closest('[data-sector]');
     const row = event.target.closest('[data-sector-row]');
     if (!button && !row) return;
     const index = Number(button?.dataset.sector ?? row?.dataset.sectorRow);
-    selectSector(state.activeSector === index ? null : index);
+    selectSectorRange(state.activeSector === index && state.activeSectorEnd === index ? null : index);
+  });
+  ui.sector?.addEventListener('change', event => {
+    if (!event.target.matches('[data-sector-range-start],[data-sector-range-end]')) return;
+    const start = Number(ui.sector.querySelector('[data-sector-range-start]')?.value);
+    const end = Number(ui.sector.querySelector('[data-sector-range-end]')?.value);
+    if (event.target.matches('[data-sector-range-start]') && end < start) {
+      ui.sector.querySelector('[data-sector-range-end]').value = String(start);
+    } else if (event.target.matches('[data-sector-range-end]') && start > end) {
+      ui.sector.querySelector('[data-sector-range-start]').value = String(end);
+    }
   });
   ui.map?.addEventListener('click', event => {
     const geometry = state.mapGeometry;
