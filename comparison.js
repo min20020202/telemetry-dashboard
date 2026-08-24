@@ -2,12 +2,13 @@
   'use strict';
 
   const COLORS = ['#06b6d4', '#ff3d9a', '#76ff03', '#ffca28'];
-  const state = { sessions: [], selected: new Set(), cache: new Map(), charts: {}, serial: 0 };
+  const state = { sessions: [], selected: new Set(), cache: new Map(), charts: {}, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0 };
   const $ = id => document.getElementById(id);
   const ui = {
     files: $('comparison-files'), clear: $('comparison-clear'), status: $('comparison-status'),
     count: $('comparison-count'), sessions: $('comparison-sessions'), summary: $('comparison-summary'),
-    sector: $('comparison-sector-table'), map: $('comparison-track-map')
+    sector: $('comparison-sector-table'), map: $('comparison-track-map'),
+    play: $('comparison-play-toggle'), rate: $('comparison-play-rate'), slider: $('comparison-play-slider'), playTime: $('comparison-play-time')
   };
 
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
@@ -280,14 +281,66 @@
       ctx.strokeStyle = COLORS[index]; ctx.lineWidth = 2.5; ctx.globalAlpha = .9; ctx.stroke();
       ctx.globalAlpha = 1; ctx.fillStyle = COLORS[index]; ctx.font = '700 11px monospace'; ctx.fillText(`${item.session.driver} L${item.lap.number}`, 10, 17 + index * 15);
     });
+    items.forEach((item, index) => {
+      const point = lapPositionAtElapsed(item, state.playElapsed);
+      if (!point) return;
+      const [x, y] = xy(point);
+      ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fillStyle = COLORS[index]; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 11, 0, Math.PI * 2); ctx.lineWidth = 1.5; ctx.strokeStyle = COLORS[index]; ctx.globalAlpha = .55; ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.fillStyle = '#ffffff'; ctx.font = '800 9px monospace'; ctx.fillText(`L${item.lap.number}`, x + 10, y - 9);
+    });
+  }
+
+  function lapPositionAtElapsed(item, elapsed) {
+    const points = item.session.gpsPoints.filter(point => point.time >= item.lap.startTime && point.time <= item.lap.endTime);
+    if (!points.length) return null;
+    const target = item.lap.startTime + Math.max(0, Math.min(item.lap.duration, elapsed));
+    let low = 0, high = points.length - 1;
+    while (low < high) { const middle = (low + high) >> 1; if (points[middle].time < target) low = middle + 1; else high = middle; }
+    const right = points[low], left = points[Math.max(0, low - 1)];
+    const width = right.time - left.time;
+    const ratio = width ? Math.max(0, Math.min(1, (target - left.time) / width)) : 0;
+    return { lat: left.lat + (right.lat - left.lat) * ratio, lon: left.lon + (right.lon - left.lon) * ratio };
+  }
+
+  function playbackDuration(items = selectedLaps()) { return items.length ? Math.max(...items.map(item => item.lap.duration)) : 0; }
+  function syncPlaybackUi(items = selectedLaps()) {
+    const duration = playbackDuration(items);
+    state.playElapsed = Math.max(0, Math.min(duration, state.playElapsed));
+    if (ui.slider) { ui.slider.max = String(Math.max(.01, duration)); ui.slider.value = String(state.playElapsed); ui.slider.disabled = !duration; }
+    if (ui.playTime) ui.playTime.textContent = `${state.playElapsed.toFixed(2)} s`;
+    if (ui.play) { ui.play.textContent = state.playing ? 'Ⅱ 일시정지' : '▶ 재생'; ui.play.disabled = !duration; }
+  }
+  function setPlaying(active) {
+    const items = selectedLaps(), duration = playbackDuration(items);
+    if (!duration) active = false;
+    if (active && state.playElapsed >= duration - .001) state.playElapsed = 0;
+    state.playing = active;
+    state.playStamp = 0;
+    if (state.playFrame) cancelAnimationFrame(state.playFrame);
+    state.playFrame = active ? requestAnimationFrame(playTick) : 0;
+    syncPlaybackUi(items);
+    renderMap(items);
+  }
+  function playTick(timestamp) {
+    if (!state.playing) return;
+    const items = selectedLaps(), duration = playbackDuration(items);
+    if (state.playStamp) state.playElapsed += ((timestamp - state.playStamp) / 1000) * state.playRate;
+    state.playStamp = timestamp;
+    if (state.playElapsed >= duration) { state.playElapsed = duration; setPlaying(false); return; }
+    syncPlaybackUi(items);
+    renderMap(items);
+    state.playFrame = requestAnimationFrame(playTick);
   }
 
   function updateCount() { if (ui.count) ui.count.textContent = `${state.selected.size} / 4 선택`; }
   function render() {
-    const items = selectedLaps(); updateCount(); renderSummary(items); renderCharts(items); renderSectors(items); renderMap(items);
+    const items = selectedLaps(); updateCount(); renderSummary(items); renderCharts(items); renderSectors(items); syncPlaybackUi(items); renderMap(items);
     if (items.length) setStatus(`${items.length}개 랩을 1 m 간격 공통 중심선 거리축으로 비교 중입니다.`);
   }
   window.renderDriverComparison = render;
+  window.stopDriverComparisonPlayback = () => setPlaying(false);
   window.registerCurrentComparisonSession = snapshot => {
     try {
       const session = addSession(snapshot, true);
@@ -301,6 +354,7 @@
 
   ui.files?.addEventListener('change', event => { const files = [...event.target.files]; event.target.value = ''; importFiles(files); });
   ui.clear?.addEventListener('click', () => {
+    setPlaying(false);
     state.sessions = []; state.selected.clear(); state.cache.clear();
     Object.values(state.charts).forEach(chart => chart.destroy()); state.charts = {};
     renderSessions(); render(); setStatus('CSV를 추가한 뒤 비교할 랩을 2~4개 선택하세요.');
@@ -313,6 +367,7 @@
     const key = event.target.dataset.lapKey;
     if (!key) return;
     if (event.target.checked && state.selected.size >= 4) { event.target.checked = false; setStatus('동시에 비교할 수 있는 랩은 최대 4개입니다.', true); return; }
+    setPlaying(false); state.playElapsed = 0;
     event.target.checked ? state.selected.add(key) : state.selected.delete(key); render();
   });
   ui.sessions?.addEventListener('click', event => {
@@ -320,6 +375,7 @@
     if (!button) return;
     const session = state.sessions.find(item => item.id === Number(button.dataset.sessionId));
     if (!session) return;
+    setPlaying(false); state.playElapsed = 0;
     session.laps.forEach((_, lapIndex) => state.selected.delete(selectionKey(session.id, lapIndex)));
     const ordered = session.laps.map((lap, lapIndex) => ({ lap, lapIndex })).sort((a, b) => a.lap.duration - b.lap.duration);
     let picks = [];
@@ -328,6 +384,14 @@
     picks.slice(0, Math.max(0, 4 - state.selected.size)).forEach(item => state.selected.add(selectionKey(session.id, item.lapIndex)));
     renderSessions();
     render();
+  });
+  ui.play?.addEventListener('click', () => setPlaying(!state.playing));
+  ui.rate?.addEventListener('change', () => { state.playRate = Number(ui.rate.value) || 1; });
+  ui.slider?.addEventListener('input', () => { setPlaying(false); state.playElapsed = Number(ui.slider.value) || 0; syncPlaybackUi(); renderMap(selectedLaps()); });
+  document.addEventListener('keydown', event => {
+    if (event.code !== 'Space' || !$('page-comparison')?.classList.contains('active')) return;
+    if (event.target.matches('input, textarea, select, button') || event.target.isContentEditable) return;
+    event.preventDefault(); setPlaying(!state.playing);
   });
   window.addEventListener('resize', () => { if ($('page-comparison')?.classList.contains('active')) renderMap(selectedLaps()); });
 })();

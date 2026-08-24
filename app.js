@@ -3678,6 +3678,7 @@ document.addEventListener('keydown', (event) => {
 function switchTab(mode) {
   if (mode !== 'gps' && gpsPlaybackActive) setGpsPlayback(false);
   if (mode !== 'temperature' && page4PlaybackActive) setPage4Playback(false);
+  if (mode !== 'comparison') window.stopDriverComparisonPlayback?.();
 
   // Remove active from all tabs and pages
   tabGeneral.classList.remove('active');
