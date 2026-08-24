@@ -14,10 +14,11 @@
 }
 
 .comparison-page.active { display: flex !important; flex-direction: column; gap: 5px; }
-.comparison-toolbar { display:flex; min-height:30px; align-items:center; justify-content:space-between; gap:10px; flex:0 0 auto; }
+.comparison-toolbar { display:flex; min-height:32px; align-items:center; gap:9px; flex:0 0 auto; }
+.comparison-toolbar > div:first-child { flex:0 0 auto; }
 .comparison-toolbar h2 { margin:0; font-size:14px; line-height:1; }
 .comparison-toolbar p { display:none; }
-.comparison-toolbar-actions { display:flex; gap:5px; }
+.comparison-toolbar-actions { display:flex; flex:0 0 auto; gap:5px; margin-left:auto; }
 .comparison-file-button, #comparison-clear {
   display:inline-flex; height:28px; align-items:center; border:1px solid var(--border-color); border-radius:6px; padding:0 9px;
   background:var(--panel-bg); color:var(--text-primary); font-size:9px; font-weight:800; cursor:pointer;
@@ -48,7 +49,7 @@
 .comparison-summary-card b { display: block; margin-bottom: 2px; }
 .comparison-empty { margin: 8px 0; color: var(--text-secondary); font-size: 12px; }
 .comparison-main { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.comparison-playback-panel { position:sticky; top:0; z-index:30; display:flex; align-items:center; gap:10px; min-height:40px; padding:4px 7px; border:1px solid var(--border-color); border-radius:8px; background:var(--panel-bg); box-shadow:var(--card-shadow); }
+.comparison-playback-panel { display:flex; flex:1 1 auto; min-width:340px; align-items:center; gap:7px; padding:0; border:0; background:transparent; box-shadow:none; }
 .comparison-playback-heading { display:flex; flex:0 0 auto; align-items:center; gap:8px; font-size:10px; white-space:nowrap; }
 .comparison-playback-heading span { color:var(--text-secondary); font-size:8px; }
 .comparison-chart-stack { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
@@ -60,9 +61,9 @@
 .comparison-bottom-grid article { min-width: 0; padding: 8px; }
 .comparison-track-card { display: grid; grid-template-rows: auto minmax(250px,1fr); }
 .comparison-bottom-grid header span { color: var(--text-secondary); font-size: 10px; }
-.comparison-playback { display: grid; grid-template-columns: 82px 58px minmax(180px, 1fr) 62px minmax(130px,auto); flex:1 1 auto; align-items:center; gap:6px; min-width:0; }
+.comparison-playback { display:grid; grid-template-columns:72px 54px minmax(140px,1fr) 58px minmax(110px,auto); flex:1 1 auto; align-items:center; gap:5px; min-width:0; }
 .comparison-playback button, .comparison-playback select { height:30px; border:1px solid var(--border-color); border-radius:6px; background:var(--panel-bg); color:var(--text-primary); font-size:10px; font-weight:800; }
-.comparison-playback button { min-width:78px; color:var(--accent-orange); cursor:pointer; }
+.comparison-playback button { min-width:68px; color:var(--accent-orange); cursor:pointer; }
 .comparison-playback input { width:100%; height:22px; accent-color:var(--accent-orange); cursor:pointer; }
 .comparison-playback input::-webkit-slider-thumb { width:18px; height:18px; }
 .comparison-playback output { color:var(--accent-orange); font:800 10px monospace; text-align:right; }
@@ -87,14 +88,16 @@
   .comparison-layout { grid-template-columns: 210px minmax(0,1fr); }
   .comparison-chart-stack { grid-template-columns: 1fr; }
   .comparison-bottom-grid { grid-template-columns: 1fr; }
-  .comparison-playback-heading span { display:none; }
+  .comparison-toolbar { flex-wrap:wrap; }
+  .comparison-playback-panel { order:3; width:100%; flex-basis:100%; }
+  .comparison-playback-heading { display:none; }
 }
 
 @media (max-width: 760px) {
   .logo-wrapper { display: none; }
   .app-header { height: 52px; }
   .header-right .btn-theme, .header-right #file-status { display: none; }
-  .comparison-toolbar { align-items: flex-start; flex-direction: column; }
+  .comparison-toolbar { align-items:center; flex-direction:row; }
   .comparison-layout { grid-template-columns: 1fr; }
   .comparison-sidebar { display: grid; grid-template-columns: 1fr 1fr; }
   .comparison-playback { grid-template-columns:1fr 70px; }
