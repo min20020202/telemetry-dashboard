@@ -2052,6 +2052,14 @@ function page4BestLapIndex(session) {
   return session.laps.reduce((best, lap, index, laps) => lap.duration < laps[best].duration ? index : best, 0);
 }
 
+function syncPage4SelectionToComparison() {
+  const selections = page4SelectedSessionLaps.map(selection => {
+    const session = page4SessionStore.find(item => item.id === selection.sessionId);
+    return session ? { sourceKey: session.sourceKey, lapIndex: selection.lapIndex } : null;
+  }).filter(Boolean);
+  window.setComparisonSelectionFromPage4?.(selections);
+}
+
 function renderPage4SessionDrawer() {
   if (!p4SessionList) return;
   if (!page4SessionStore.length) {
@@ -2142,7 +2150,32 @@ function importPage4SessionFile(file) {
   });
 }
 
-window.registerPage4ComparisonSession = snapshot => registerPage4Session(snapshot, false);
+window.registerPage4ComparisonSession = snapshot => {
+  const session = registerPage4Session(snapshot, false);
+  if (!session || page4SelectedSessionLaps.some(item => item.sessionId === session.id) || page4SelectedSessionLaps.length >= 2) return session;
+  const bestLapIndex = page4BestLapIndex(session);
+  if (bestLapIndex >= 0) {
+    page4SelectedSessionLaps.push({ sessionId: session.id, lapIndex: bestLapIndex });
+    renderPage4SessionDrawer();
+    applyPage4Selection();
+  }
+  return session;
+};
+window.setPage4ComparisonSelection = selections => {
+  const mapped = (selections || []).map(selection => {
+    const session = page4SessionStore.find(item => item.sourceKey === selection.sourceKey);
+    return session?.laps?.[selection.lapIndex] ? { sessionId: session.id, lapIndex: selection.lapIndex } : null;
+  }).filter(Boolean).slice(0, 2);
+  if (!mapped.length) return;
+  const primary = mapped[0];
+  if (page4ActiveSessionId !== primary.sessionId) activatePage4SessionLap(primary.sessionId, primary.lapIndex);
+  page4ActiveSessionId = primary.sessionId;
+  page4SelectedLapIndex = primary.lapIndex;
+  page4SelectedSessionLaps = mapped;
+  if (p4LapSelect) p4LapSelect.value = String(primary.lapIndex);
+  refreshPage4SectorOptions();
+  renderPage4SessionDrawer();
+};
 window.setPrimaryPage4Session = snapshot => {
   const file = snapshot?.file;
   if (!file) return;
@@ -2601,6 +2634,7 @@ p4SessionList?.addEventListener('click', event => {
       if (next) activatePage4SessionLap(next.id, page4BestLapIndex(next));
     }
     renderPage4SessionDrawer();
+    syncPage4SelectionToComparison();
     return;
   }
   const lap = event.target.closest('[data-p4-session-lap]');
@@ -2612,6 +2646,7 @@ p4SessionList?.addEventListener('click', event => {
     page4SelectedSessionLaps.splice(selectedIndex, 1);
     if (selectedIndex === 0) activatePage4SessionLap(page4SelectedSessionLaps[0].sessionId, page4SelectedSessionLaps[0].lapIndex);
     else { renderPage4SessionDrawer(); applyPage4Selection(); }
+    syncPage4SelectionToComparison();
     return;
   }
   if (page4SelectedSessionLaps.length >= 2) {
@@ -2621,6 +2656,7 @@ p4SessionList?.addEventListener('click', event => {
   page4SelectedSessionLaps.push({ sessionId, lapIndex });
   renderPage4SessionDrawer();
   applyPage4Selection();
+  syncPage4SelectionToComparison();
 });
 p4LapSelect?.addEventListener('change', () => {
   page4SelectedLapIndex = Number(p4LapSelect.value);
@@ -2629,6 +2665,7 @@ p4LapSelect?.addEventListener('change', () => {
   }
   refreshPage4SectorOptions();
   renderPage4SessionDrawer();
+  syncPage4SelectionToComparison();
 });
 p4SectorStart?.addEventListener('change', applyPage4Selection);
 p4SectorEnd?.addEventListener('change', applyPage4Selection);

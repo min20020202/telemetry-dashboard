@@ -143,6 +143,24 @@
     return result;
   }
 
+  function page4RepresentativeSelections() {
+    const ordered = selectedLaps().slice().sort((a, b) => a.lap.duration - b.lap.duration);
+    const picked = [];
+    // 여러 세션이 선택된 경우 각 세션의 가장 빠른 선택 랩을 우선한다.
+    ordered.forEach(item => {
+      if (picked.length < 2 && !picked.some(pick => pick.session.id === item.session.id)) picked.push(item);
+    });
+    // 한 세션만 선택된 경우에는 그 세션 안에서 빠른 두 랩을 채운다.
+    ordered.forEach(item => {
+      if (picked.length < 2 && !picked.includes(item)) picked.push(item);
+    });
+    return picked.map(item => ({ sourceKey: item.session.sourceKey, lapIndex: item.lapIndex }));
+  }
+
+  function syncSelectionToPage4() {
+    window.setPage4ComparisonSelection?.(page4RepresentativeSelections());
+  }
+
   function referenceMeters() {
     const points = reference();
     if (points.length < 2) return [];
@@ -920,6 +938,7 @@
       const session = addSession(snapshot, autoSelect);
       renderSessions();
       render();
+      syncSelectionToPage4();
       setStatus(`${session.fileName}의 ${session.laps.length}개 랩을 불러왔습니다. 같은 CSV 안에서 바로 비교할 수 있습니다.`);
     } catch (error) {
       setStatus(error.message, true);
@@ -950,10 +969,25 @@
       const session = addSession(snapshot, true);
       renderSessions();
       render();
+      syncSelectionToPage4();
       setStatus(`${session.fileName}을 기준 세션으로 불러왔습니다. 비교 CSV를 추가할 수 있습니다.`);
     } catch (error) {
       setStatus(error.message, true);
     }
+  };
+  window.setComparisonSelectionFromPage4 = selections => {
+    const next = new Set();
+    (selections || []).slice(0, 2).forEach(selection => {
+      const session = state.sessions.find(item => item.sourceKey === selection.sourceKey);
+      if (session?.laps?.[selection.lapIndex]) next.add(selectionKey(session.id, selection.lapIndex));
+    });
+    state.selected = next;
+    setPlaying(false);
+    state.playElapsed = 0;
+    state.activeSector = null;
+    state.activeSectorEnd = null;
+    renderSessions();
+    render();
   };
 
   ui.files?.addEventListener('change', event => { const files = [...event.target.files]; event.target.value = ''; importFiles(files); });
@@ -966,7 +1000,7 @@
     if (!key) return;
     if (event.target.checked && state.selected.size >= 4) { event.target.checked = false; setStatus('동시에 비교할 수 있는 랩은 최대 4개입니다.', true); return; }
     setPlaying(false); state.playElapsed = 0; state.activeSector = null; state.activeSectorEnd = null;
-    event.target.checked ? state.selected.add(key) : state.selected.delete(key); render();
+    event.target.checked ? state.selected.add(key) : state.selected.delete(key); render(); syncSelectionToPage4();
   });
   ui.sessions?.addEventListener('click', event => {
     const removeButton = event.target.closest('[data-session-remove]');
@@ -979,7 +1013,7 @@
       [...state.selected].forEach(key => { if (key.startsWith(`${sessionId}:`)) state.selected.delete(key); });
       state.cache.clear(); state.distanceMapCache.clear(); state.sourceSeriesCache.clear(); state.sectorCache.clear(); state.seriesEnabled.clear();
       state.playElapsed = 0; state.viewMin = 0; state.viewMax = null; state.hoverDistance = null; state.activeSector = null; state.activeSectorEnd = null; state.lastSector = 0; state.mapGeometry = null;
-      renderSessions(); render();
+      renderSessions(); render(); syncSelectionToPage4();
       setStatus(`${session.fileName} 세션을 제거했습니다.`);
       return;
     }
@@ -996,6 +1030,7 @@
     picks.slice(0, Math.max(0, 4 - state.selected.size)).forEach(item => state.selected.add(selectionKey(session.id, item.lapIndex)));
     renderSessions();
     render();
+    syncSelectionToPage4();
   });
   ui.play?.addEventListener('click', () => setPlaying(!state.playing));
   ui.rate?.addEventListener('change', () => { state.playRate = Number(ui.rate.value) || 1; });
