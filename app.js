@@ -1898,6 +1898,7 @@ function page4ChartDatasets(spec, startTime = page4ViewStart, endTime = page4Vie
       borderWidth: item.selectionIndex === 0 ? 1.45 : 1.3,
       borderDash: series[4]?.length ? series[4] : (seriesIndex === 0 ? [] : [7, 3 + seriesIndex]),
       pointRadius: 0,
+      clip: 4,
       stepped: spec.stepped ? 'before' : false,
       fill: false,
       hidden: page4HiddenSeries.has(label),
@@ -1912,12 +1913,21 @@ function syncPage4SeriesToggles(chart) {
   const header = chart?.canvas?.parentElement?.querySelector('header');
   if (!header) return;
   header.querySelector('.p4-series-toggles')?.remove();
-  // Gear처럼 한 종류의 신호만 있는 그래프는 토글이 정보보다 공간을
-  // 더 많이 차지하므로 표시하지 않는다.
-  const distinctSeries = new Set(chart.data.datasets.map(dataset => dataset.page4SeriesIndex));
-  if (distinctSeries.size <= 1) return;
+  header.querySelector('.p4-series-menu-button')?.remove();
+  header.querySelector('.p4-series-menu')?.remove();
+  if (!chart.data.datasets.length) return;
+
+  const menuButton = document.createElement('button');
+  menuButton.type = 'button';
+  menuButton.className = 'p4-series-menu-button';
+  menuButton.setAttribute('aria-label', '표시할 그래프 선택');
+  menuButton.setAttribute('aria-expanded', 'false');
+  menuButton.title = '표시할 그래프 선택';
+  menuButton.innerHTML = '<span></span><span></span><span></span>';
+
   const toggles = document.createElement('div');
-  toggles.className = 'p4-series-toggles';
+  toggles.className = 'p4-series-menu';
+  toggles.hidden = true;
   chart.data.datasets.forEach((dataset, datasetIndex) => {
     const button = document.createElement('button');
     button.type = 'button';
@@ -1935,8 +1945,24 @@ function syncPage4SeriesToggles(chart) {
     });
     toggles.appendChild(button);
   });
-  header.insertBefore(toggles, header.querySelector('output'));
+  menuButton.addEventListener('click', event => {
+    event.stopPropagation();
+    document.querySelectorAll('.p4-series-menu:not([hidden])').forEach(openMenu => {
+      if (openMenu !== toggles) openMenu.hidden = true;
+    });
+    toggles.hidden = !toggles.hidden;
+    menuButton.setAttribute('aria-expanded', String(!toggles.hidden));
+  });
+  toggles.addEventListener('click', event => event.stopPropagation());
+  header.append(menuButton, toggles);
 }
+
+document.addEventListener('click', () => {
+  document.querySelectorAll('.p4-series-menu:not([hidden])').forEach(menu => {
+    menu.hidden = true;
+    menu.parentElement?.querySelector('.p4-series-menu-button')?.setAttribute('aria-expanded', 'false');
+  });
+});
 
 function buildPage4WorkspaceCharts(S, makeCommonOptions) {
   page4Charts.forEach(chart => chart?.destroy());
