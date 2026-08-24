@@ -2113,6 +2113,14 @@ body.dark-mode .lap-strip header,body.dark-mode .lap-strip header output,body.da
 }
 
 .gps-fullscreen-playback { display: none; }
+.gps-axis-mode { display:flex; flex:0 0 auto; padding:2px; border:1px solid var(--border-color); border-radius:6px; background:var(--panel-bg); }
+.gps-axis-mode button { height:25px; padding:0 9px; border:0; border-radius:4px; background:transparent; color:var(--text-secondary); font:800 8px var(--font-mono); cursor:pointer; }
+.gps-axis-mode button.active { background:var(--accent-orange); color:#fff; box-shadow:0 1px 4px rgba(249,115,22,.28); }
+.gps-distance-position { position:absolute; z-index:920; left:50%; top:14px; transform:translateX(-50%); padding:7px 11px; border:1px solid rgba(255,255,255,.35); border-radius:8px; background:rgba(15,23,42,.88); color:#cbd5e1; box-shadow:0 3px 12px rgba(15,23,42,.28); font:800 9px var(--font-mono); pointer-events:none; }
+.gps-distance-position strong { margin-left:5px; color:#fb923c; font-size:14px; }
+.gps-map-stage.gps-detail-open .gps-distance-position { left:calc((100% - var(--gps-detail-width)) / 2); }
+.gps-distance-marker-wrap { background:transparent; border:0; }
+.gps-distance-marker { display:block; width:36px; padding:2px 0; border:1px solid rgba(255,255,255,.85); border-radius:8px; background:rgba(15,23,42,.88); color:#fb923c; box-shadow:0 1px 5px rgba(15,23,42,.4); font:900 8px/12px var(--font-mono); text-align:center; }
 
 .gps-map-card:fullscreen .gps-lap-toolbar,
 .gps-map-card.is-gps-fullscreen .gps-lap-toolbar,

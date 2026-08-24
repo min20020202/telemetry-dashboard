@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260824-1">
+  <link rel="stylesheet" href="style.css?v=20260824-2">
 </head>
 <body>
 
@@ -307,6 +307,7 @@
               <button id="gps-shared-settings-copy" type="button" disabled>공통 설정 복사</button>
               <button id="gps-sector-toggle" type="button" disabled>구간 비교</button>
               <button id="gps-handling-toggle" type="button" disabled>핸들링 분석</button>
+              <div id="gps-axis-mode" class="gps-axis-mode" aria-label="GPS 그래프 가로축"><button type="button" class="active" data-mode="time">시간 s</button><button type="button" data-mode="distance">거리 m</button></div>
               <label>최소 랩
                 <input id="gps-lap-min-time" type="number" min="5" max="600" step="1" value="20">
                 <span>초</span>
@@ -329,6 +330,7 @@
             </div>
             <div class="gps-map-stage">
               <div id="gps-map"></div>
+              <div id="gps-distance-position" class="gps-distance-position" hidden>기준 거리 <strong>0.0</strong> m</div>
               <div id="gps-gopro-panel" class="gps-gopro-panel" hidden>
                 <header><strong>GoPro 자동 동기화</strong><button id="gps-gopro-close" type="button" aria-label="GoPro 영상 닫기">×</button></header>
                 <div class="gps-gopro-video-grid">
@@ -830,6 +832,6 @@
   <script src="steering.js?v=20260820-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-1"></script>
-  <script src="app.js?v=20260824-1"></script>
+  <script src="app.js?v=20260824-2"></script>
 </body>
 </html>

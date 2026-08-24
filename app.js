@@ -29,6 +29,7 @@ let page4CursorTime = 0;
 let page4SelectedLapIndex = -1;
 let page4AxisMode = 'time';
 const page4LapDistanceCache = new Map();
+let gpsAxisMode = 'time';
 
 // Global state variables for Page 3 IMU charts
 let chartImuAccel = null;
@@ -226,6 +227,8 @@ const gpsDetailRpmValue = document.getElementById('gps-detail-rpm-value');
 const gpsDetailGearValue = document.getElementById('gps-detail-gear-value');
 const gpsDetailSteeringValue = document.getElementById('gps-detail-steering-value');
 const gpsDetailPedalValue = document.getElementById('gps-detail-pedal-value');
+const gpsAxisModeControl = document.getElementById('gps-axis-mode');
+const gpsDistancePosition = document.getElementById('gps-distance-position');
 
 // Theme Switcher DOM
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
@@ -338,6 +341,7 @@ let gpsFinishEndpointLayer = null;
 let gpsLapCrossingLayer = null;
 let gpsLapRouteLayer = null;
 let gpsHandlingLayer = null;
+let gpsDistanceReferenceLayer = null;
 let gpsFinishPoints = [];
 let gpsFinishPreviewLine = null;
 let gpsFinishMarkers = [];
@@ -1607,8 +1611,8 @@ function buildPage4LapDistanceMap(lapIndex = page4SelectedLapIndex) {
   return map;
 }
 
-function interpolatePage4Map(value, inputKey, outputKey) {
-  const map = buildPage4LapDistanceMap();
+function interpolateLapDistanceMap(value, inputKey, outputKey, lapIndex = page4SelectedLapIndex) {
+  const map = buildPage4LapDistanceMap(lapIndex);
   if (!map.length) return Number(value) || 0;
   const target = Number(value) || 0;
   let low = 0, high = map.length - 1;
@@ -1623,8 +1627,46 @@ function interpolatePage4Map(value, inputKey, outputKey) {
   return left[outputKey] + (right[outputKey] - left[outputKey]) * ratio;
 }
 
-function page4AxisValue(time) { return page4AxisMode === 'distance' ? interpolatePage4Map(time, 'time', 'distance') : Number(time); }
-function page4TimeFromAxis(axis) { return page4AxisMode === 'distance' ? interpolatePage4Map(axis, 'distance', 'time') : Number(axis); }
+function page4AxisValue(time) { return page4AxisMode === 'distance' ? interpolateLapDistanceMap(time, 'time', 'distance') : Number(time); }
+function page4TimeFromAxis(axis) { return page4AxisMode === 'distance' ? interpolateLapDistanceMap(axis, 'distance', 'time') : Number(axis); }
+
+function gpsAxisLapIndex(targetTime = NaN) {
+  if (gpsSelectedLapIndices.length) return gpsSelectedLapIndices[0];
+  const found = gpsLapResults.findIndex(lap => targetTime >= lap.startTime && targetTime <= lap.endTime);
+  return found >= 0 ? found : (gpsLapResults.length ? 0 : -1);
+}
+
+function gpsDistanceAtTime(targetTime, lapIndex = gpsAxisLapIndex(targetTime)) {
+  const lap = gpsLapResults[lapIndex];
+  if (!lap) return NaN;
+  const absoluteTime = gpsSelectedLapIndices.length > 1
+    ? lap.startTime + Math.max(0, Math.min(lap.duration, Number(targetTime) || 0))
+    : Number(targetTime);
+  return interpolateLapDistanceMap(absoluteTime, 'time', 'distance', lapIndex);
+}
+
+function drawGpsDistanceReference() {
+  gpsDistanceReferenceLayer?.clearLayers();
+  if (gpsAxisMode !== 'distance' || !gpsDistanceReferenceLayer) return;
+  const points = page4ReferencePoints();
+  for (let distance = 0; distance <= 800; distance += 100) {
+    const point = points.reduce((best, item) => Math.abs(item[2] - distance) < Math.abs(best[2] - distance) ? item : best, points[0]);
+    if (!point) continue;
+    L.marker([point[0], point[1]], {
+      interactive: false,
+      zIndexOffset: 8000,
+      icon: L.divIcon({ className: 'gps-distance-marker-wrap', html: `<span class="gps-distance-marker">${distance}m</span>`, iconSize: [36, 18], iconAnchor: [18, 9] })
+    }).addTo(gpsDistanceReferenceLayer);
+  }
+}
+
+function updateGpsDistancePosition(targetTime) {
+  if (!gpsDistancePosition) return;
+  const distance = gpsDistanceAtTime(targetTime);
+  gpsDistancePosition.hidden = gpsAxisMode !== 'distance' || !Number.isFinite(distance);
+  const value = gpsDistancePosition.querySelector('strong');
+  if (value && Number.isFinite(distance)) value.textContent = distance.toFixed(1);
+}
 
 const PAGE4_CHART_SPECS = [
   { id: 'p4-chart-speed', min: 0, series: [
@@ -2379,6 +2421,11 @@ function ensureGpsDetailCharts() {
 }
 
 function updateGpsDetailChartRange(minTime, maxTime) {
+  if (gpsAxisMode === 'distance' && gpsSelectedLapIndices.length) {
+    const total = Number(window.NSSUR_TRACK_REFERENCE?.totalDistanceMeters) || 0;
+    minTime = 0;
+    maxTime = total;
+  }
   gpsDetailCharts.forEach(chart => {
     chart.options.scales.x.min = minTime;
     chart.options.scales.x.max = maxTime;
@@ -2389,9 +2436,10 @@ function updateGpsDetailChartRange(minTime, maxTime) {
 function updateGpsDetailCursors(targetTime) {
   if (!gpsFullscreenDetail?.classList.contains('open')) return;
   updateGpsDetailReadouts(targetTime);
+  const axisValue = gpsAxisMode === 'distance' ? gpsDistanceAtTime(targetTime) : targetTime;
   gpsDetailCharts.forEach(chart => {
-    chart.$gpsCursorTime = targetTime;
-    updateGpsDetailCursorOverlay(chart, targetTime);
+    chart.$gpsCursorTime = axisValue;
+    updateGpsDetailCursorOverlay(chart, axisValue);
   });
 }
 
@@ -2556,24 +2604,32 @@ function rebuildGpsDetailChartsForSelection() {
   if (!gpsFullscreenDetail?.classList.contains('open')) return;
   destroyGpsDetailCharts();
   ensureGpsDetailCharts();
-  if (gpsSelectedLapIndices.length < 2) return;
+  if (!gpsSelectedLapIndices.length) return;
   const sources = [chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake];
-  const sourceDatasetIndexes = [[0], [0], [0], [0], [0, 1]];
+  const comparisonIndexes = [[0], [0], [0], [0], [0, 1]];
   gpsDetailCharts.forEach((chart, chartIndex) => {
     const source = sources[chartIndex];
     const selectedDatasets = [];
     gpsSelectedLapIndices.forEach(lapIndex => {
       const lap = gpsLapResults[lapIndex];
       const color = GPS_LAP_COLORS[lapIndex % GPS_LAP_COLORS.length];
-      sourceDatasetIndexes[chartIndex].forEach((datasetIndex, subIndex) => {
+      const datasetIndexes = gpsSelectedLapIndices.length > 1
+        ? comparisonIndexes[chartIndex]
+        : (source.data.datasets || []).map((_, index) => index);
+      datasetIndexes.forEach((datasetIndex, subIndex) => {
         const sourceDataset = source.data.datasets[datasetIndex];
         const data = (sourceDataset.data || [])
           .filter(point => point.x >= lap.startTime && point.x <= lap.endTime)
-          .map(point => ({ x: point.x - lap.startTime, y: point.y }));
+          .map(point => ({
+            x: gpsAxisMode === 'distance'
+              ? interpolateLapDistanceMap(point.x, 'time', 'distance', lapIndex)
+              : (gpsSelectedLapIndices.length > 1 ? point.x - lap.startTime : point.x),
+            y: point.y
+          }));
         selectedDatasets.push({
-          label: `LAP ${lap.number}${subIndex ? ' Brake' : ''}`,
+          label: gpsSelectedLapIndices.length > 1 ? `LAP ${lap.number}${subIndex ? ' Brake' : ''}` : sourceDataset.label,
           data,
-          borderColor: color,
+          borderColor: gpsSelectedLapIndices.length > 1 ? color : sourceDataset.borderColor,
           borderWidth: subIndex ? 1.2 : 1.8,
           borderDash: subIndex ? [5, 3] : [],
           pointRadius: 0,
@@ -2583,8 +2639,12 @@ function rebuildGpsDetailChartsForSelection() {
       });
     });
     chart.data.datasets = selectedDatasets;
-    chart.options.scales.x.min = 0;
-    chart.options.scales.x.max = Math.max(...gpsSelectedLapIndices.map(index => gpsLapResults[index].duration));
+    chart.options.scales.x.min = gpsAxisMode === 'distance' ? 0 : (gpsSelectedLapIndices.length > 1 ? 0 : gpsLapResults[gpsSelectedLapIndices[0]].startTime);
+    chart.options.scales.x.max = gpsAxisMode === 'distance'
+      ? (Number(window.NSSUR_TRACK_REFERENCE?.totalDistanceMeters) || 0)
+      : (gpsSelectedLapIndices.length > 1
+        ? Math.max(...gpsSelectedLapIndices.map(index => gpsLapResults[index].duration))
+        : gpsLapResults[gpsSelectedLapIndices[0]].endTime);
     chart.update('none');
   });
 }
@@ -3147,6 +3207,7 @@ function initGpsMap() {
   gpsLapCrossingLayer = L.layerGroup().addTo(gpsMap);
   gpsCheckpointLayer = L.layerGroup().addTo(gpsMap);
   gpsCheckpointDraftLayer = L.layerGroup().addTo(gpsMap);
+  gpsDistanceReferenceLayer = L.layerGroup().addTo(gpsMap);
   gpsMap.on('click', handleGpsLapMapClick);
   gpsMap.on('click', handleGpsCheckpointMapClick);
   gpsMap.on('mousemove', updateGpsFinishPreview);
@@ -3203,6 +3264,24 @@ gpsLapMinTime?.addEventListener('change', () => {
   if (gpsFinishPoints.length === 2) calculateGpsLaps();
 });
 
+gpsAxisModeControl?.addEventListener('click', event => {
+  const button = event.target.closest('button[data-mode]');
+  if (!button || button.dataset.mode === gpsAxisMode) return;
+  if (button.dataset.mode === 'distance' && !gpsLapResults.length) {
+    setGpsLapStatus('거리축을 사용하려면 먼저 피니시라인으로 랩을 계산하십시오.', 'warn');
+    return;
+  }
+  if (button.dataset.mode === 'distance' && !gpsSelectedLapIndices.length) selectGpsLapView(0);
+  gpsAxisMode = button.dataset.mode;
+  gpsAxisModeControl.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
+  const detailAxisLabel = gpsFullscreenDetail?.querySelector('.gps-detail-head span');
+  if (detailAxisLabel) detailAxisLabel.textContent = gpsAxisMode === 'distance' ? '공통 중심 거리 동기화' : '현재 시점 동기화';
+  drawGpsDistanceReference();
+  rebuildGpsDetailChartsForSelection();
+  updateGpsDetailChartRange(Number(scrollBar.min), Number(scrollBar.max));
+  updateGpsCursorAtTime(Number(scrollBar.value));
+});
+
 gpsLapMapLegend?.addEventListener('click', event => {
   const button = event.target.closest('[data-lap-view]');
   if (!button) return;
@@ -3226,7 +3305,7 @@ gpsFullscreenDetailToggle?.addEventListener('click', () => {
   gpsFullscreenDetailToggle.textContent = open ? '상세정보 닫기 ›' : '상세정보 ›';
   if (open) {
     ensureGpsDetailCharts();
-    if (gpsSelectedLapIndices.length > 1) rebuildGpsDetailChartsForSelection();
+    if (gpsSelectedLapIndices.length || gpsAxisMode === 'distance') rebuildGpsDetailChartsForSelection();
     updateGpsDetailChartRange(Number(scrollBar.min), Number(scrollBar.max));
     updateGpsDetailCursors(Number(scrollBar.value));
   }
@@ -4046,6 +4125,7 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
   const minTime = Number(scrollBar.min) || 0;
   const maxTime = Number(scrollBar.max) || totalDurationSec;
   const clampedTime = Math.max(minTime, Math.min(maxTime, targetTime));
+  updateGpsDistancePosition(clampedTime);
   if (gpsSelectedLapIndices.length > 1) {
     scrollBar.value = clampedTime.toFixed(2);
     if (gpsPlayTime) gpsPlayTime.textContent = `${clampedTime.toFixed(2)} s`;
