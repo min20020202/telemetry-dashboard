@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260824-8">
+  <link rel="stylesheet" href="style.css?v=20260824-9">
 </head>
 <body>
 
@@ -592,7 +592,7 @@
         <header class="comparison-toolbar">
           <div>
             <h2>드라이버·랩 비교</h2>
-            <p>여러 CSV의 랩을 공통 중심선 거리축으로 정렬해 제동·가속·조향 차이를 비교합니다.</p>
+            <p>한 CSV의 랩별 비교와 여러 드라이버 CSV 비교를 공통 중심선 거리축에서 수행합니다.</p>
           </div>
           <div class="comparison-toolbar-actions">
             <label for="comparison-files" class="comparison-file-button">＋ 비교 CSV 추가</label>
@@ -600,7 +600,7 @@
             <button id="comparison-clear" type="button">전체 제거</button>
           </div>
         </header>
-        <div id="comparison-status" class="comparison-status">CSV를 추가한 뒤 비교할 랩을 2~4개 선택하세요.</div>
+        <div id="comparison-status" class="comparison-status">CSV 한 개만 추가해도 파일 안의 랩을 서로 비교할 수 있습니다.</div>
         <div class="comparison-layout">
           <aside class="comparison-sidebar">
             <section class="comparison-panel">
@@ -857,7 +857,7 @@
             <section class="help-section" id="help-comparison">
               <div class="help-section-title"><span>5</span><div><h2>드라이버·랩 비교</h2><p>서로 다른 CSV의 랩을 같은 트랙 거리에서 직접 비교합니다.</p></div><button type="button" data-help-tab="comparison">5페이지 열기</button></div>
               <div class="help-grid two">
-                <article class="help-card"><h3>CSV와 랩 선택</h3><ol><li><b>비교 CSV 추가</b>로 한 개 이상의 세션 파일을 선택합니다.</li><li>파일별 드라이버 이름을 확인하거나 수정합니다.</li><li>비교할 랩을 2~4개 선택합니다.</li></ol></article>
+                <article class="help-card"><h3>CSV와 랩 선택</h3><ol><li><b>비교 CSV 추가</b>로 한 개 이상의 세션 파일을 선택합니다.</li><li>CSV 한 개를 열면 가장 빠른 두 랩이 자동 선택됩니다.</li><li><b>빠른 4랩</b> 또는 <b>베스트·워스트</b>로 같은 세션의 랩을 빠르게 비교할 수 있습니다.</li><li>파일별 드라이버 이름도 직접 수정할 수 있습니다.</li></ol></article>
                 <article class="help-card"><h3>비교 결과</h3><ul><li>속도, TPS·브레이크, 조향·Yaw, 누적 시간차를 공통 거리축으로 표시합니다.</li><li>주행선은 가공하지 않은 각 랩의 실제 GPS 경로입니다.</li><li>체크포인트 표는 구간 기록·최저속도·제동 시작·재가속 위치·탈출 속도를 보여줍니다.</li></ul></article>
               </div>
               <div class="help-callout warn"><strong>해석 기준</strong><span>첫 번째로 선택한 랩이 시간차 기준 랩입니다. 5Hz GPS 보간이므로 드라이버·랩 간 상대 비교에 사용하고 절대 위치를 10cm 정밀도로 해석하지 마십시오.</span></div>
@@ -975,6 +975,6 @@
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
   <script src="app.js?v=20260824-11"></script>
-  <script src="comparison.js?v=20260824-1"></script>
+  <script src="comparison.js?v=20260824-2"></script>
 </body>
 </html>

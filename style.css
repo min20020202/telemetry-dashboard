@@ -35,8 +35,11 @@
 .comparison-panel-title span { color: var(--accent-orange); font: 700 11px monospace; }
 .comparison-sessions { display: flex; flex-direction: column; gap: 8px; }
 .comparison-session { border: 1px solid var(--border-color); border-radius: 7px; padding: 8px; }
-.comparison-session input[type="text"] { width: 100%; padding: 6px 7px; border: 1px solid var(--border-color); border-radius: 5px; color: var(--text-primary); background: var(--body-bg); font-weight: 800; }
+.comparison-session input[type="text"] { width: 100%; padding: 6px 7px; border: 1px solid var(--border-color); border-radius: 5px; color: var(--text-primary); background: var(--bg-color); font-weight: 800; }
 .comparison-session small { display: block; margin: 4px 0 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.comparison-session-actions { display: flex; gap: 4px; margin-bottom: 7px; }
+.comparison-session-actions button { flex: 1 1 auto; min-width: 0; padding: 4px 3px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--panel-bg); color: var(--text-secondary); font-size: 9px; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.comparison-session-actions button:hover { color: var(--accent-orange); border-color: var(--accent-orange); }
 .comparison-laps { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 5px; }
 .comparison-lap-choice { display: flex; align-items: center; gap: 5px; padding: 5px; border-radius: 5px; background: rgba(128,128,128,.07); font: 700 11px monospace; cursor: pointer; }
 .comparison-summary-panel { flex: 1 1 auto; }

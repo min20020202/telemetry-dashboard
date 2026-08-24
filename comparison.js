@@ -56,13 +56,20 @@
     if (!files.length) return;
     switchTab('comparison');
     let failures = [];
+    const initialSessionCount = state.sessions.length;
     for (let index = 0; index < files.length; index += 1) {
       setStatus(`${index + 1} / ${files.length} · ${files[index].name} 분석 중…`);
       try { await importOne(files[index]); }
       catch (error) { failures.push(error.message); }
     }
+    if (files.length === 1 && state.sessions.length === initialSessionCount + 1 && state.selected.size === 0) {
+      const session = state.sessions.at(-1);
+      session.laps.map((lap, lapIndex) => ({ lap, lapIndex })).sort((a, b) => a.lap.duration - b.lap.duration).slice(0, 2)
+        .forEach(item => state.selected.add(selectionKey(session.id, item.lapIndex)));
+    }
     renderSessions();
-    setStatus(failures.length ? failures.join(' / ') : `${files.length}개 CSV 추가 완료 · 비교할 랩을 선택하세요.`, failures.length > 0);
+    if (state.selected.size >= 2) render();
+    else setStatus(failures.length ? failures.join(' / ') : `${files.length}개 CSV 추가 완료 · 같은 파일 안에서도 비교할 랩을 선택할 수 있습니다.`, failures.length > 0);
   }
 
   function renderSessions() {
@@ -70,7 +77,8 @@
     ui.sessions.innerHTML = state.sessions.length ? state.sessions.map(session => `
       <section class="comparison-session" data-session="${session.id}">
         <input type="text" value="${escapeHtml(session.driver)}" aria-label="드라이버 이름" data-driver="${session.id}">
-        <small title="${escapeHtml(session.fileName)}">${escapeHtml(session.fileName)}</small>
+        <small title="${escapeHtml(session.fileName)}">${escapeHtml(session.fileName)} · ${session.laps.length}개 완성 랩</small>
+        <div class="comparison-session-actions"><button type="button" data-session-pick="fast" data-session-id="${session.id}">빠른 4랩</button><button type="button" data-session-pick="spread" data-session-id="${session.id}">베스트·워스트</button><button type="button" data-session-pick="clear" data-session-id="${session.id}">해제</button></div>
         <div class="comparison-laps">${session.laps.map((lap, lapIndex) => {
           const key = selectionKey(session.id, lapIndex);
           return `<label class="comparison-lap-choice"><input type="checkbox" data-lap-key="${key}" ${state.selected.has(key) ? 'checked' : ''}><span>L${lap.number} ${formatLap(lap.duration)}</span></label>`;
@@ -284,6 +292,20 @@
     if (!key) return;
     if (event.target.checked && state.selected.size >= 4) { event.target.checked = false; setStatus('동시에 비교할 수 있는 랩은 최대 4개입니다.', true); return; }
     event.target.checked ? state.selected.add(key) : state.selected.delete(key); render();
+  });
+  ui.sessions?.addEventListener('click', event => {
+    const button = event.target.closest('[data-session-pick]');
+    if (!button) return;
+    const session = state.sessions.find(item => item.id === Number(button.dataset.sessionId));
+    if (!session) return;
+    session.laps.forEach((_, lapIndex) => state.selected.delete(selectionKey(session.id, lapIndex)));
+    const ordered = session.laps.map((lap, lapIndex) => ({ lap, lapIndex })).sort((a, b) => a.lap.duration - b.lap.duration);
+    let picks = [];
+    if (button.dataset.sessionPick === 'fast') picks = ordered.slice(0, 4);
+    if (button.dataset.sessionPick === 'spread' && ordered.length) picks = ordered.length === 1 ? ordered : [ordered[0], ordered.at(-1)];
+    picks.slice(0, Math.max(0, 4 - state.selected.size)).forEach(item => state.selected.add(selectionKey(session.id, item.lapIndex)));
+    renderSessions();
+    render();
   });
   window.addEventListener('resize', () => { if ($('page-comparison')?.classList.contains('active')) renderMap(selectedLaps()); });
 })();
