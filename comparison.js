@@ -665,7 +665,10 @@
 
   function lapPointAtTime(item, time) {
     const points = item.session.gpsPoints
-      .filter(point => point.time >= item.lap.startTime - .05 && point.time <= item.lap.endTime + .05)
+      // GPS fixes are about 0.2 s apart. Include the fixes surrounding each
+      // boundary so every cursor starts at the interpolated line crossing,
+      // not at a different first post-crossing sample.
+      .filter(point => point.time >= item.lap.startTime - .5 && point.time <= item.lap.endTime + .5)
       .sort((a, b) => a.time - b.time);
     if (!points.length) return null;
     let low = 0, high = points.length - 1;
@@ -851,15 +854,8 @@
   }
 
   function lapPositionAtElapsed(item, elapsed) {
-    const points = item.session.gpsPoints.filter(point => point.time >= item.lap.startTime && point.time <= item.lap.endTime);
-    if (!points.length) return null;
     const target = item.lap.startTime + Math.max(0, Math.min(item.lap.duration, elapsed));
-    let low = 0, high = points.length - 1;
-    while (low < high) { const middle = (low + high) >> 1; if (points[middle].time < target) low = middle + 1; else high = middle; }
-    const right = points[low], left = points[Math.max(0, low - 1)];
-    const width = right.time - left.time;
-    const ratio = width ? Math.max(0, Math.min(1, (target - left.time) / width)) : 0;
-    return { lat: left.lat + (right.lat - left.lat) * ratio, lon: left.lon + (right.lon - left.lon) * ratio };
+    return lapPointAtTime(item, target);
   }
 
   function playbackDuration(items = selectedLaps()) {
@@ -911,7 +907,12 @@
   function syncPlaybackUi(items = selectedLaps()) {
     const duration = playbackDuration(items);
     state.playElapsed = Math.max(0, Math.min(duration, state.playElapsed));
-    if (ui.slider) { ui.slider.max = String(Math.max(.01, duration)); ui.slider.value = String(state.playElapsed); ui.slider.disabled = !duration; }
+    if (ui.slider) {
+      ui.slider.max = String(Math.max(.01, duration));
+      ui.slider.value = String(state.playElapsed);
+      ui.slider.disabled = !duration;
+      ui.slider.style.setProperty('--comparison-play-progress', `${duration ? Math.max(0, Math.min(100, state.playElapsed / duration * 100)) : 0}%`);
+    }
     if (ui.playTime) ui.playTime.textContent = state.activeSector === null ? `${state.playElapsed.toFixed(2)} s` : `구간 +${state.playElapsed.toFixed(2)} s`;
     if (ui.playDistance) ui.playDistance.innerHTML = items.length ? items.map((item, index) => {
       const sample = cursorSampleForItem(item, items);

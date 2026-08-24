@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260825-18">
+  <link rel="stylesheet" href="style.css?v=20260825-19">
 </head>
 <body>
 
@@ -612,16 +612,14 @@
               <output id="comparison-play-distance" class="comparison-play-distance">-- m</output>
             </div>
           </section>
-          <div class="comparison-toolbar-actions">
-            <label for="comparison-files" class="comparison-file-button">＋ 비교 CSV 추가</label>
-            <input id="comparison-files" type="file" accept=".csv,.CSV" multiple hidden>
-          </div>
         </header>
         <div class="comparison-layout">
           <aside class="comparison-sidebar">
             <section class="comparison-panel">
               <div class="comparison-panel-title"><strong>세션과 랩</strong><span id="comparison-count">0 / 4 선택</span></div>
               <div id="comparison-sessions" class="comparison-sessions"><p class="comparison-empty">아직 추가된 세션이 없습니다.</p></div>
+              <label for="comparison-files" class="comparison-file-button comparison-sidebar-file-button">＋ 비교 CSV 추가</label>
+              <input id="comparison-files" type="file" accept=".csv,.CSV" multiple hidden>
             </section>
             <section class="comparison-panel comparison-summary-panel">
               <strong>비교 요약</strong>
@@ -993,7 +991,7 @@
   <script src="steering.js?v=20260820-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
-  <script src="app.js?v=20260825-13"></script>
-  <script src="comparison.js?v=20260825-28"></script>
+  <script src="app.js?v=20260825-14"></script>
+  <script src="comparison.js?v=20260825-29"></script>
 </body>
 </html>

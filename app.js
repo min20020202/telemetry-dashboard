@@ -1934,7 +1934,8 @@ function syncPage4SeriesToggles(chart) {
     const visible = !page4HiddenSeries.has(dataset.label);
     chart.setDatasetVisibility(datasetIndex, visible);
     button.className = visible ? 'active' : '';
-    button.innerHTML = `<i style="background:${dataset.borderColor}"></i>${escapePage4SessionHtml(dataset.label)}`;
+    const dashed = Array.isArray(dataset.borderDash) && dataset.borderDash.length > 0;
+    button.innerHTML = `<i class="${dashed ? 'dashed' : ''}" style="--series-color:${dataset.borderColor}"></i>${escapePage4SessionHtml(dataset.label)}`;
     button.addEventListener('click', () => {
       const isVisible = chart.isDatasetVisible(datasetIndex);
       chart.setDatasetVisibility(datasetIndex, !isVisible);
