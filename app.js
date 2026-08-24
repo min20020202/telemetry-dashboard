@@ -1801,14 +1801,30 @@ const PAGE4_CHART_SPECS = [
   ]}
 ];
 
+const PAGE4_FILTER_FIELDS = [
+  ['steering_filtered_deg', row => getCalibratedSteering(row.steering_raw)],
+  ['imu_filtered_ax_g', row => Number(row.imu_accel_x_g) || 0],
+  ['imu_filtered_ay_g', row => Number(row.imu_accel_y_g) || 0],
+  ['imu_filtered_gz_dps', row => Number(row.imu_gyro_z_dps) || 0]
+];
+
+// Page 4 always compares the same 5 Hz-filtered signals, independently of
+// which CSV is currently active in the other pages.
+function applyPage4FiveHzFilter(rows) {
+  if (!rows?.length || typeof fltButterworth !== 'function') return;
+  const firstTime = Number(rows[0]?.time_sec);
+  const lastTime = Number(rows[rows.length - 1]?.time_sec);
+  const span = lastTime - firstTime;
+  const rate = span > 0 ? Math.max(1, (rows.length - 1) / span) : 100;
+  PAGE4_FILTER_FIELDS.forEach(([field, getter]) => {
+    const raw = Float64Array.from(rows, getter);
+    const filtered = fltButterworth(raw, 5, rate, 2);
+    rows.forEach((row, index) => { row[field] = filtered[index]; });
+  });
+}
+
 function page4SeriesValue(series, row, globalIndex) {
   const channelKey = series[5];
-  if (channelKey && typeof channelValueAt === 'function' && Number.isInteger(globalIndex)) {
-    const filtered = channelValueAt(channelKey, globalIndex);
-    if (Number.isFinite(filtered)) return filtered;
-  }
-  // 비교용으로 추가한 세션은 전역 채널 인덱스를 공유하지 않으므로,
-  // CSV를 읽을 때 각 행에 저장해 둔 동일 필터 결과를 사용한다.
   const filteredField = {
     steering: 'steering_filtered_deg',
     imu_ax: 'imu_filtered_ax_g',
@@ -1817,6 +1833,10 @@ function page4SeriesValue(series, row, globalIndex) {
   }[channelKey];
   const storedFiltered = filteredField ? Number(row?.[filteredField]) : NaN;
   if (Number.isFinite(storedFiltered)) return storedFiltered;
+  if (channelKey && typeof channelValueAt === 'function' && Number.isInteger(globalIndex)) {
+    const filtered = channelValueAt(channelKey, globalIndex);
+    if (Number.isFinite(filtered)) return filtered;
+  }
   return series[2](row);
 }
 
@@ -1834,11 +1854,23 @@ function page4AlignedSeries(item, series, primaryLap, startTime, endTime) {
   const sourceStart = item.lap.startTime + relativeStart;
   const sourceEnd = Math.min(item.lap.endTime, item.lap.startTime + relativeEnd);
   const rows = item.session.rows || [];
-  let first = 0;
-  while (first < rows.length && Number(rows[first]?.time_sec) < sourceStart) first += 1;
-  let last = first;
-  while (last < rows.length && Number(rows[last]?.time_sec) <= sourceEnd) last += 1;
-  const indices = downsampleIndices(Math.max(0, last - first), 4500).map(index => first + index);
+  let lo = 0, hi = rows.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (Number(rows[mid]?.time_sec) < sourceStart) lo = mid + 1; else hi = mid;
+  }
+  const first = Math.max(0, lo - 1);
+  lo = first; hi = rows.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (Number(rows[mid]?.time_sec) <= sourceEnd) lo = mid + 1; else hi = mid;
+  }
+  const last = Math.min(rows.length, lo + 1);
+  // 한 화면 픽셀보다 촘촘한 점은 보이지 않으므로 렌더링만 줄인다.
+  // 20초 이하에서는 원본 센서 표본을 그대로 유지한다.
+  const visibleCount = Math.max(0, last - first);
+  const pointLimit = sourceEnd - sourceStart <= 20 ? visibleCount : 2200;
+  const indices = downsampleIndices(visibleCount, pointLimit).map(index => first + index);
   return indices.map(index => {
     const row = rows[index];
     const alignedTime = primaryLap.startTime + (Number(row.time_sec) - item.lap.startTime);
@@ -1855,27 +1887,35 @@ function page4ChartDatasets(spec, startTime = page4ViewStart, endTime = page4Vie
   const primary = items[0];
   if (!primary) return [];
   const useSeriesColors = items.length === 1;
-  return items.flatMap(item => spec.series.map((series, seriesIndex) => ({
-    label: `${item.session.driver} · L${item.lap.number} ${series[0]}`,
-    data: page4AlignedSeries(item, series, primary.lap, startTime, endTime),
-    // 한 랩만 볼 때는 한 패널 안의 신호를 고유 색상으로 구분한다.
-    // 여러 랩 비교에서는 기존처럼 각 랩의 색을 모든 신호에 유지한다.
-    borderColor: useSeriesColors ? series[1] : PAGE4_LAP_COLORS[item.selectionIndex],
-    borderWidth: item.selectionIndex === 0 ? 1.45 : 1.3,
-    borderDash: series[4]?.length ? series[4] : (seriesIndex === 0 ? [] : [7, 3 + seriesIndex]),
-    pointRadius: 0,
-    stepped: spec.stepped ? 'before' : false,
-    fill: false,
-    yAxisID: series[3] || 'y',
-    page4SelectionIndex: item.selectionIndex,
-    page4SeriesIndex: seriesIndex
-  })));
+  return items.flatMap(item => spec.series.map((series, seriesIndex) => {
+    const label = `${item.session.driver} · L${item.lap.number} ${series[0]}`;
+    return {
+      label,
+      data: page4AlignedSeries(item, series, primary.lap, startTime, endTime),
+      // 한 랩만 볼 때는 한 패널 안의 신호를 고유 색상으로 구분한다.
+      // 여러 랩 비교에서는 기존처럼 각 랩의 색을 모든 신호에 유지한다.
+      borderColor: useSeriesColors ? series[1] : PAGE4_LAP_COLORS[item.selectionIndex],
+      borderWidth: item.selectionIndex === 0 ? 1.45 : 1.3,
+      borderDash: series[4]?.length ? series[4] : (seriesIndex === 0 ? [] : [7, 3 + seriesIndex]),
+      pointRadius: 0,
+      stepped: spec.stepped ? 'before' : false,
+      fill: false,
+      hidden: page4HiddenSeries.has(label),
+      yAxisID: series[3] || 'y',
+      page4SelectionIndex: item.selectionIndex,
+      page4SeriesIndex: seriesIndex
+    };
+  }));
 }
 
 function syncPage4SeriesToggles(chart) {
   const header = chart?.canvas?.parentElement?.querySelector('header');
   if (!header) return;
   header.querySelector('.p4-series-toggles')?.remove();
+  // Gear처럼 한 종류의 신호만 있는 그래프는 토글이 정보보다 공간을
+  // 더 많이 차지하므로 표시하지 않는다.
+  const distinctSeries = new Set(chart.data.datasets.map(dataset => dataset.page4SeriesIndex));
+  if (distinctSeries.size <= 1) return;
   const toggles = document.createElement('div');
   toggles.className = 'p4-series-toggles';
   chart.data.datasets.forEach((dataset, datasetIndex) => {
@@ -2105,6 +2145,7 @@ function registerPage4Session(snapshot, makeActive = true) {
     page4SessionStore.push(session);
   }
   session.rows = snapshot.rows;
+  applyPage4FiveHzFilter(session.rows);
   session.gpsPoints = (snapshot.gpsPoints || []).map(point => ({ ...point }));
   session.laps = (snapshot.laps || []).map(lap => ({ ...lap }));
   session.checkpoints = (snapshot.checkpoints || []).map(line => line.map(point => ({ ...point })));
@@ -2257,7 +2298,7 @@ function applyPage4Selection() {
   page4RangeEnd = Math.max(startTime + 0.05, endTime);
   page4ViewStart = startTime;
   page4ViewEnd = page4RangeEnd;
-  refreshPage4VisibleRange(startTime, page4RangeEnd);
+  refreshPage4VisibleRange(startTime, page4RangeEnd, true);
   const startLabel = boundaries[startIndex]?.label || 'START';
   const endLabel = boundaries[endIndex]?.label || 'FINISH';
   const axisSpan = page4AxisValue(page4RangeEnd) - page4AxisValue(page4RangeStart);
@@ -2304,7 +2345,7 @@ function drawPage4GTrace() {
   points.forEach(point => { ctx.beginPath(); ctx.arc(point.x, point.y, 1.15, 0, Math.PI * 2); ctx.fill(); });
 }
 
-function refreshPage4VisibleRange(startTime, endTime) {
+function refreshPage4VisibleRange(startTime, endTime, rebuildToggles = false) {
   if (!page4Charts.length || !globalData.length) return;
   page4ViewStart = Math.max(page4RangeStart, Number(startTime));
   page4ViewEnd = Math.min(page4RangeEnd, Number(endTime));
@@ -2313,7 +2354,7 @@ function refreshPage4VisibleRange(startTime, endTime) {
     const chart = page4Charts[chartIndex];
     if (!chart) return;
     chart.data.datasets = page4ChartDatasets(spec, page4ViewStart, page4ViewEnd);
-    syncPage4SeriesToggles(chart);
+    if (rebuildToggles) syncPage4SeriesToggles(chart);
     chart.options.scales.x.min = page4AxisValue(page4ViewStart);
     chart.options.scales.x.max = page4AxisValue(page4ViewEnd);
     chart.options.scales.x.ticks.callback = value => page4AxisMode === 'distance' ? `${Math.round(Number(value))}m` : Number(value).toFixed(1);
