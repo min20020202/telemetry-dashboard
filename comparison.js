@@ -790,7 +790,7 @@
         const throttle = points.slice(Math.max(0, minIndex)).find(point => point.tps >= 20);
         const detail = `최저속도 ${minSpeed.toFixed(1)} km/h · 브레이크 ${brake ? `${brake.x.toFixed(0)}m` : '없음'} · 재가속 ${throttle ? `${throttle.x.toFixed(0)}m` : '없음'} · 탈출속도 ${(last?.speed || 0).toFixed(1)} km/h`;
         const delta = Number.isFinite(duration) && Number.isFinite(referenceDuration) ? duration - referenceDuration : NaN;
-        const deltaMarkup = Number.isFinite(delta)
+        const deltaMarkup = cell.index > 0 && Number.isFinite(delta)
           ? `<small class="sector-time-delta ${delta < -.0005 ? 'faster' : delta > .0005 ? 'slower' : 'equal'}">기준 ${delta >= 0 ? '+' : ''}${delta.toFixed(3)}s</small>`
           : '';
         return Number.isFinite(duration)
