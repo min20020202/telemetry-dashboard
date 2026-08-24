@@ -811,6 +811,33 @@
     scrollSelectedSectorIntoView(state.activeSector);
   }
 
+  function pedalEventSummary(points, key, threshold) {
+    if (!points.length) return { events: [], activeTime: 0, average: 0, maximum: 0 };
+    let weighted = 0, totalTime = 0, activeTime = 0, run = null;
+    const rawRuns = [];
+    for (let index = 1; index < points.length; index += 1) {
+      const previous = points[index - 1], current = points[index];
+      const dt = Math.max(0, current.elapsed - previous.elapsed);
+      const previousValue = Number(previous[key]) || 0, currentValue = Number(current[key]) || 0;
+      weighted += (previousValue + currentValue) * .5 * dt;
+      totalTime += dt;
+      if (previousValue >= threshold || currentValue >= threshold) {
+        activeTime += dt;
+        if (!run) run = { start: previous.x, startTime: previous.elapsed, end: current.x, endTime: current.elapsed, maximum: Math.max(previousValue, currentValue) };
+        else { run.end = current.x; run.endTime = current.elapsed; run.maximum = Math.max(run.maximum, previousValue, currentValue); }
+      } else if (run) { rawRuns.push(run); run = null; }
+    }
+    if (run) rawRuns.push(run);
+    // 0.12초보다 짧은 단발성 ADC/TPS 튐은 운전자 조작으로 세지 않는다.
+    const events = rawRuns.filter(event => event.endTime - event.startTime >= .12);
+    return {
+      events,
+      activeTime: events.reduce((sum, event) => sum + event.endTime - event.startTime, 0),
+      average: totalTime > 0 ? weighted / totalTime : Number(points[0]?.[key]) || 0,
+      maximum: Math.max(...points.map(point => Number(point[key]) || 0))
+    };
+  }
+
   function renderSectors(items) {
     if (!ui.sector) return;
     if (items.length < 2) { ui.sector.innerHTML = '<p class="comparison-empty">두 개 이상의 랩을 선택하세요.</p>'; return; }
@@ -832,15 +859,17 @@
       const referenceDuration = durations[0];
       return `<tr class="${isActive(sectorIndex) ? 'active' : ''}" data-sector-row="${sectorIndex}"><td><button type="button" data-sector="${sectorIndex}">S${sectorIndex + 1}</button><br><small>${start.toFixed(0)}–${end.toFixed(0)}m</small></td>${cells.map(cell => {
         const points = cell.data.filter(point => point.x >= start && point.x <= end);
-        const first = points[0], last = points.at(-1);
+        const last = points.at(-1);
         const duration = durations[cell.index];
         const isFastest = Number.isFinite(duration) && Math.abs(duration - fastest) < .0005;
         const minSpeed = Math.min(...points.map(point => point.speed));
-        const brake = points.find(point => point.brake >= 5);
-        const minIndex = points.findIndex(point => point.speed === minSpeed);
-        const throttle = points.slice(Math.max(0, minIndex)).find(point => point.tps >= 20);
+        const brakeStats = pedalEventSummary(points, 'brake', 5);
+        const throttleStats = pedalEventSummary(points, 'tps', 20);
+        const fullThrottleStats = pedalEventSummary(points, 'tps', 90);
         const metrics = sectorPathMetrics(cell.item, sectorIndex, items, start, end);
-        const detail = `실제 GPS 주행거리 ${metrics?.actualDistance.toFixed(1) ?? '—'} m · 공통 중심선 구간 ${metrics?.commonDistance.toFixed(1) ?? '—'} m · 추가거리 ${metrics && metrics.extraDistance >= 0 ? '+' : ''}${metrics?.extraDistance.toFixed(1) ?? '—'} m · 평균속도 ${metrics?.averageSpeed.toFixed(1) ?? '—'} km/h · 중심선 이탈 평균/최대 ${metrics?.meanDeviation.toFixed(1) ?? '—'}/${metrics?.maxDeviation.toFixed(1) ?? '—'} m · 최저속도 ${minSpeed.toFixed(1)} km/h · 브레이크 ${brake ? `${brake.x.toFixed(0)}m` : '없음'} · 재가속 ${throttle ? `${throttle.x.toFixed(0)}m` : '없음'} · 탈출속도 ${(last?.speed || 0).toFixed(1)} km/h`;
+        const brakePositions = brakeStats.events.length ? brakeStats.events.map(event => `${event.start.toFixed(0)}m`).join(', ') : '없음';
+        const throttlePositions = throttleStats.events.length ? throttleStats.events.map(event => `${event.start.toFixed(0)}m`).join(', ') : '없음';
+        const detail = `주행 분석\n실제 GPS 주행거리 ${metrics?.actualDistance.toFixed(1) ?? '—'} m · 공통 중심선 구간 ${metrics?.commonDistance.toFixed(1) ?? '—'} m · 추가거리 ${metrics && metrics.extraDistance >= 0 ? '+' : ''}${metrics?.extraDistance.toFixed(1) ?? '—'} m\n평균속도 ${metrics?.averageSpeed.toFixed(1) ?? '—'} km/h · 최저속도 ${minSpeed.toFixed(1)} km/h · 탈출속도 ${(last?.speed || 0).toFixed(1)} km/h\n중심선 이탈 평균/최대 ${metrics?.meanDeviation.toFixed(1) ?? '—'}/${metrics?.maxDeviation.toFixed(1) ?? '—'} m\n\n페달 분석 (0.12초 미만 신호 제외)\n브레이크 ${brakeStats.events.length}회 · 총 ${brakeStats.activeTime.toFixed(2)}초 · 최대 ${brakeStats.maximum.toFixed(1)}% · 시작 ${brakePositions}\n가속 ${throttleStats.events.length}회 · 총 ${throttleStats.activeTime.toFixed(2)}초 · 평균 ${throttleStats.average.toFixed(1)}% · 시작 ${throttlePositions}\n풀가속(90% 이상) ${fullThrottleStats.activeTime.toFixed(2)}초`;
         const delta = Number.isFinite(duration) && Number.isFinite(referenceDuration) ? duration - referenceDuration : NaN;
         const deltaMarkup = cell.index > 0 && Number.isFinite(delta)
           ? `<small class="sector-time-delta ${delta < -.0005 ? 'faster' : delta > .0005 ? 'slower' : 'equal'}">${delta >= 0 ? '+' : ''}${delta.toFixed(3)}s</small>`
@@ -848,8 +877,9 @@
         const metricsMarkup = metrics
           ? `<small class="sector-line-metrics">${metrics.actualDistance.toFixed(1)}m <i>${metrics.extraDistance >= 0 ? '+' : ''}${metrics.extraDistance.toFixed(1)}m</i> · 평균 ${metrics.averageSpeed.toFixed(1)}</small>`
           : '';
+        const pedalMarkup = `<span class="sector-pedal-metrics"><small class="brake">B <b>${brakeStats.events.length}회</b> · ${brakeStats.activeTime.toFixed(2)}s · MAX ${brakeStats.maximum.toFixed(0)}%</small><small class="throttle">T <b>${throttleStats.events.length}회</b> · AVG ${throttleStats.average.toFixed(0)}% · FULL ${fullThrottleStats.activeTime.toFixed(2)}s</small></span>`;
         return Number.isFinite(duration)
-          ? `<td class="${isFastest ? 'sector-fastest' : ''}" title="${detail}"><b>${duration.toFixed(3)}s</b>${isFastest ? '<span class="sector-fastest-badge">★ FAST</span>' : ''}<span class="sector-cell-meta">${deltaMarkup}${metricsMarkup}</span></td>`
+          ? `<td class="${isFastest ? 'sector-fastest' : ''}" title="${escapeHtml(detail)}"><span class="sector-time-row"><b>${duration.toFixed(3)}s</b>${isFastest ? '<span class="sector-fastest-badge">★ FAST</span>' : ''}</span><span class="sector-cell-meta">${deltaMarkup}${metricsMarkup}</span>${pedalMarkup}</td>`
           : '<td title="해당 체크포인트의 실제 교차점을 찾지 못했습니다."><b>통과 기록 없음</b></td>';
       }).join('')}</tr>`;
     }).join('')}</tbody></table>`;
