@@ -222,6 +222,8 @@ const helpVideoTitleOutput = document.getElementById('help-video-title-output');
 const helpVideoDescriptionOutput = document.getElementById('help-video-description-output');
 const helpVideoTitleCopy = document.getElementById('help-video-title-copy');
 const helpVideoDescriptionCopy = document.getElementById('help-video-description-copy');
+const helpDistanceMethodDialog = document.getElementById('help-distance-method-dialog');
+const helpDistanceMethodClose = document.getElementById('help-distance-method-close');
 const gpsDetailSpeedValue = document.getElementById('gps-detail-speed-value');
 const gpsDetailRpmValue = document.getElementById('gps-detail-rpm-value');
 const gpsDetailGearValue = document.getElementById('gps-detail-gear-value');
@@ -3557,8 +3559,17 @@ if (tabHelp) {
 }
 
 pageHelp?.addEventListener('click', event => {
+  if (event.target.closest('[data-distance-method-open]')) {
+    if (typeof helpDistanceMethodDialog?.showModal === 'function') helpDistanceMethodDialog.showModal();
+    else helpDistanceMethodDialog?.setAttribute('open', '');
+    return;
+  }
   const button = event.target.closest('[data-help-tab]');
   if (button) switchTab(button.dataset.helpTab);
+});
+helpDistanceMethodClose?.addEventListener('click', () => helpDistanceMethodDialog?.close());
+helpDistanceMethodDialog?.addEventListener('click', event => {
+  if (event.target === helpDistanceMethodDialog) helpDistanceMethodDialog.close();
 });
 
 // Keyboard shortcuts: number row and numeric keypad 1–6 switch pages.

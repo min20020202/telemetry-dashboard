@@ -1674,6 +1674,18 @@ body.dark-mode .lap-strip header,body.dark-mode .lap-strip header output,body.da
 .help-eyebrow { color: var(--accent-orange); font: 800 10px var(--font-mono); letter-spacing: 0.14em; }
 .help-hero h1 { margin: 7px 0 8px; font-size: clamp(24px, 2.2vw, 36px); line-height: 1.15; }
 .help-hero p { max-width: 760px; margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.7; }
+.help-hero-action, .help-inline-action {
+  margin-top: 13px;
+  padding: 9px 13px;
+  border: 1px solid rgba(14, 165, 233, 0.42);
+  border-radius: 8px;
+  background: rgba(14, 165, 233, 0.09);
+  color: #0284c7;
+  font: 850 11px var(--font-mono);
+  cursor: pointer;
+}
+.help-hero-action:hover, .help-inline-action:hover { background:#0284c7; color:#fff; }
+.help-inline-action { margin-top: 12px; }
 .help-hero-badge { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
 .help-hero-badge b {
   display: grid;
@@ -1783,6 +1795,51 @@ body.dark-mode .lap-strip header,body.dark-mode .lap-strip header output,body.da
 .help-faq summary { padding: 12px 14px; font-size: 11px; font-weight: 800; cursor: pointer; }
 .help-faq p { margin: 0; padding: 0 14px 13px; color: var(--text-secondary); font-size: 11px; line-height: 1.65; }
 
+.help-distance-dialog {
+  width: min(980px, calc(100vw - 34px));
+  max-width: none;
+  max-height: calc(100vh - 34px);
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: var(--panel-bg);
+  color: var(--text-primary);
+  box-shadow: 0 28px 90px rgba(15, 23, 42, 0.4);
+}
+.help-distance-dialog::backdrop { background: rgba(15, 23, 42, 0.72); backdrop-filter: blur(3px); }
+.help-distance-dialog-shell { display:flex; max-height:calc(100vh - 34px); flex-direction:column; }
+.help-distance-dialog header { display:flex; align-items:flex-start; gap:18px; padding:22px 24px 18px; border-bottom:1px solid var(--border-color); background:linear-gradient(135deg, rgba(14,165,233,.11), rgba(249,115,22,.06)); }
+.help-distance-dialog header > div { flex:1; min-width:0; }
+.help-distance-dialog header span { color:#0284c7; font:900 9px var(--font-mono); letter-spacing:.12em; }
+.help-distance-dialog header h2 { margin:5px 0 5px; font-size:24px; }
+.help-distance-dialog header p { margin:0; color:var(--text-secondary); font-size:11px; }
+.help-distance-dialog header button { display:grid; width:38px; height:38px; flex:0 0 auto; place-items:center; border:1px solid var(--border-color); border-radius:50%; background:var(--input-bg); color:var(--text-primary); font-size:25px; cursor:pointer; }
+.help-distance-dialog-body { overflow-y:auto; padding:20px 24px 28px; }
+.help-distance-dialog-body > section { margin-bottom:22px; }
+.help-distance-dialog-body h3 { margin:0 0 9px; font-size:15px; }
+.help-distance-dialog-body p, .help-distance-dialog-body li { color:var(--text-secondary); font-size:11px; line-height:1.7; }
+.help-distance-summary { display:grid; grid-template-columns:repeat(4, 1fr); gap:9px; }
+.help-distance-summary article { padding:13px; border:1px solid var(--border-color); border-radius:9px; background:rgba(14,165,233,.055); }
+.help-distance-summary small { display:block; margin-bottom:4px; color:var(--text-secondary); font-size:9px; }
+.help-distance-summary b { color:#0284c7; font:900 14px var(--font-mono); }
+.help-distance-flow { display:flex; align-items:center; justify-content:center; gap:7px; padding:13px; border:1px solid var(--border-color); border-radius:9px; background:var(--input-bg); font-size:10px; }
+.help-distance-flow b { padding:6px 8px; border-radius:6px; background:var(--panel-bg); }
+.help-distance-flow i { color:var(--accent-orange); font-style:normal; font-weight:900; }
+.help-distance-projection { position:relative; display:flex; align-items:center; justify-content:center; padding:28px 14px 42px; font:800 10px var(--font-mono); }
+.help-distance-projection em { width:100px; height:3px; background:#94a3b8; }
+.help-distance-projection b { padding:7px 9px; border:2px solid #fff; border-radius:7px; background:#f97316; color:#fff; box-shadow:0 3px 10px rgba(249,115,22,.28); }
+.help-distance-projection i { position:absolute; left:50%; bottom:6px; padding-top:25px; border-left:2px dashed #0ea5e9; color:#0284c7; font-style:normal; transform:translateX(-1px); }
+.help-distance-equation { padding:13px; border-radius:9px; background:#111827; color:#34d399; text-align:center; font:800 12px var(--font-mono); }
+.help-distance-dialog table { width:100%; border-collapse:collapse; font-size:10px; }
+.help-distance-dialog th, .help-distance-dialog td { padding:8px 9px; border:1px solid var(--border-color); text-align:left; }
+.help-distance-dialog th { background:rgba(14,165,233,.09); color:var(--text-primary); }
+.help-distance-dialog .reliable { color:#059669; }.help-distance-dialog .usable { color:#0284c7; }.help-distance-dialog .caution { color:#dc2626; }
+.help-distance-warning { display:flex; gap:9px; margin-top:10px; padding:11px 12px; border-left:4px solid #f97316; border-radius:6px; background:rgba(249,115,22,.08); font-size:10px; }
+.help-distance-warning span { color:var(--text-secondary); }
+.help-distance-use { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.help-distance-use > div { padding:14px 16px; border:1px solid var(--border-color); border-radius:10px; background:rgba(128,128,128,.035); }
+.help-distance-use ul { margin:0; padding-left:18px; }
+
 @media (max-width: 1100px) {
   .help-layout { grid-template-columns: 1fr; }
   .help-toc { position: static; grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -1799,6 +1856,11 @@ body.dark-mode .lap-strip header,body.dark-mode .lap-strip header output,body.da
   .help-section-title > button { margin-left: 49px; }
   .help-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .help-code { align-items: flex-start; flex-direction: column; }
+  .help-distance-summary { grid-template-columns:repeat(2, 1fr); }
+  .help-distance-flow { align-items:stretch; flex-direction:column; text-align:center; }
+  .help-distance-flow i { transform:rotate(90deg); }
+  .help-distance-use { grid-template-columns:1fr; }
+  .help-distance-dialog header, .help-distance-dialog-body { padding-left:16px; padding-right:16px; }
 }
 
 /* --- 상단 접속 / 링크 상태 바 --- */

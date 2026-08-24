@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260824-3">
+  <link rel="stylesheet" href="style.css?v=20260824-4">
 </head>
 <body>
 
@@ -640,7 +640,8 @@
           <div>
             <span class="help-eyebrow">NSSUR TELEMETRY USER GUIDE</span>
             <h1>처음 사용하는 사람을 위한 도움말</h1>
-            <p>CSV를 여는 것부터 그래프 분석, GPS 랩 비교, GoPro·YouTube 영상 동기화까지 순서대로 확인할 수 있습니다.</p>
+            <p>CSV를 여는 것부터 그래프 분석, 공통 거리축·랩 구간 비교, GPS 재생과 GoPro·YouTube 영상 동기화까지 순서대로 확인할 수 있습니다.</p>
+            <button id="help-distance-method-open" class="help-hero-action" type="button" data-distance-method-open>거리 측정 방식</button>
           </div>
           <div class="help-hero-badge"><b>?</b><span>모든 분석은<br>브라우저에서 실행됩니다</span></div>
         </div>
@@ -659,7 +660,7 @@
             <a href="#help-page2"><span>2</span>입력·서스펜션</a>
             <a href="#help-page3"><span>3</span>GPS·IMU·랩</a>
             <a href="#help-video"><span>▶</span>영상 동기화</a>
-            <a href="#help-page4"><span>4</span>냉각·온도</a>
+            <a href="#help-page4"><span>4</span>랩 구간 분석</a>
             <a href="#help-page5"><span>5</span>실시간 텔레메트리</a>
             <a href="#help-trouble"><span>!</span>문제 해결</a>
           </nav>
@@ -711,6 +712,10 @@
                 <div class="help-steps"><span><b>1</b>피니시 라인 설정</span><span><b>2</b>지도에서 라인 양 끝 클릭</span><span><b>3</b>자동 계산된 LAP 확인</span><span><b>4</b>원하는 LAP 선택·비교</span></div>
                 <ul><li>라인은 차량 경로가 실제로 통과하도록 트랙 폭을 가로질러 그립니다.</li><li>랩을 한 번 누르면 해당 랩만 표시되고, 여러 랩을 누르면 경로와 데이터를 겹쳐 비교합니다.</li><li>랩 상세의 <b>시작 지점</b>·<b>종료 지점</b> 버튼은 재생을 멈추고 해당 시점으로 이동합니다.</li><li>별표가 붙은 LAP이 베스트 랩입니다.</li></ul>
               </article>
+              <div class="help-grid two help-wide-card">
+                <article class="help-card"><h3>시간축·거리축 전환</h3><ul><li><b>시간 s</b>는 센서가 기록된 원래 시각으로 표시합니다.</li><li><b>거리 m</b>는 각 랩을 0~862.556m 공통 대표 경로에 맞춰 표시합니다.</li><li>드라이버별 브레이크·조향·액셀 위치 비교에는 거리축을 사용합니다.</li></ul><button id="help-distance-method-inline" class="help-inline-action" type="button" data-distance-method-open>측정 원리와 신뢰도 보기</button></article>
+                <article class="help-card"><h3>체크포인트·핸들링</h3><ul><li>체크포인트를 통과 순서대로 추가하면 랩별 구간 기록, 통과·최저속도와 페달 시점을 비교합니다.</li><li><b>핸들링 분석</b>은 기본 OFF이며 버튼을 켰을 때만 계산합니다.</li><li>언더·오버 표시는 슬립각 센서가 없는 추정값이므로 추정 점수와 지속시간을 함께 확인합니다.</li></ul></article>
+              </div>
             </section>
 
             <section class="help-section" id="help-video">
@@ -752,8 +757,13 @@
             </section>
 
             <section class="help-section" id="help-page4">
-              <div class="help-section-title"><span>4</span><div><h2>냉각 및 온도 분석</h2><p>냉각수·오일·흡기·ECU 온도의 변화와 최고값을 확인합니다.</p></div><button type="button" data-help-tab="temperature">4페이지 열기</button></div>
-              <article class="help-card"><p>상단 요약 카드에서 현재 온도와 최고 온도를 확인하고, 아래 그래프에서 시간에 따른 변화와 차량 속도의 관계를 살펴봅니다.</p></article>
+              <div class="help-section-title"><span>4</span><div><h2>랩 구간 분석</h2><p>선택한 한 랩의 모든 주요 채널을 같은 시간 또는 거리축에서 정밀하게 확인합니다.</p></div><button type="button" data-help-tab="temperature">4페이지 열기</button></div>
+              <div class="help-grid two">
+                <article class="help-card"><h3>7개 동기화 그래프</h3><ul><li>GPS·FL·RL·RR 속도</li><li>RPM·TPS, 기어, TPS·브레이크</li><li>조향·Yaw rate, 종·횡G, 냉각수·유온</li><li>제목의 채널 버튼으로 원하는 선만 켜거나 끕니다.</li></ul></article>
+                <article class="help-card"><h3>랩과 구간 선택</h3><ul><li>오른쪽에서 랩과 START·CP·FINISH 구간을 선택합니다.</li><li>재생 중 모든 그래프, G 원, 트랙 위치가 같은 시점으로 움직입니다.</li><li>하단에서 선택 랩 범위 안의 구간을 직접 입력하거나 커서 막대로 이동합니다.</li></ul></article>
+                <article class="help-card"><h3>확대·이동</h3><ul><li>휠은 주황색 커서선을 기준으로 확대·축소합니다.</li><li>그래프를 클릭한 채 좌우로 드래그하면 커서와 표시 구간이 이동합니다.</li><li><kbd>←</kbd><kbd>→</kbd>는 0.1초, <kbd>Shift</kbd>와 함께 누르면 0.01초 이동합니다.</li></ul></article>
+                <article class="help-card"><h3>거리축 비교</h3><ul><li>거리 모드에서는 센서값을 공통 대표 경로상의 위치로 변환합니다.</li><li>현재 중심선은 12개 정상 랩, 1m 간격 864점, 총 862.556m입니다.</li><li>0.1m 표시는 보간 단위이며 GPS 절대 정확도가 10cm라는 뜻은 아닙니다.</li></ul><button class="help-inline-action" type="button" data-distance-method-open>거리 측정 방식 자세히</button></article>
+              </div>
             </section>
 
             <section class="help-section" id="help-page5">
@@ -767,6 +777,7 @@
                 <details open><summary>GPS 지도에 경로가 보이지 않습니다.</summary><p>CSV에 유효한 위도·경도와 GPS Fix가 포함되어 있는지 확인하고, CSV를 다시 연 뒤 3페이지로 이동합니다.</p></details>
                 <details><summary>랩이 계산되지 않습니다.</summary><p>피니시 라인이 실제 주행 경로를 완전히 가로지르는지 확인하고 최소 랩 시간을 실제 랩타임보다 짧게 설정합니다.</p></details>
                 <details><summary>GoPro 또는 YouTube 영상이 연결되지 않습니다.</summary><p>CSV와 영상의 KST 시간 구간이 일부라도 겹쳐야 합니다. YouTube는 제목 형식과 공개 상태, HD 처리 완료 여부도 확인합니다.</p></details>
+                <details><summary>거리축의 0.1m 값은 실제로 10cm 정확도인가요?</summary><p>아닙니다. 1m 공통 경로 선분과 5Hz GPS 측정점 사이를 보간한 표시값입니다. 랩·드라이버 간 반복적인 상대 비교에 사용하고 수십 cm의 절대 위치로 단정하지 마십시오.</p></details>
                 <details><summary>수정된 사이트가 이전 화면으로 보입니다.</summary><p>브라우저를 새로고침합니다. 계속 같다면 강력 새로고침을 사용하거나 새 탭에서 운영 주소를 다시 엽니다.</p></details>
               </div>
             </section>
@@ -804,6 +815,35 @@
     </div>
   </div>
 
+  <dialog id="help-distance-method-dialog" class="help-distance-dialog">
+    <div class="help-distance-dialog-shell">
+      <header>
+        <div><span>GPS DISTANCE REFERENCE</span><h2>공통 거리축 측정 방식</h2><p>랩과 드라이버의 데이터를 같은 트랙 위치에서 비교하기 위한 계산 기준입니다.</p></div>
+        <button id="help-distance-method-close" type="button" aria-label="닫기">×</button>
+      </header>
+      <div class="help-distance-dialog-body">
+        <section class="help-distance-summary">
+          <article><small>대표 경로</small><b>862.556 m</b></article>
+          <article><small>기준점</small><b>864개 · 약 1m</b></article>
+          <article><small>기준 랩</small><b>정상 랩 12개</b></article>
+          <article><small>GPS</small><b>5 Hz · 약 0.2초</b></article>
+        </section>
+
+        <section><h3>1. 대표 경로 생성</h3><div class="help-distance-flow"><b>유효 GPS 추출</b><i>→</i><b>피니시 통과로 랩 분리</b><i>→</i><b>거리 이상 랩 제외</b><i>→</i><b>12개 랩 위치 중앙값</b><i>→</i><b>1m 간격 재구성</b></div><p>각 랩을 누적 진행률 0~100%로 맞추고 같은 진행률에서 12개 랩의 위도·경도 중앙값을 사용합니다. 따라서 물리적으로 측량한 트랙 중앙이 아니라 정상 랩들의 <strong>공통 대표 주행 경로</strong>입니다.</p></section>
+
+        <section><h3>2. 현재 위치를 거리로 변환</h3><p>각 랩의 GPS 위치를 가장 가까운 기준점으로 반올림하지 않고, 인접한 두 기준점이 만드는 선분에 수직 투영합니다.</p><div class="help-distance-projection"><span>A · 200m</span><em></em><b>Q · 200.37m</b><em></em><span>B · 201m</span><i>P · 차량 GPS</i></div><p>투영점 Q가 200m와 201m 사이의 37% 위치라면 중심 거리는 200.37m입니다. 이전 위치 기준 뒤 약 5m·앞 약 35m만 검색하고, GPS 노이즈 때문에 계산값이 뒤로 가면 이전 거리를 유지합니다.</p></section>
+
+        <section><h3>3. 5Hz GPS 사이의 보간</h3><div class="help-distance-equation">s(t) = s₁ + (s₂ − s₁) × (t − t₁) ÷ (t₂ − t₁)</div><p>예를 들어 12.000초에 300.2m, 12.200초에 306.6m라면 12.100초는 303.4m로 계산합니다. 브레이크·액셀·조향 센서값은 바꾸지 않고 센서가 기록된 시각만 이 시간-거리 표를 통해 거리축으로 변환합니다.</p></section>
+
+        <section><h3>4. 속도에 따른 실제 GPS 점 간격</h3><table><thead><tr><th>속도</th><th>0.2초 이동거리</th><th>해석</th></tr></thead><tbody><tr><td>20 km/h</td><td>약 1.1m</td><td>저속 코너</td></tr><tr><td>40 km/h</td><td>약 2.2m</td><td>일반 코너</td></tr><tr><td>60 km/h</td><td>약 3.3m</td><td>중고속 구간</td></tr><tr><td>80 km/h</td><td>약 4.4m</td><td>고속 구간</td></tr><tr><td>100 km/h</td><td>약 5.6m</td><td>직선 고속 구간</td></tr></tbody></table><div class="help-distance-warning"><b>0.1m는 계산·표시 단위입니다.</b><span>실제 GPS가 10cm마다 측정하거나 절대 위치가 10cm 정확하다는 뜻이 아닙니다.</span></div></section>
+
+        <section><h3>5. 오차와 신뢰도</h3><table><thead><tr><th>비교 항목</th><th>권장 신뢰도</th><th>사용 방법</th></tr></thead><tbody><tr><td>속도 곡선, 진입·최저·탈출 속도</td><td><strong class="reliable">높음</strong></td><td>동일 중심거리 또는 구간 평균 비교</td></tr><tr><td>브레이크 시작·해제, 액셀 재개</td><td><strong class="usable">중간~높음</strong></td><td>여러 랩에서 반복되는 약 1~2m 이상 차이 우선</td></tr><tr><td>조향 시작 위치</td><td><strong class="usable">중간</strong></td><td>임계값과 지속시간을 함께 확인</td></tr><tr><td>20~50cm 차이 또는 절대 지면 위치</td><td><strong class="caution">낮음</strong></td><td>일반 GPS 노이즈와 구분하기 어려움</td></tr></tbody></table><p>주요 오차 원인은 GPS 절대 위치 오차, 5Hz 갱신 간격, 센서와 GPS의 시간 지연, 코너 곡률, 운전자별 라인 차이입니다. 60km/h에서 시간축이 0.1초 어긋나면 약 1.67m 위치 차이가 생기므로 미세한 차이는 영상과 반복 랩으로 검증해야 합니다.</p></section>
+
+        <section class="help-distance-use"><div><h3>적합한 사용</h3><ul><li>랩·드라이버별 브레이크와 액셀 패턴 비교</li><li>코너 진입·최저·탈출 속도 비교</li><li>같은 위치에서 센서 그래프 겹쳐 보기</li><li>수 m 수준의 반복되는 차이 분석</li></ul></div><div><h3>부적합한 사용</h3><ul><li>10cm 단위 절대 위치 측량</li><li>한 번 나온 수십 cm 차이로 우열 판정</li><li>차량과 트랙 경계 사이의 정확한 거리 측정</li></ul></div></section>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="gps-youtube-dialog" class="gps-youtube-dialog">
     <form id="gps-youtube-form" method="dialog">
       <div class="gps-youtube-dialog-head">
@@ -832,6 +872,6 @@
   <script src="steering.js?v=20260820-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
-  <script src="app.js?v=20260824-4"></script>
+  <script src="app.js?v=20260824-5"></script>
 </body>
 </html>
