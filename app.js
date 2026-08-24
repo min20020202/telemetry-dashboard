@@ -2576,6 +2576,12 @@ function keepPage4CursorInView(targetTime, direction = 0) {
 // 재생 중에는 확대 배율을 유지한 채 표시 구간만 앞으로 넘깁니다. 비교 랩이
 // 여러 개면 같은 경과시간에서 가장 앞선 커서까지 화면 안에 남도록 합니다.
 function followPage4PlaybackCursors(targetTime) {
+  const boundaries = page4LapBoundaries(page4SelectedLapIndex);
+  const selectedStart = Number(p4SectorStart?.value) || 0;
+  const selectedEnd = Number(p4SectorEnd?.value);
+  // 체크포인트 구간 비교에서는 모든 랩이 같은 X축 구간을 공유해야 하므로
+  // 재생 커서가 움직여도 사용자가 고른 구간을 고정합니다.
+  if (boundaries.length && (selectedStart !== 0 || selectedEnd !== boundaries.length - 1)) return;
   const viewStart = page4AxisValue(page4ViewStart), viewEnd = page4AxisValue(page4ViewEnd);
   const rangeStart = page4AxisValue(page4RangeStart), rangeEnd = page4AxisValue(page4RangeEnd);
   const span = viewEnd - viewStart;
@@ -5030,6 +5036,9 @@ function followGpsPlaybackCursor(targetTime, fullRange) {
   if (targetTime > viewMin + margin && targetTime < viewMax - margin) return;
   let min = targetTime >= viewMax - margin ? targetTime - span * 0.78 : targetTime - span * 0.22;
   min = Math.max(fullRange.min, Math.min(fullRange.max - span, min));
+  // GPS 페이지의 기본 그래프와 전체화면 상세 그래프가 같은 창을 보도록
+  // 공통 차트 범위도 함께 이동시킨 뒤 타임라인 값을 복원합니다.
+  applyZoomRange(min, min + span);
   syncGpsTimelineRange(min, min + span, targetTime);
 }
 

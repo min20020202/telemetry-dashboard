@@ -950,6 +950,9 @@
     Object.values(state.charts).forEach(chart => chart.draw());
   }
   function followPlaybackCursors(items) {
+    // 체크포인트/다중 구간을 골랐을 때는 랩 간 직접 비교가 목적이므로
+    // 선택한 공통 거리 구간을 재생 중에도 고정합니다.
+    if (state.activeSector !== null) return;
     const distance = totalDistance();
     const min = state.viewMin, max = state.viewMax ?? distance, span = max - min;
     if (!(span > 0) || !(distance > span + .01) || !items.length) return;
