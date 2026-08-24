@@ -32,6 +32,7 @@ let page4CursorTime = 0;
 let page4SelectedLapIndex = -1;
 let page4AxisMode = 'distance';
 const page4LapDistanceCache = new Map();
+const page4SeriesCache = new Map();
 const page4SessionStore = [];
 let page4SessionSerial = 0;
 let page4ActiveSessionId = null;
@@ -1823,6 +1824,7 @@ const PAGE4_FILTER_FIELDS = [
 // which CSV is currently active in the other pages.
 function applyPage4FiveHzFilter(rows) {
   if (!rows?.length || typeof fltButterworth !== 'function') return;
+  page4SeriesCache.clear();
   const firstTime = Number(rows[0]?.time_sec);
   const lastTime = Number(rows[rows.length - 1]?.time_sec);
   const span = lastTime - firstTime;
@@ -1860,44 +1862,30 @@ function page4SelectedItems() {
 }
 
 function page4AlignedSeries(item, series, primaryLap, startTime, endTime) {
-  const relativeStart = Math.max(0, startTime - primaryLap.startTime);
-  const relativeEnd = Math.max(relativeStart, endTime - primaryLap.startTime);
-  const primaryStartDistance = page4AxisValue(startTime);
-  const primaryEndDistance = page4AxisValue(endTime);
-  const itemDistanceMap = buildPage4ItemDistanceMap(item);
-  const sourceStart = page4AxisMode === 'distance'
-    ? interpolatePage4DistanceMap(itemDistanceMap, primaryStartDistance, 'distance', 'time')
-    : item.lap.startTime + relativeStart;
-  const sourceEnd = page4AxisMode === 'distance'
-    ? interpolatePage4DistanceMap(itemDistanceMap, primaryEndDistance, 'distance', 'time')
-    : Math.min(item.lap.endTime, item.lap.startTime + relativeEnd);
-  const rows = item.session.rows || [];
-  let lo = 0, hi = rows.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (Number(rows[mid]?.time_sec) < sourceStart) lo = mid + 1; else hi = mid;
+  const cacheKey = `${page4AxisMode}:${item.session.id}:${item.selection.lapIndex}:${primaryLap.startTime}:${series[0]}`;
+  let points = page4SeriesCache.get(cacheKey);
+  if (!points) {
+    const rows = item.session.rows || [];
+    const itemDistanceMap = buildPage4ItemDistanceMap(item);
+    points = [];
+    for (let index = page4RowIndexAtTime(rows, item.lap.startTime); index < rows.length; index += 1) {
+      const row = rows[index];
+      const time = Number(row?.time_sec);
+      if (!Number.isFinite(time)) continue;
+      if (time > item.lap.endTime) break;
+      const x = page4AxisMode === 'distance'
+        ? interpolatePage4DistanceMap(itemDistanceMap, time, 'time', 'distance')
+        : primaryLap.startTime + (time - item.lap.startTime);
+      const globalIndex = item.session.id === page4ActiveSessionId ? index : undefined;
+      points.push({ x, y: page4SeriesValue(series, row, globalIndex) });
+    }
+    page4SeriesCache.set(cacheKey, points);
   }
-  const first = Math.max(0, lo - 1);
-  lo = first; hi = rows.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (Number(rows[mid]?.time_sec) <= sourceEnd) lo = mid + 1; else hi = mid;
-  }
-  const last = Math.min(rows.length, lo + 1);
-  // 한 화면 픽셀보다 촘촘한 점은 보이지 않으므로 렌더링만 줄인다.
-  // 20초 이하에서는 원본 센서 표본을 그대로 유지한다.
-  const visibleCount = Math.max(0, last - first);
-  const pointLimit = sourceEnd - sourceStart <= 20 ? visibleCount : 2200;
-  const points = Array.from({ length: visibleCount }, (_, offset) => first + offset).map(index => {
-    const row = rows[index];
-    const alignedTime = primaryLap.startTime + (Number(row.time_sec) - item.lap.startTime);
-    const x = page4AxisMode === 'distance'
-      ? interpolatePage4DistanceMap(itemDistanceMap, Number(row.time_sec), 'time', 'distance')
-      : alignedTime;
-    const globalIndex = item.session.id === page4ActiveSessionId ? index : undefined;
-    return { x, y: page4SeriesValue(series, row, globalIndex) };
-  });
-  return downsampleEnvelopePoints(points, pointLimit);
+  const visible = sliceVisiblePointSeries(points, page4AxisValue(startTime), page4AxisValue(endTime));
+  // 20 seconds or less keeps every original source sample. Wider views retain
+  // the first/min/max/last envelope in each horizontal bucket.
+  const pointLimit = endTime - startTime <= 20 ? visible.length : 2200;
+  return downsampleEnvelopePoints(visible, pointLimit);
 }
 
 function page4ChartDatasets(spec, startTime = page4ViewStart, endTime = page4ViewEnd) {
@@ -2123,6 +2111,7 @@ function page4LapBoundaries(lapIndex) {
 function refreshPage4Selectors() {
   invalidatePage4BoundariesCache();
   page4LapDistanceCache.clear();
+  page4SeriesCache.clear();
   if (!p4LapSelect) return;
   const previous = Number(p4LapSelect.value);
   p4LapSelect.innerHTML = gpsLapResults.length
@@ -2288,6 +2277,7 @@ window.setPrimaryPage4Session = snapshot => {
   page4ActiveSessionId = null;
   page4SelectedLapIndex = -1;
   page4LapDistanceCache.clear();
+  page4SeriesCache.clear();
   invalidatePage4BoundariesCache();
   page4PrimarySourceKey = sourceKey;
   registerPage4Session(snapshot, true);
@@ -2315,6 +2305,7 @@ function applyPage4Selection() {
     if (p4LapSelect) p4LapSelect.value = String(page4SelectedLapIndex);
     invalidatePage4BoundariesCache();
     page4LapDistanceCache.clear();
+    page4SeriesCache.clear();
   }
   const boundaries = page4LapBoundaries(page4SelectedLapIndex);
   if (!boundaries.length || !page4Charts.length) return;
@@ -5612,6 +5603,7 @@ function uploadFileToServer(file) {
 
 function initDataAndDashboard() {
   if (globalData.length === 0) return;
+  visibleChannelSeriesCache.clear();
   setGpsPlayback(false);
   statusText.textContent = '지표 연산 중...';
 
@@ -6004,6 +5996,7 @@ const CHANNEL_SOURCE_HZ = {
   water: 25, oil: 25, iat: 25, ecu: 25
 };
 const MAX_VISIBLE_SENSOR_POINTS = 4500;
+const visibleChannelSeriesCache = new Map();
 
 function visibleSensorIndices(startTime, endTime, sourceHz, preserveAllSourceSamples = false) {
   let lo = 0;
@@ -6039,6 +6032,27 @@ function visibleSensorIndices(startTime, endTime, sourceHz, preserveAllSourceSam
   return indices;
 }
 
+function fullVisibleChannelSeries(key, sourceHz) {
+  const cacheKey = `${key}:${sourceHz}`;
+  if (visibleChannelSeriesCache.has(cacheKey)) return visibleChannelSeriesCache.get(cacheKey);
+  const start = Number(globalData[0]?.time_sec) || 0;
+  const end = Number(globalData.at(-1)?.time_sec) || start;
+  const indices = visibleSensorIndices(start, end, sourceHz, true);
+  const series = channelSeries(key, indices, indices.map(index => Number(globalData[index]?.time_sec) || 0));
+  visibleChannelSeriesCache.set(cacheKey, series);
+  return series;
+}
+
+function sliceVisiblePointSeries(source, startTime, endTime) {
+  if (!source.length) return [];
+  let lo = 0, hi = source.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (source[mid].x < startTime) lo = mid + 1; else hi = mid; }
+  const first = Math.max(0, lo - 1);
+  lo = first; hi = source.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (source[mid].x <= endTime) lo = mid + 1; else hi = mid; }
+  return source.slice(first, Math.min(source.length, lo + 1));
+}
+
 // Rebuild every visible chart channel at its measured source resolution.
 // Short windows retain every sensor update; long windows are capped per
 // dataset so the dashboard remains responsive.
@@ -6049,22 +6063,15 @@ function refreshVisibleSensorSeries(startTime, endTime, updateNow = true) {
     diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
     chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
   ];
-  const indexCache = new Map();
   charts.forEach(chart => {
     if (!chart) return;
     const keys = typeof CHART_CHANNELS !== 'undefined' ? CHART_CHANNELS[chart.canvas.id] : null;
     if (!keys) return;
     keys.forEach((key, datasetIndex) => {
       const hz = CHANNEL_SOURCE_HZ[key] || 100;
-      // Inspect every real source update before reducing the draw series. The
-      // envelope reducer below then retains short peaks instead of skipping
-      // them with uniform interval sampling.
-      if (!indexCache.has(hz)) indexCache.set(hz, visibleSensorIndices(startTime, endTime, hz, true));
-      const indices = indexCache.get(hz);
-      const times = indices.map(index => globalData[index].time_sec);
       if (chart.data.datasets[datasetIndex]) {
         chart.data.datasets[datasetIndex].data = downsampleEnvelopePoints(
-          channelSeries(key, indices, times),
+          sliceVisiblePointSeries(fullVisibleChannelSeries(key, hz), startTime, endTime),
           MAX_VISIBLE_SENSOR_POINTS
         );
       }
@@ -6076,6 +6083,7 @@ function refreshVisibleSensorSeries(startTime, endTime, updateNow = true) {
 // 필터 설정이 바뀌었을 때 모든 차트의 데이터셋을 교체하고 즉시 다시 그립니다.
 function refreshChartsAfterFilter() {
   if (!globalData.length || !sampleIndices.length) return;
+  visibleChannelSeriesCache.clear();
 
   const pairs = [
     [chartSpeed, 'chart-ground-speed'],
