@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260824-7">
+  <link rel="stylesheet" href="style.css?v=20260824-8">
 </head>
 <body>
 
@@ -40,15 +40,20 @@
           <span class="brand-sub">Telemetry</span>
         </div>
         <!-- 탭 버튼 영역 -->
-        <nav class="tab-navigation">
-          <button id="tab-general" class="view-tab active">1: 종합 주행 분석</button>
-          <button id="tab-diagnostics" class="view-tab">2: 입력 및 서스펜션 분석</button>
-          <button id="tab-gps" class="view-tab">3: GPS + IMU 주행 분석</button>
-          <button id="tab-temperature" class="view-tab">4: 랩 구간 분석</button>
-          <button id="tab-cooling" class="view-tab">5: 냉각 및 온도 분석</button>
-          <button id="tab-realtime" class="view-tab">6: 실시간 텔레메트리</button>
-          <button id="tab-help" class="view-tab">7: 도움말</button>
-        </nav>
+        <div class="tab-nav-shell">
+          <button id="tab-nav-prev" class="tab-nav-arrow" type="button" aria-label="이전 페이지 탭">‹</button>
+          <nav class="tab-navigation" aria-label="분석 페이지">
+            <button id="tab-general" class="view-tab active">1: 종합 주행 분석</button>
+            <button id="tab-diagnostics" class="view-tab">2: 입력 및 서스펜션 분석</button>
+            <button id="tab-gps" class="view-tab">3: GPS + IMU 주행 분석</button>
+            <button id="tab-temperature" class="view-tab">4: 랩 구간 분석</button>
+            <button id="tab-comparison" class="view-tab">5: 드라이버·랩 비교</button>
+            <button id="tab-cooling" class="view-tab">6: 냉각 및 온도 분석</button>
+            <button id="tab-realtime" class="view-tab">7: 실시간 텔레메트리</button>
+            <button id="tab-help" class="view-tab">8: 도움말</button>
+          </nav>
+          <button id="tab-nav-next" class="tab-nav-arrow" type="button" aria-label="다음 페이지 탭">›</button>
+        </div>
       </div>
       
       <div class="header-right">
@@ -582,6 +587,46 @@
         </aside>
       </section>
 
+      <!-- [페이지 5] 여러 CSV / 드라이버 / 랩 거리축 비교 -->
+      <section id="page-comparison" class="comparison-page page-view">
+        <header class="comparison-toolbar">
+          <div>
+            <h2>드라이버·랩 비교</h2>
+            <p>여러 CSV의 랩을 공통 중심선 거리축으로 정렬해 제동·가속·조향 차이를 비교합니다.</p>
+          </div>
+          <div class="comparison-toolbar-actions">
+            <label for="comparison-files" class="comparison-file-button">＋ 비교 CSV 추가</label>
+            <input id="comparison-files" type="file" accept=".csv,.CSV" multiple hidden>
+            <button id="comparison-clear" type="button">전체 제거</button>
+          </div>
+        </header>
+        <div id="comparison-status" class="comparison-status">CSV를 추가한 뒤 비교할 랩을 2~4개 선택하세요.</div>
+        <div class="comparison-layout">
+          <aside class="comparison-sidebar">
+            <section class="comparison-panel">
+              <div class="comparison-panel-title"><strong>세션과 랩</strong><span id="comparison-count">0 / 4 선택</span></div>
+              <div id="comparison-sessions" class="comparison-sessions"><p class="comparison-empty">아직 추가된 세션이 없습니다.</p></div>
+            </section>
+            <section class="comparison-panel comparison-summary-panel">
+              <strong>비교 요약</strong>
+              <div id="comparison-summary" class="comparison-summary"><p class="comparison-empty">두 개 이상의 랩을 선택하면 차이를 계산합니다.</p></div>
+            </section>
+          </aside>
+          <main class="comparison-main">
+            <section class="comparison-chart-stack">
+              <article><header><strong>속도</strong><output id="comparison-speed-value">-- km/h</output></header><canvas id="comparison-speed-chart"></canvas></article>
+              <article><header><strong>TPS / 브레이크</strong><output id="comparison-pedal-value">-- %</output></header><canvas id="comparison-pedal-chart"></canvas></article>
+              <article><header><strong>조향각 / Yaw rate</strong><output id="comparison-steering-value">--</output></header><canvas id="comparison-steering-chart"></canvas></article>
+              <article><header><strong>기준 랩 대비 누적 시간</strong><output id="comparison-delta-value">-- s</output></header><canvas id="comparison-delta-chart"></canvas></article>
+            </section>
+            <section class="comparison-bottom-grid">
+              <article class="comparison-track-card"><header><strong>주행 라인</strong><span>선택 랩 실 GPS</span></header><canvas id="comparison-track-map"></canvas></article>
+              <article class="comparison-sector-card"><header><strong>체크포인트 구간 비교</strong><span>거리축 기준</span></header><div id="comparison-sector-table" class="comparison-sector-table"><p class="comparison-empty">선택한 랩의 구간 기록이 여기에 표시됩니다.</p></div></article>
+            </section>
+          </main>
+        </div>
+      </section>
+
       <!-- [페이지 5] 냉각 및 온도 분석 -->
       <section id="page-cooling" class="temperature-panel page-view">
         <div class="temperature-summary-grid">
@@ -702,8 +747,9 @@
             <a href="#help-page3"><span>3</span>GPS·IMU·랩</a>
             <a href="#help-video"><span>▶</span>영상 동기화</a>
             <a href="#help-page4"><span>4</span>랩 구간 분석</a>
-            <a href="#help-page5"><span>5</span>냉각·온도</a>
-            <a href="#help-page6"><span>6</span>실시간 텔레메트리</a>
+            <a href="#help-comparison"><span>5</span>드라이버·랩 비교</a>
+            <a href="#help-page5"><span>6</span>냉각·온도</a>
+            <a href="#help-page6"><span>7</span>실시간 텔레메트리</a>
             <a href="#help-trouble"><span>!</span>문제 해결</a>
           </nav>
 
@@ -808,13 +854,22 @@
               </div>
             </section>
 
+            <section class="help-section" id="help-comparison">
+              <div class="help-section-title"><span>5</span><div><h2>드라이버·랩 비교</h2><p>서로 다른 CSV의 랩을 같은 트랙 거리에서 직접 비교합니다.</p></div><button type="button" data-help-tab="comparison">5페이지 열기</button></div>
+              <div class="help-grid two">
+                <article class="help-card"><h3>CSV와 랩 선택</h3><ol><li><b>비교 CSV 추가</b>로 한 개 이상의 세션 파일을 선택합니다.</li><li>파일별 드라이버 이름을 확인하거나 수정합니다.</li><li>비교할 랩을 2~4개 선택합니다.</li></ol></article>
+                <article class="help-card"><h3>비교 결과</h3><ul><li>속도, TPS·브레이크, 조향·Yaw, 누적 시간차를 공통 거리축으로 표시합니다.</li><li>주행선은 가공하지 않은 각 랩의 실제 GPS 경로입니다.</li><li>체크포인트 표는 구간 기록·최저속도·제동 시작·재가속 위치·탈출 속도를 보여줍니다.</li></ul></article>
+              </div>
+              <div class="help-callout warn"><strong>해석 기준</strong><span>첫 번째로 선택한 랩이 시간차 기준 랩입니다. 5Hz GPS 보간이므로 드라이버·랩 간 상대 비교에 사용하고 절대 위치를 10cm 정밀도로 해석하지 마십시오.</span></div>
+            </section>
+
             <section class="help-section" id="help-page5">
-              <div class="help-section-title"><span>5</span><div><h2>냉각 및 온도 분석</h2><p>냉각수·유온·흡기온·ECU 온도의 변화와 최대값을 한 화면에서 확인합니다.</p></div><button type="button" data-help-tab="cooling">5페이지 열기</button></div>
+              <div class="help-section-title"><span>6</span><div><h2>냉각 및 온도 분석</h2><p>냉각수·유온·흡기온·ECU 온도의 변화와 최대값을 한 화면에서 확인합니다.</p></div><button type="button" data-help-tab="cooling">6페이지 열기</button></div>
               <div class="help-grid two"><article class="help-card"><h3>온도 상태 카드</h3><p>현재 커서 시점의 네 가지 온도와 CSV 전체 구간의 최대 온도를 함께 표시합니다.</p></article><article class="help-card"><h3>온도 추세 차트</h3><p>냉각수·유온을 차량 속도와 비교하고, 흡기온·ECU 온도는 별도 차트에서 확인합니다. 하단 공통 타임라인과 확대·커서를 그대로 사용할 수 있습니다.</p></article></div>
             </section>
 
             <section class="help-section" id="help-page6">
-              <div class="help-section-title"><span>6</span><div><h2>실시간 텔레메트리</h2><p>차량 RF 중계 서버에서 들어오는 데이터를 실시간으로 표시합니다.</p></div><button type="button" data-help-tab="realtime">6페이지 열기</button></div>
+              <div class="help-section-title"><span>7</span><div><h2>실시간 텔레메트리</h2><p>차량 RF 중계 서버에서 들어오는 데이터를 실시간으로 표시합니다.</p></div><button type="button" data-help-tab="realtime">7페이지 열기</button></div>
               <div class="help-grid two"><article class="help-card"><h3>실제 연결</h3><ol><li>수신 서버 주소를 입력합니다.</li><li>전송 방식을 선택하거나 자동으로 둡니다.</li><li><b>연결</b>을 누르고 수신률·손실률·RSSI·SNR을 확인합니다.</li></ol></article><article class="help-card"><h3>화면 시험</h3><p>하드웨어나 중계 서버가 없을 때 <b>데모 모드</b>를 누르면 가상 데이터로 카드와 그래프 동작을 확인할 수 있습니다.</p></article></div>
             </section>
 
@@ -919,6 +974,7 @@
   <script src="steering.js?v=20260820-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
-  <script src="app.js?v=20260824-10"></script>
+  <script src="app.js?v=20260824-11"></script>
+  <script src="comparison.js?v=20260824-1"></script>
 </body>
 </html>

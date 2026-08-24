@@ -113,6 +113,8 @@ const pageDiagnostics = document.getElementById('page-diagnostics');
 const pageGps = document.getElementById('page-gps');
 const tabTemperature = document.getElementById('tab-temperature');
 const pageTemperature = document.getElementById('page-temperature');
+const tabComparison = document.getElementById('tab-comparison');
+const pageComparison = document.getElementById('page-comparison');
 const tabCooling = document.getElementById('tab-cooling');
 const pageCooling = document.getElementById('page-cooling');
 const tabRealtime = document.getElementById('tab-realtime');
@@ -120,6 +122,9 @@ const pageRealtime = document.getElementById('page-realtime');
 const tabHelp = document.getElementById('tab-help');
 const pageHelp = document.getElementById('page-help');
 const timelineNavigator = document.querySelector('.timeline-navigator');
+const tabNavigation = document.querySelector('.tab-navigation');
+const tabNavPrev = document.getElementById('tab-nav-prev');
+const tabNavNext = document.getElementById('tab-nav-next');
 
 // Temperature DOMs (Page 5)
 const tempCursorCoolant = document.getElementById('temp-cursor-coolant');
@@ -3602,6 +3607,9 @@ if (tabGps) {
 if (tabTemperature) {
   tabTemperature.addEventListener('click', () => switchTab('temperature'));
 }
+if (tabComparison) {
+  tabComparison.addEventListener('click', () => switchTab('comparison'));
+}
 if (tabCooling) {
   tabCooling.addEventListener('click', () => switchTab('cooling'));
 }
@@ -3611,6 +3619,12 @@ if (tabRealtime) {
 if (tabHelp) {
   tabHelp.addEventListener('click', () => switchTab('help'));
 }
+
+tabNavPrev?.addEventListener('click', () => tabNavigation?.scrollBy({ left: -260, behavior: 'smooth' }));
+tabNavNext?.addEventListener('click', () => tabNavigation?.scrollBy({ left: 260, behavior: 'smooth' }));
+document.querySelectorAll('.view-tab').forEach(button => button.addEventListener('click', () => {
+  requestAnimationFrame(() => button.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' }));
+}));
 
 pageHelp?.addEventListener('click', event => {
   if (event.target.closest('[data-distance-method-open]')) {
@@ -3626,7 +3640,7 @@ helpDistanceMethodDialog?.addEventListener('click', event => {
   if (event.target === helpDistanceMethodDialog) helpDistanceMethodDialog.close();
 });
 
-// Keyboard shortcuts: number row and numeric keypad 1–7 switch pages.
+// Keyboard shortcuts: number row and numeric keypad 1–8 switch pages.
 document.addEventListener('keydown', (event) => {
   const target = event.target;
   const isTyping = target instanceof HTMLInputElement ||
@@ -3645,12 +3659,14 @@ document.addEventListener('keydown', (event) => {
     Numpad3: 'gps',
     Digit4: 'temperature',
     Numpad4: 'temperature',
-    Digit5: 'cooling',
-    Numpad5: 'cooling',
-    Digit6: 'realtime',
-    Numpad6: 'realtime',
-    Digit7: 'help',
-    Numpad7: 'help'
+    Digit5: 'comparison',
+    Numpad5: 'comparison',
+    Digit6: 'cooling',
+    Numpad6: 'cooling',
+    Digit7: 'realtime',
+    Numpad7: 'realtime',
+    Digit8: 'help',
+    Numpad8: 'help'
   };
   const mode = pageByKey[event.code];
   if (!mode) return;
@@ -3668,6 +3684,7 @@ function switchTab(mode) {
   tabDiagnostics.classList.remove('active');
   if (tabGps) tabGps.classList.remove('active');
   if (tabTemperature) tabTemperature.classList.remove('active');
+  if (tabComparison) tabComparison.classList.remove('active');
   if (tabCooling) tabCooling.classList.remove('active');
   if (tabRealtime) tabRealtime.classList.remove('active');
   if (tabHelp) tabHelp.classList.remove('active');
@@ -3676,6 +3693,7 @@ function switchTab(mode) {
   pageDiagnostics.classList.remove('active');
   if (pageGps) pageGps.classList.remove('active');
   if (pageTemperature) pageTemperature.classList.remove('active');
+  if (pageComparison) pageComparison.classList.remove('active');
   if (pageCooling) pageCooling.classList.remove('active');
   if (pageRealtime) pageRealtime.classList.remove('active');
   if (pageHelp) pageHelp.classList.remove('active');
@@ -3684,7 +3702,14 @@ function switchTab(mode) {
 
   // 실시간과 도움말 페이지는 로그 재생용 타임라인이 필요 없으므로 숨깁니다.
   if (timelineNavigator) {
-    timelineNavigator.style.display = (mode === 'realtime' || mode === 'help') ? 'none' : '';
+    timelineNavigator.style.display = (mode === 'realtime' || mode === 'help' || mode === 'comparison') ? 'none' : '';
+  }
+
+  if (mode === 'comparison') {
+    tabComparison?.classList.add('active');
+    pageComparison?.classList.add('active');
+    setTimeout(() => window.renderDriverComparison?.(), 50);
+    return;
   }
 
   if (mode === 'help') {
@@ -4929,7 +4954,7 @@ function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverr
   }
 }
 
-function handleFile(file) {
+function handleFile(file, options = {}) {
   if (!file.name.endsWith('.csv') && !file.name.endsWith('.CSV')) {
     alert('CSV 형식의 로그 파일만 업로드할 수 있습니다.');
     return;
@@ -4956,12 +4981,22 @@ function handleFile(file) {
     complete: function (results) {
       globalData = results.data;
       initDataAndDashboard();
-      uploadFileToServer(file);
+      if (!options.skipUpload) uploadFileToServer(file);
+      if (typeof options.onComplete === 'function') {
+        options.onComplete({
+          file,
+          rows: globalData,
+          gpsPoints: gpsLapPoints,
+          laps: gpsLapResults,
+          checkpoints: gpsCheckpoints
+        });
+      }
     },
     error: function (err) {
       statusBadge.className = 'status-badge inactive';
       statusText.textContent = '파싱 오류!';
       alert('CSV 파일을 읽는 중 오류가 발생했습니다: ' + err.message);
+      if (typeof options.onError === 'function') options.onError(err);
     }
   });
 }
