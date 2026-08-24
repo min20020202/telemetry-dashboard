@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>GPS 공통 거리축 측정 방식 및 신뢰도</title>
+<style>
+  @page { size: A4; margin: 18mm; }
+  body { font-family: "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; color:#172033; line-height:1.58; font-size:10.5pt; }
+  h1 { color:#0f172a; font-size:24pt; margin:0 0 4pt; }
+  h2 { color:#075985; font-size:16pt; border-bottom:2px solid #0ea5e9; padding-bottom:4pt; margin-top:24pt; }
+  h3 { color:#1e3a5f; font-size:12.5pt; margin-top:16pt; }
+  p { margin:6pt 0; }
+  .subtitle { color:#64748b; font-size:11pt; margin-bottom:18pt; }
+  .summary { background:#eff6ff; border-left:5px solid #2563eb; padding:12pt 14pt; margin:14pt 0; }
+  .warning { background:#fff7ed; border-left:5px solid #f97316; padding:10pt 13pt; margin:12pt 0; }
+  .good { background:#ecfdf5; border-left:5px solid #10b981; padding:10pt 13pt; margin:12pt 0; }
+  table { width:100%; border-collapse:collapse; margin:10pt 0 16pt; font-size:9.5pt; }
+  th { background:#0f4c6e; color:white; text-align:left; }
+  th, td { border:1px solid #cbd5e1; padding:6pt 7pt; vertical-align:top; }
+  tr:nth-child(even) td { background:#f8fafc; }
+  code, .mono { font-family:"SFMono-Regular", Menlo, Consolas, monospace; }
+  .flow { text-align:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:10pt; font-family:"SFMono-Regular", Menlo, monospace; }
+  .small { color:#64748b; font-size:9pt; }
+  ul, ol { margin-top:5pt; }
+  li { margin:3pt 0; }
+  .page-break { page-break-before:always; }
+</style>
+</head>
+<body>
+<h1>GPS 공통 거리축 측정 방식 및 신뢰도</h1>
+<div class="subtitle">NSSUR Telemetry Dashboard 기술 설명서 · 기준일 2026-08-24</div>
+
+<div class="summary">
+  <b>핵심 결론</b><br>
+  현재 시스템은 12개 정상 랩의 GPS 경로를 합성한 공통 대표 경로에 각 랩의 위치를 투영하여, 모든 주행을 동일한 <b>0~862.556m 거리축</b>으로 비교한다. 브레이크·액셀·조향 시작 위치처럼 랩 및 드라이버 간 상대 차이를 분석하는 데 적합하다. 다만 GPS가 5Hz이므로 화면의 0.1m 표시는 보간 계산 단위이며 실제 위치 정확도가 10cm라는 의미는 아니다.
+</div>
+
+<h2>1. 현재 시스템 사양</h2>
+<table>
+  <tr><th>항목</th><th>현재 설정</th><th>의미</th></tr>
+  <tr><td>기준 CSV</td><td>김도현1.csv</td><td>공통 대표 경로 생성에 사용한 원본 세션</td></tr>
+  <tr><td>사용 랩</td><td>정상 완전 랩 12개</td><td>거리 중앙값에서 ±2% 안에 있는 랩</td></tr>
+  <tr><td>기준 경로 길이</td><td>862.556m</td><td>공통 대표 경로의 누적 선분 길이</td></tr>
+  <tr><td>기준 경로 간격</td><td>약 1m</td><td>총 864개 기준점(마지막 862.556m 포함)</td></tr>
+  <tr><td>GPS 갱신률</td><td>5Hz</td><td>약 0.2초마다 실제 GPS 위치 갱신</td></tr>
+  <tr><td>화면 거리 표시</td><td>0.1m</td><td>측정 정밀도가 아니라 선분·시간 보간 결과의 표시 단위</td></tr>
+  <tr><td>거리 방향</td><td>0m → 862.556m</td><td>피니시 라인부터 주행 방향으로 증가</td></tr>
+</table>
+
+<h2>2. 공통 대표 경로 생성 방식</h2>
+<div class="flow">유효 GPS 추출 → 피니시 라인 통과 계산 → 랩 분리 → 비정상 랩 제거 → 랩 진행률 정규화 → 12개 랩 위치 중앙값 → 1m 간격 재표본화</div>
+
+<h3>2.1 유효 GPS 추출</h3>
+<ul>
+  <li><span class="mono">gps_qual &gt; 0</span>인 위치만 사용한다.</li>
+  <li><span class="mono">gps_fix_update_count</span>가 바뀐 행만 사용하여, CSV의 반복 GPS 행을 제거한다.</li>
+  <li>위도·경도, GPS 속도, CSV 시간값을 함께 저장한다.</li>
+</ul>
+
+<h3>2.2 피니시 라인과 랩 분리</h3>
+<p>연속된 GPS 두 점이 고정 피니시 라인의 서로 반대편에 위치하면 통과로 판단한다. 통과 시각과 위치는 두 GPS 점 사이의 교차 비율로 보간한다. 반대 방향 통과와 20초 이내 중복 통과는 제외한다.</p>
+
+<h3>2.3 정상 랩 선택</h3>
+<p>각 랩의 GPS 점 사이 거리를 Haversine 공식으로 합산한다. 전체 랩 거리 중앙값과 비교하여 ±2% 범위 밖의 랩은 중심선 생성에서 제외한다. 피트 랩, 불완전 랩, GPS 이상 랩이 대표 경로를 왜곡하는 것을 줄이기 위한 처리다.</p>
+
+<h3>2.4 12개 랩 합성</h3>
+<p>랩타임이 서로 다르므로 같은 시각이 아니라 각 랩의 누적 진행률을 맞춘다. 각 랩을 0~100%로 정규화하고 약 1m마다 각 랩의 위치를 보간한 뒤, 동일 진행률에서 12개 위도의 중앙값과 경도의 중앙값을 대표 위치로 채택한다.</p>
+<div class="warning"><b>용어 주의:</b> 현재의 “중심선”은 트랙 양쪽 경계의 기하학적 중앙이 아니다. 12개 정상 랩의 <b>중앙 주행 경로 또는 대표 레이싱 라인</b>이다.</div>
+
+<h3>2.5 1m 기준점 생성</h3>
+<p>합성 경로의 선분 길이를 다시 누적한 뒤 0m, 1m, 2m … 862m, 862.556m 위치를 생성한다. 각 기준점에는 위도, 경도, 피니시 라인부터의 누적거리가 저장된다.</p>
+
+<h2>3. 각 랩을 공통 거리축에 맞추는 방법</h2>
+<h3>3.1 가장 가까운 점이 아니라 선분에 투영</h3>
+<p>차량 GPS 위치를 가장 가까운 1m 기준점으로 반올림하지 않는다. 인접 기준점 A와 B가 만드는 선분에 GPS 위치 P를 수직 투영하고, 투영점 Q가 선분에서 차지하는 비율을 계산한다.</p>
+<div class="flow">A(200m) ───── Q(200.37m) ───── B(201m)<br>　　　　　　　　│<br>　　　　　　　　P(차량 GPS)</div>
+<p>Q가 A→B 선분의 37% 위치라면 결과는 200.37m다. 따라서 기준점이 1m 간격이어도 계산 결과는 연속적인 실수이며 1m 단위로 끊기지 않는다.</p>
+
+<h3>3.2 검색 범위 제한</h3>
+<p>트랙의 인접 구간으로 잘못 투영되는 것을 막기 위해 이전 투영 선분을 기준으로 뒤 약 5m, 앞 약 35m 범위만 검색한다. 첫 두 GPS 점은 출발점부터 앞 약 35m 범위에서 검색한다.</p>
+
+<h3>3.3 거리 역행 방지</h3>
+<p>GPS 노이즈가 다음 점을 이전 점보다 뒤쪽에 투영하더라도 거리값이 감소하지 않도록 다음 규칙을 적용한다.</p>
+<div class="flow">현재 거리 = max(이전 거리, 새 투영 거리)</div>
+<p>거리값의 순간적인 역행은 방지되지만, 노이즈 구간에서는 거리가 잠시 멈춘 후 다시 증가할 수 있다. 랩 시작은 0m, 종료는 862.556m로 고정한다.</p>
+
+<h2>4. GPS 점 사이의 시간-거리 보간</h2>
+<p>5Hz GPS의 각 실제 측정점을 중심선에 투영하면 시간-거리 기준점이 만들어진다.</p>
+<table>
+  <tr><th>GPS 시각</th><th>투영 거리</th><th>구분</th></tr>
+  <tr><td>12.000초</td><td>300.2m</td><td>실제 GPS 위치를 중심선에 투영</td></tr>
+  <tr><td>12.100초</td><td>303.4m</td><td>앞뒤 기준점 사이 선형보간</td></tr>
+  <tr><td>12.200초</td><td>306.6m</td><td>다음 실제 GPS 위치를 중심선에 투영</td></tr>
+</table>
+<p>중간 시각의 거리는 다음 식으로 계산한다.</p>
+<div class="flow">s(t) = s₁ + (s₂ − s₁) × (t − t₁) ÷ (t₂ − t₁)</div>
+<p>고주기 브레이크·액셀·조향 센서의 값 자체는 바꾸지 않는다. 각 센서 측정 시각만 위 시간-거리 대응표를 통해 거리로 변환한다.</p>
+
+<h2>5. “현재 거리”의 정확한 의미</h2>
+<div class="good"><b>예: 화면에 417.3m가 표시된 경우</b><br>현재 재생 시각에 해당하는 차량 위치를 공통 대표 경로에 투영했을 때, 피니시 라인부터 대표 경로를 따라 약 417.3m 진행한 위치라는 뜻이다.</div>
+<p>이 값은 다음과 다르다.</p>
+<ul>
+  <li>차량이 실제 타이어 궤적으로 이동한 누적거리</li>
+  <li>트랙 경계의 정확한 기하학적 중심을 따라 측량한 거리</li>
+  <li>10cm 정확도의 절대 위치 측정값</li>
+</ul>
+<p>운전자가 안쪽 또는 바깥쪽 라인을 달려 실제 이동거리가 달라도, 트랙상의 같은 진행 위치라면 동일한 공통 거리 근처로 정렬된다. 이것이 랩 및 드라이버 비교의 목적에 적합하다.</p>
+
+<div class="page-break"></div>
+<h2>6. 5Hz GPS의 공간 해상도</h2>
+<table>
+  <tr><th>차량 속도</th><th>0.2초 동안 이동거리</th><th>실제 GPS 점의 대략적인 공간 간격</th></tr>
+  <tr><td>20km/h</td><td>약 1.1m</td><td>저속 코너</td></tr>
+  <tr><td>40km/h</td><td>약 2.2m</td><td>일반 코너</td></tr>
+  <tr><td>60km/h</td><td>약 3.3m</td><td>중고속 구간</td></tr>
+  <tr><td>80km/h</td><td>약 4.4m</td><td>고속 구간</td></tr>
+  <tr><td>100km/h</td><td>약 5.6m</td><td>직선 고속 구간</td></tr>
+</table>
+<p>따라서 60km/h에서는 실제 GPS 측정점이 약 3.3m마다 존재하고, 그 사이의 0.1m 거리값은 시간 비율로 계산한 값이다.</p>
+
+<h2>7. 선형보간 오차</h2>
+<h3>7.1 가속·제동에 의한 이론적 오차</h3>
+<p>GPS 두 점 사이에서 속도가 변하지만 선형 위치로 보간할 때, 등가속도 조건의 최대 오차는 대략 다음과 같다.</p>
+<div class="flow">최대 오차 ≈ |가속도| × 측정주기² ÷ 8</div>
+<table>
+  <tr><th>종방향 가속도</th><th>5Hz(0.2초)에서 최대 선형보간 오차</th></tr>
+  <tr><td>0.3g</td><td>약 1.5cm</td></tr>
+  <tr><td>0.5g</td><td>약 2.5cm</td></tr>
+  <tr><td>1.0g</td><td>약 4.9cm</td></tr>
+  <tr><td>1.5g</td><td>약 7.4cm</td></tr>
+</table>
+<p>이는 양 끝 GPS 투영거리가 정확하고 시간축이 일치한다는 이상적인 조건의 보간 오차다. 실제 시스템에서는 GPS 위치 오차와 시간 동기화 오차가 더 큰 영향을 줄 수 있다.</p>
+
+<h3>7.2 코너에서의 추가 오차</h3>
+<ul>
+  <li>GPS 측정점 사이의 곡선 움직임을 단순한 진행거리 변화로 근사한다.</li>
+  <li>운전자별 주행 라인이 공통 대표 경로와 다르다.</li>
+  <li>서로 가까운 트랙 구간에서 잘못된 선분으로 투영될 가능성이 있다.</li>
+  <li>GPS 위치가 순간적으로 흔들리면 투영거리도 앞뒤로 흔들릴 수 있다.</li>
+</ul>
+
+<h2>8. 전체 오차 요인과 영향</h2>
+<table>
+  <tr><th>오차 요인</th><th>예상 영향</th><th>현재 대응</th></tr>
+  <tr><td>일반 GPS 절대 위치 오차</td><td>환경에 따라 약 1~수 m 수준 가능</td><td>12랩 중앙 경로, 순차 투영, 상대 비교 사용</td></tr>
+  <tr><td>5Hz 갱신 주기</td><td>속도에 따라 실제 GPS 점 간격 약 1~6m</td><td>시간-거리 선형보간</td></tr>
+  <tr><td>센서와 GPS 시간축 오차</td><td>0.1초 오차 시 60km/h에서 약 1.67m</td><td>동일 CSV 시간축 사용, 별도 지연 보정은 없음</td></tr>
+  <tr><td>코너 곡률</td><td>고속·급격한 코너에서 증가 가능</td><td>1m 대표 경로 선분 투영</td></tr>
+  <tr><td>주행 라인 차이</td><td>실제 궤적거리와 공통 진행거리 차이</td><td>공통 위치 비교라는 목적에 맞춰 중심선 투영</td></tr>
+  <tr><td>GPS 순간 이상값</td><td>거리 점프 또는 잠시 정지</td><td>검색 범위 제한, 거리 역행 방지</td></tr>
+  <tr><td>대표 경로 생성 오차</td><td>공통 위치 기준 자체의 편향</td><td>12랩 중앙값, ±2% 이상 랩 제외, 1m 합성</td></tr>
+</table>
+
+<h2>9. 신뢰도 판단 기준</h2>
+<table>
+  <tr><th>분석 항목</th><th>신뢰도</th><th>해석 방법</th></tr>
+  <tr><td>랩별 속도 곡선 비교</td><td>높음</td><td>같은 중심거리에서 반복되는 차이를 비교</td></tr>
+  <tr><td>코너 진입·최저·탈출 속도</td><td>높음</td><td>수 m 구간 또는 구간 평균으로 비교</td></tr>
+  <tr><td>브레이크 시작·해제 위치</td><td>중간~높음</td><td>약 1~2m 이상 반복되는 차이를 우선 신뢰</td></tr>
+  <tr><td>액셀 재개 위치</td><td>중간~높음</td><td>단일 샘플보다 지속적인 TPS 상승 구간 사용</td></tr>
+  <tr><td>조향 시작 위치</td><td>중간</td><td>조향 임계값과 지속시간을 함께 적용</td></tr>
+  <tr><td>20~50cm 수준의 위치 차이</td><td>낮음</td><td>일반 GPS 노이즈와 구분하기 어려움</td></tr>
+  <tr><td>차량의 절대 지면 위치</td><td>낮음</td><td>측량 또는 RTK GPS 용도로 사용 불가</td></tr>
+</table>
+
+<div class="warning"><b>권장 해석:</b> 한 번 나타난 0.5m 이하 차이를 단정하지 말고, 여러 랩에서 같은 방향으로 반복되는 1~2m 이상의 차이 또는 0.1초 이상의 차이를 중심으로 판단한다.</div>
+
+<h2>10. 브레이크·액셀·조향 비교 권장 규칙</h2>
+<ol>
+  <li><b>시작점 한 점보다 지속 조건을 사용한다.</b> 예: 브레이크 5% 이상이 0.1초 이상 유지된 최초 위치.</li>
+  <li><b>반복성을 확인한다.</b> 동일 운전자의 여러 랩에서 비슷한 위치가 나오는지 확인한다.</li>
+  <li><b>구간 단위로 본다.</b> 단일 0.1m 값보다 진입 20m, 코너 30m, 탈출 20m 같은 구간을 비교한다.</li>
+  <li><b>속도와 함께 판단한다.</b> 브레이크 위치만 보지 말고 진입속도, 최소속도, 해제 위치, 액셀 재개 위치를 함께 비교한다.</li>
+  <li><b>영상으로 검증한다.</b> 차이가 작거나 의심스러운 구간은 동기화된 GoPro 영상과 함께 확인한다.</li>
+</ol>
+
+<h2>11. 현재 방식의 장점과 한계</h2>
+<table>
+  <tr><th>장점</th><th>한계</th></tr>
+  <tr><td>모든 랩을 동일한 0~862.556m 축으로 정렬</td><td>물리적으로 측량한 트랙 중앙선이 아님</td></tr>
+  <tr><td>랩타임이 달라도 같은 코너 위치에서 비교 가능</td><td>GPS 5Hz 및 일반 GPS 위치 오차의 제약</td></tr>
+  <tr><td>운전자별 라인 차이가 있어도 진행 위치 비교 가능</td><td>실제 주행 궤적 누적거리와 다를 수 있음</td></tr>
+  <tr><td>1m 경로와 선분 투영으로 거리값이 연속적</td><td>0.1m 표시는 계산 단위이지 측정 정확도가 아님</td></tr>
+  <tr><td>12랩 중앙값으로 GPS 이상값 영향 감소</td><td>기준 세션의 레이싱 라인에 대표 경로가 편향될 수 있음</td></tr>
+</table>
+
+<h2>12. 향후 정확도 개선 권장안</h2>
+<ol>
+  <li><b>GPS 투영 + 고주기 속도 적분 융합:</b> GPS 기준점 사이를 휠 속도 또는 GPS 속도로 적분하고 다음 GPS 점에서 오차를 재보정한다.</li>
+  <li><b>휠 슬립 판별:</b> 제동 잠김 또는 가속 슬립이 발생한 바퀴를 거리 적분에서 제외한다.</li>
+  <li><b>시간 지연 보정:</b> GPS, 브레이크, 조향, IMU의 실제 지연을 시험해 채널별 시간 오프셋을 적용한다.</li>
+  <li><b>반복 랩 통계:</b> 시작 위치를 한 랩의 단일 값이 아니라 중앙값과 분산으로 표시한다.</li>
+  <li><b>고정밀 GNSS:</b> 절대 위치와 라인 차이를 10cm 수준으로 분석하려면 RTK 또는 고주기 듀얼밴드 GNSS를 사용한다.</li>
+</ol>
+
+<h2>13. 최종 사용 지침</h2>
+<div class="good">
+  <b>현재 방식은 다음 목적에 적합하다.</b>
+  <ul>
+    <li>랩 및 드라이버별 브레이크·액셀·조향 패턴 비교</li>
+    <li>코너 진입속도, 최저속도, 탈출속도 비교</li>
+    <li>수 m 수준의 반복적인 이벤트 위치 차이 분석</li>
+    <li>동일 트랙에서의 상대적인 성능 분석</li>
+  </ul>
+</div>
+<div class="warning">
+  <b>다음 용도로는 사용하지 않는다.</b>
+  <ul>
+    <li>10cm 단위의 실제 절대 위치 측량</li>
+    <li>한 번 측정된 수십 cm 차이로 운전자 우열 단정</li>
+    <li>트랙 경계와 차량 사이의 정확한 거리 측정</li>
+  </ul>
+</div>
+
+<p class="small">본 문서는 NSSUR Telemetry Dashboard의 2026-08-24 구현을 기준으로 작성되었다. 중심선 또는 투영 알고리즘이 변경되면 거리와 신뢰도 조건도 다시 검토해야 한다.</p>
+</body>
+</html>
