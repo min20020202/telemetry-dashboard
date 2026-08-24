@@ -2573,6 +2573,27 @@ function keepPage4CursorInView(targetTime, direction = 0) {
   refreshPage4VisibleRange(page4TimeFromAxis(start), page4TimeFromAxis(end));
 }
 
+// 재생 중에는 확대 배율을 유지한 채 표시 구간만 앞으로 넘깁니다. 비교 랩이
+// 여러 개면 같은 경과시간에서 가장 앞선 커서까지 화면 안에 남도록 합니다.
+function followPage4PlaybackCursors(targetTime) {
+  const viewStart = page4AxisValue(page4ViewStart), viewEnd = page4AxisValue(page4ViewEnd);
+  const rangeStart = page4AxisValue(page4RangeStart), rangeEnd = page4AxisValue(page4RangeEnd);
+  const span = viewEnd - viewStart;
+  if (!(span > 0) || !(rangeEnd - rangeStart > span + 0.001)) return;
+  const items = page4SelectedItems(), primary = items[0];
+  const values = primary ? items.map(item => {
+    const itemTime = page4ItemDisplayTime(item, primary, targetTime);
+    return page4ItemAxisValue(item, itemTime, primary);
+  }).filter(Number.isFinite) : [page4AxisValue(targetTime)];
+  if (!values.length) return;
+  const leading = Math.max(...values), trailing = Math.min(...values);
+  const margin = span * 0.12;
+  if (leading < viewEnd - margin && trailing > viewStart + margin) return;
+  let start = leading >= viewEnd - margin ? leading - span * 0.78 : trailing - span * 0.22;
+  start = Math.max(rangeStart, Math.min(rangeEnd - span, start));
+  refreshPage4VisibleRange(page4TimeFromAxis(start), page4TimeFromAxis(start + span));
+}
+
 function drawPage4Cursor(targetTime) {
   const items = page4SelectedItems();
   const primary = items[0];
@@ -2603,6 +2624,7 @@ function updatePage4PlaybackCursor(targetTime, synchronizedElapsed = NaN) {
   const rangeEnd = validRange ? page4RangeEnd : totalDurationSec;
   page4CursorTime = Math.max(rangeStart, Math.min(rangeEnd, Number(targetTime) || rangeStart));
   page4PlaybackElapsed = Number.isFinite(synchronizedElapsed) ? Math.max(0, synchronizedElapsed) : NaN;
+  if (page4PlaybackActive) followPage4PlaybackCursors(page4CursorTime);
   preciseCursorTimeSec = page4CursorTime;
   currentCursorIndex = findSampleIndexAtTime(page4CursorTime);
   if (p4PlayTimeline) p4PlayTimeline.value = String(page4CursorTime);
@@ -4988,6 +5010,29 @@ function updateGpsCursorAtTime(targetTime, playbackFrame = false) {
   }
 }
 
+function gpsFullPlaybackRange() {
+  if (gpsSelectedLapIndices.length === 1) {
+    const lap = gpsLapResults[gpsSelectedLapIndices[0]];
+    if (lap) return { min: lap.startTime, max: lap.endTime };
+  }
+  if (gpsSelectedLapIndices.length > 1) {
+    return { min: 0, max: Math.max(...gpsSelectedLapIndices.map(index => gpsLapResults[index]?.duration || 0)) };
+  }
+  return { min: 0, max: totalDurationSec };
+}
+
+function followGpsPlaybackCursor(targetTime, fullRange) {
+  if (gpsAxisMode === 'distance') return;
+  const viewMin = Number(scrollBar.min), viewMax = Number(scrollBar.max);
+  const span = viewMax - viewMin, fullSpan = fullRange.max - fullRange.min;
+  if (!(span > 0) || !(fullSpan > span + 0.01)) return;
+  const margin = span * 0.12;
+  if (targetTime > viewMin + margin && targetTime < viewMax - margin) return;
+  let min = targetTime >= viewMax - margin ? targetTime - span * 0.78 : targetTime - span * 0.22;
+  min = Math.max(fullRange.min, Math.min(fullRange.max - span, min));
+  syncGpsTimelineRange(min, min + span, targetTime);
+}
+
 function setGpsPlayback(shouldPlay) {
   const canPlay = shouldPlay && activeSampledData.length > 0 &&
     tabGps && tabGps.classList.contains('active');
@@ -5028,10 +5073,12 @@ function setGpsPlayback(shouldPlay) {
     minTime = 0;
     maxTime = longerVideoLapDuration;
   }
-  const playbackEndTime = selectedSingleLap ? Math.min(maxTime, selectedSingleLap.endTime) : maxTime;
+  const fullPlaybackRange = gpsFullPlaybackRange();
+  const playbackEndTime = fullPlaybackRange.max;
   gpsPlaybackCursorSec = Number(scrollBar.value);
   if (!Number.isFinite(gpsPlaybackCursorSec) || gpsPlaybackCursorSec >= playbackEndTime - 0.01) {
-    gpsPlaybackCursorSec = minTime;
+    gpsPlaybackCursorSec = fullPlaybackRange.min;
+    followGpsPlaybackCursor(gpsPlaybackCursorSec, fullPlaybackRange);
     updateGpsCursorAtTime(gpsPlaybackCursorSec);
   }
   syncGoProVideo(getGoProTargetTelemetryTime(gpsPlaybackCursorSec), true);
@@ -5065,9 +5112,11 @@ function setGpsPlayback(shouldPlay) {
     const rate = Number(gpsPlayRate ? gpsPlayRate.value : 1) || 1;
     gpsPlaybackCursorSec += (elapsedMs / 1000) * rate;
     if (gpsPlaybackCursorSec >= playbackEndTime) {
-      gpsPlaybackCursorSec = minTime;
-      updateGpsCursorAtTime(minTime, true);
+      gpsPlaybackCursorSec = fullPlaybackRange.min;
+      followGpsPlaybackCursor(gpsPlaybackCursorSec, fullPlaybackRange);
+      updateGpsCursorAtTime(gpsPlaybackCursorSec, true);
     } else {
+      followGpsPlaybackCursor(gpsPlaybackCursorSec, fullPlaybackRange);
       updateGpsCursorAtTime(gpsPlaybackCursorSec, true);
     }
     gpsPlaybackFrame = requestAnimationFrame(playbackStep);

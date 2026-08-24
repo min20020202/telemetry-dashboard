@@ -949,6 +949,18 @@
     if (ui.play) { ui.play.textContent = state.playing ? 'Ⅱ 일시정지' : '▶ 재생'; ui.play.disabled = !duration; }
     Object.values(state.charts).forEach(chart => chart.draw());
   }
+  function followPlaybackCursors(items) {
+    const distance = totalDistance();
+    const min = state.viewMin, max = state.viewMax ?? distance, span = max - min;
+    if (!(span > 0) || !(distance > span + .01) || !items.length) return;
+    const positions = items.map(item => cursorSampleForItem(item, items)?.x).filter(Number.isFinite);
+    if (!positions.length) return;
+    const leading = Math.max(...positions), trailing = Math.min(...positions), margin = span * .12;
+    if (leading < max - margin && trailing > min + margin) return;
+    let nextMin = leading >= max - margin ? leading - span * .78 : trailing - span * .22;
+    nextMin = Math.max(0, Math.min(distance - span, nextMin));
+    setChartViewRange(nextMin, nextMin + span);
+  }
   function setPlaying(active) {
     const items = selectedLaps(), duration = playbackDuration(items);
     if (!duration) active = false;
@@ -969,6 +981,7 @@
     if (state.playElapsed >= duration) { state.playElapsed = duration; setPlaying(false); return; }
     if (!state.playRenderStamp || timestamp - state.playRenderStamp >= 15) {
       state.playRenderStamp = timestamp;
+      followPlaybackCursors(items);
       syncPlaybackUi(items);
       renderMap(items);
     }
