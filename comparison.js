@@ -421,16 +421,19 @@
     const controls = `<div class="comparison-sector-controls"><button type="button" data-sector-toggle aria-pressed="${state.activeSector !== null}" class="comparison-sector-toggle ${state.activeSector !== null ? 'active' : ''}">구간 보기 ${state.activeSector !== null ? 'ON' : 'OFF'}</button>${bounds.slice(0, -1).map((_, index) => `<button type="button" data-sector="${index}" class="${state.activeSector === index ? 'active' : ''}">S${index + 1}</button>`).join('')}</div>`;
     ui.sector.innerHTML = `${controls}<table><thead><tr><th>구간</th>${cells.map(cell => `<th style="color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)} L${cell.item.lap.number}</th>`).join('')}</tr></thead><tbody>${bounds.slice(0, -1).map((start, sectorIndex) => {
       const end = bounds[sectorIndex + 1];
+      const durations = cells.map(cell => sectorDuration(cell.item, start, end));
+      const fastest = Math.min(...durations);
       return `<tr class="${state.activeSector === sectorIndex ? 'active' : ''}" data-sector-row="${sectorIndex}"><td><button type="button" data-sector="${sectorIndex}">S${sectorIndex + 1}</button><br><small>${start.toFixed(0)}–${end.toFixed(0)}m</small></td>${cells.map(cell => {
         const points = cell.data.filter(point => point.x >= start && point.x <= end);
         const first = points[0], last = points.at(-1);
-        const duration = (last?.elapsed || 0) - (first?.elapsed || 0);
+        const duration = durations[cell.index];
+        const isFastest = Number.isFinite(duration) && Math.abs(duration - fastest) < .0005;
         const minSpeed = Math.min(...points.map(point => point.speed));
         const brake = points.find(point => point.brake >= 5);
         const minIndex = points.findIndex(point => point.speed === minSpeed);
         const throttle = points.slice(Math.max(0, minIndex)).find(point => point.tps >= 20);
         const detail = `최저속도 ${minSpeed.toFixed(1)} km/h · 브레이크 ${brake ? `${brake.x.toFixed(0)}m` : '없음'} · 재가속 ${throttle ? `${throttle.x.toFixed(0)}m` : '없음'} · 탈출속도 ${(last?.speed || 0).toFixed(1)} km/h`;
-        return `<td title="${detail}"><b>${duration.toFixed(3)}s</b></td>`;
+        return `<td class="${isFastest ? 'sector-fastest' : ''}" title="${detail}"><b>${duration.toFixed(3)}s</b>${isFastest ? '<span class="sector-fastest-badge">★ FAST</span>' : ''}</td>`;
       }).join('')}</tr>`;
     }).join('')}</tbody></table>`;
   }

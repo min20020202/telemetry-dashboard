@@ -85,6 +85,8 @@
 .comparison-sector-table td:first-child button { padding:1px 5px; }
 .comparison-sector-controls button.active,.comparison-sector-table tr.active td:first-child button { border-color:var(--accent-orange); background:rgba(249,115,22,.12); color:var(--accent-orange); }
 .comparison-sector-table tr.active td { background:rgba(249,115,22,.08); }
+.comparison-sector-table td.sector-fastest { background:rgba(34,197,94,.13); box-shadow:inset 3px 0 0 #22c55e; color:#15803d; }
+.sector-fastest-badge { display:inline-block; margin-left:7px; padding:1px 4px; border-radius:4px; background:#22c55e; color:#fff; font:900 7px var(--font-mono); vertical-align:1px; }
 
 @media (max-width: 1450px) {
   .app-header { padding-inline: 10px; }
