@@ -8,7 +8,7 @@
     files: $('comparison-files'), clear: $('comparison-clear'), status: $('comparison-status'),
     count: $('comparison-count'), sessions: $('comparison-sessions'), summary: $('comparison-summary'),
     sector: $('comparison-sector-table'), map: $('comparison-track-map'),
-    play: $('comparison-play-toggle'), rate: $('comparison-play-rate'), slider: $('comparison-play-slider'), playTime: $('comparison-play-time')
+    play: $('comparison-play-toggle'), rate: $('comparison-play-rate'), slider: $('comparison-play-slider'), playTime: $('comparison-play-time'), playDistance: $('comparison-play-distance')
   };
 
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
@@ -198,28 +198,78 @@
     };
   }
 
+  function sampleAtElapsed(item, elapsed) {
+    const samples = sampleLap(item);
+    if (!samples.length) return null;
+    const target = Math.max(0, Math.min(item.lap.duration, elapsed));
+    let low = 0, high = samples.length - 1;
+    while (low < high) { const middle = (low + high) >> 1; if (samples[middle].elapsed < target) low = middle + 1; else high = middle; }
+    const right = samples[low], left = samples[Math.max(0, low - 1)];
+    const span = right.elapsed - left.elapsed;
+    const ratio = span ? Math.max(0, Math.min(1, (target - left.elapsed) / span)) : 0;
+    const mixed = { x: left.x + (right.x - left.x) * ratio, elapsed: target };
+    ['speed', 'tps', 'brake', 'steering', 'yaw'].forEach(key => { mixed[key] = left[key] + (right[key] - left[key]) * ratio; });
+    return mixed;
+  }
+
+  function seriesValueAt(data, x) {
+    if (!data?.length) return null;
+    let low = 0, high = data.length - 1;
+    while (low < high) { const middle = (low + high) >> 1; if (data[middle].x < x) low = middle + 1; else high = middle; }
+    const right = data[low], left = data[Math.max(0, low - 1)];
+    const span = right.x - left.x;
+    const ratio = span ? Math.max(0, Math.min(1, (x - left.x) / span)) : 0;
+    return left.y + (right.y - left.y) * ratio;
+  }
+
+  const comparisonCursorPlugin = {
+    id: 'comparisonPlaybackCursor',
+    afterDatasetsDraw(chart) {
+      const items = selectedLaps();
+      if (!items.length || !chart.chartArea) return;
+      const ctx = chart.ctx, positions = items.map(item => sampleAtElapsed(item, state.playElapsed));
+      ctx.save();
+      positions.forEach((sample, index) => {
+        if (!sample) return;
+        const x = chart.scales.x.getPixelForValue(sample.x);
+        if (x < chart.chartArea.left || x > chart.chartArea.right) return;
+        ctx.beginPath(); ctx.moveTo(x, chart.chartArea.top); ctx.lineTo(x, chart.chartArea.bottom);
+        ctx.strokeStyle = COLORS[index]; ctx.lineWidth = 1.5; ctx.globalAlpha = .78; ctx.stroke();
+        chart.data.datasets.forEach(dataset => {
+          if (dataset.comparisonIndex !== index) return;
+          const value = seriesValueAt(dataset.data, sample.x);
+          if (!Number.isFinite(value)) return;
+          const y = chart.scales.y.getPixelForValue(value);
+          ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fillStyle = COLORS[index]; ctx.globalAlpha = 1; ctx.fill();
+          ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+        });
+      });
+      ctx.restore();
+    }
+  };
+
   function rebuildChart(name, canvasId, datasets, title, extra = {}) {
     state.charts[name]?.destroy();
     const canvas = $(canvasId);
     if (!canvas) return;
     const options = chartOptions(title);
     Object.assign(options.scales.y, extra);
-    state.charts[name] = new Chart(canvas, { type: 'line', data: { datasets }, options });
+    state.charts[name] = new Chart(canvas, { type: 'line', data: { datasets }, options, plugins: [comparisonCursorPlugin] });
   }
 
-  function line(label, color, samples, key, dashed = false) {
-    return { label, data: samples.map(point => ({ x: point.x, y: point[key] })), borderColor: color, backgroundColor: color, borderWidth: 1.6, borderDash: dashed ? [5, 3] : [], pointRadius: 0, fill: false };
+  function line(label, color, samples, key, dashed = false, comparisonIndex = 0) {
+    return { label, comparisonIndex, data: samples.map(point => ({ x: point.x, y: point[key] })), borderColor: color, backgroundColor: color, borderWidth: 1.6, borderDash: dashed ? [5, 3] : [], pointRadius: 0, fill: false };
   }
 
   function renderCharts(items) {
     const sampled = items.map((item, index) => ({ item, color: COLORS[index], data: sampleLap(item), label: `${item.session.driver} · L${item.lap.number}` }));
-    rebuildChart('speed', 'comparison-speed-chart', sampled.map(s => line(s.label, s.color, s.data, 'speed')), 'km/h', { min: 0 });
-    rebuildChart('pedal', 'comparison-pedal-chart', sampled.flatMap(s => [line(`${s.label} TPS`, s.color, s.data, 'tps'), line(`${s.label} Brake`, s.color, s.data, 'brake', true)]), '%', { min: 0, max: 100 });
-    rebuildChart('steering', 'comparison-steering-chart', sampled.flatMap(s => [line(`${s.label} Steering`, s.color, s.data, 'steering'), line(`${s.label} Yaw`, s.color, s.data, 'yaw', true)]), '° / °/s');
+    rebuildChart('speed', 'comparison-speed-chart', sampled.map((s, i) => line(s.label, s.color, s.data, 'speed', false, i)), 'km/h', { min: 0 });
+    rebuildChart('pedal', 'comparison-pedal-chart', sampled.flatMap((s, i) => [line(`${s.label} TPS`, s.color, s.data, 'tps', false, i), line(`${s.label} Brake`, s.color, s.data, 'brake', true, i)]), '%', { min: 0, max: 100 });
+    rebuildChart('steering', 'comparison-steering-chart', sampled.flatMap((s, i) => [line(`${s.label} Steering`, s.color, s.data, 'steering', false, i), line(`${s.label} Yaw`, s.color, s.data, 'yaw', true, i)]), '° / °/s');
     const baseline = sampled[0]?.data || [];
     rebuildChart('delta', 'comparison-delta-chart', sampled.map(s => ({
       label: s.label, data: s.data.map((point, index) => ({ x: point.x, y: point.elapsed - (baseline[index]?.elapsed || 0) })),
-      borderColor: s.color, backgroundColor: s.color, borderWidth: 1.8, pointRadius: 0, fill: false
+      comparisonIndex: sampled.indexOf(s), borderColor: s.color, backgroundColor: s.color, borderWidth: 1.8, pointRadius: 0, fill: false
     })), 'Δ time [s]');
   }
 
@@ -310,7 +360,12 @@
     state.playElapsed = Math.max(0, Math.min(duration, state.playElapsed));
     if (ui.slider) { ui.slider.max = String(Math.max(.01, duration)); ui.slider.value = String(state.playElapsed); ui.slider.disabled = !duration; }
     if (ui.playTime) ui.playTime.textContent = `${state.playElapsed.toFixed(2)} s`;
+    if (ui.playDistance) ui.playDistance.innerHTML = items.length ? items.map((item, index) => {
+      const sample = sampleAtElapsed(item, state.playElapsed);
+      return `<span style="color:${COLORS[index]}">L${item.lap.number} ${(sample?.x || 0).toFixed(1)} m</span>`;
+    }).join('') : '-- m';
     if (ui.play) { ui.play.textContent = state.playing ? 'Ⅱ 일시정지' : '▶ 재생'; ui.play.disabled = !duration; }
+    Object.values(state.charts).forEach(chart => chart.draw());
   }
   function setPlaying(active) {
     const items = selectedLaps(), duration = playbackDuration(items);
