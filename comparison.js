@@ -37,6 +37,9 @@
     const span = Number(rows.at(-1)?.time_sec) - Number(rows[0]?.time_sec);
     const rate = span > 0 ? Math.max(1, Math.round((rows.length - 1) / span)) : 100;
     COMPARISON_IMU_FIELDS.forEach(([rawField, filteredField]) => {
+      // Page 4 and Page 5 share the same 5 Hz IMU fields. Reuse a field that
+      // the other page has already filtered instead of filtering the CSV twice.
+      if (Number.isFinite(Number(rows[0]?.[filteredField])) && Number.isFinite(Number(rows.at(-1)?.[filteredField]))) return;
       const raw = Float64Array.from(rows, row => Number(row[rawField]) || 0);
       const values = enabled && typeof fltButterworth === 'function' ? fltButterworth(raw, cutoff, rate, 2) : raw;
       rows.forEach((row, index) => { row[filteredField] = values[index]; });
@@ -102,6 +105,7 @@
 
   async function importFiles(files) {
     if (!files.length) return;
+    const importStartedAt = performance.now();
     switchTab('comparison');
     window.ensurePrimaryDashboardFile?.(files[0]);
     let failures = [];
@@ -112,8 +116,10 @@
     }
     if (typeof window.restorePrimaryDashboardFile === 'function') await window.restorePrimaryDashboardFile();
     renderSessions();
-    if (state.selected.size >= 1) render();
-    else setStatus(failures.length ? failures.join(' / ') : `${files.length}개 CSV 추가 완료 · 같은 파일 안에서도 비교할 랩을 선택할 수 있습니다.`, failures.length > 0);
+    if (state.selected.size >= 1) {
+      render();
+      if (!failures.length) setStatus(`${files.length}개 CSV 추가 완료 · ${((performance.now() - importStartedAt) / 1000).toFixed(1)}초`);
+    } else setStatus(failures.length ? failures.join(' / ') : `${files.length}개 CSV 추가 완료 · ${((performance.now() - importStartedAt) / 1000).toFixed(1)}초 · 같은 파일 안에서도 비교할 랩을 선택할 수 있습니다.`, failures.length > 0);
   }
 
   function renderSessions() {
@@ -918,7 +924,7 @@
       <small class="comparison-caption">${escapeHtml(referenceLabel)} 대비 ${escapeHtml(comparisonLabel)}</small>
       <span class="comparison-key-deltas">
         <em class="${timeDelta < 0 ? 'gain' : timeDelta > 0 ? 'loss' : ''}">기록 ${signed(timeDelta, 3, 's')}</em>
-        <em class="${distanceDelta < 0 ? 'gain' : distanceDelta > 0 ? 'loss' : ''}">거리 ${signed(distanceDelta, 1, 'm')}</em>
+        <em class="${distanceDelta < 0 ? 'gain' : distanceDelta > 0 ? 'loss' : ''}">거리 ${signed(distanceDelta, 2, 'm')}</em>
         <em class="${speedDelta > 0 ? 'gain' : speedDelta < 0 ? 'loss' : ''}">평균속도 ${signed(speedDelta, 1)}</em>
       </span>
       <small class="comparison-pedal-delta brake">브레이크 시간 ${signed(analysis.brake.activeTime - referenceAnalysis.brake.activeTime, 2, 's')} · 제동량 ${signed(analysis.brake.dose - referenceAnalysis.brake.dose, 2)} · MAX ${signed(analysis.brake.maximum - referenceAnalysis.brake.maximum, 0, '%')}</small>
@@ -931,7 +937,7 @@
     return `<section class="sector-detail-lap" style="--lap-color:${color}">
       <h3><i></i><span>${escapeHtml(cell.item.session.driver)}&nbsp;L${cell.item.lap.number}</span><strong>${analysis.duration.toFixed(3)}s</strong></h3>
       <dl>
-        <div><dt>실제 주행거리</dt><dd>${metrics?.actualDistance.toFixed(1) ?? '—'}m <small>중심선 대비 ${metrics ? signed(metrics.extraDistance, 1, 'm') : '—'}</small></dd></div>
+        <div><dt>실제 주행거리</dt><dd>${metrics?.actualDistance.toFixed(2) ?? '—'}m <small>중심선 대비 ${metrics ? signed(metrics.extraDistance, 2, 'm') : '—'}</small></dd></div>
         <div><dt>속도</dt><dd>평균 ${metrics?.averageSpeed.toFixed(1) ?? '—'} · 최저 ${analysis.minSpeed.toFixed(1)} · 탈출 ${analysis.exitSpeed.toFixed(1)} km/h</dd></div>
         <div><dt>브레이크</dt><dd>사용 ${analysis.brake.activeTime.toFixed(2)}s · 제동량 ${analysis.brake.dose.toFixed(2)} · MAX ${analysis.brake.maximum.toFixed(0)}%</dd></div>
         <div><dt>가속</dt><dd>평균 ${analysis.throttle.average.toFixed(0)}% · 풀가속 ${analysis.fullThrottle.activeTime.toFixed(2)}s · 입력량 ${analysis.throttle.dose.toFixed(2)}</dd></div>

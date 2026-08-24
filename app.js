@@ -327,6 +327,7 @@ function packedCanFrameHasData(bytes) {
 // Keep the chart code compatible with both the legacy adc/wheel column names
 // and the descriptive Telemetry_072 column names.
 function normalizeTelemetryRow(row) {
+  if (row?.__nssurPrepared) return row;
   const mappings = {
     // Datalogger board connector / MCU scan order. ADC2 and ADC3 are unused:
     // ADC1=PC0 front brake, ADC4=PC3 FR, ADC5=PC4 steering, ADC6=PC5 FL.
@@ -1832,6 +1833,8 @@ function applyPage4FiveHzFilter(rows) {
   const span = lastTime - firstTime;
   const rate = span > 0 ? Math.max(1, (rows.length - 1) / span) : 100;
   PAGE4_FILTER_FIELDS.forEach(([field, getter]) => {
+    // Comparison page may already have produced the same 5 Hz channel.
+    if (Number.isFinite(Number(rows[0]?.[field])) && Number.isFinite(Number(rows.at(-1)?.[field]))) return;
     const raw = Float64Array.from(rows, getter);
     const filtered = fltButterworth(raw, 5, rate, 2);
     rows.forEach((row, index) => { row[field] = filtered[index]; });
@@ -5789,6 +5792,7 @@ function initDataAndDashboard() {
   let latestEmuAdc6Raw = 0;
 
   globalData.forEach(row => {
+    if (row.__nssurPrepared) return;
     // timestamp_us in the new CSV is already in seconds, so we don't divide by 1,000,000!
     row.time_sec = (row.timestamp_us || 0) - startUs;
 
@@ -5902,6 +5906,10 @@ function initDataAndDashboard() {
     // Rear-right wheel speed comes from Wheel Speed 3 on the datalogger.
     row.rr_speed_kmh = (parseHexOrInt(row.rr_wheel_speed_centi_kmh ??
       row.wheel3_speed_centi_kmh) || 0) / 100.0;
+    // Comparison imports temporarily switch the dashboard dataset. Mark fully
+    // decoded rows so restoring an already processed session does not decode
+    // every CAN frame a second time.
+    row.__nssurPrepared = true;
   });
 
   let lastValidRow = globalData[globalData.length - 1];
