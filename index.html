@@ -306,7 +306,7 @@
               <button id="gps-checkpoint-clear" type="button" disabled>🔒 고정선 초기화</button>
               <button id="gps-shared-settings-copy" type="button" disabled>공통 설정 복사</button>
               <button id="gps-sector-toggle" type="button" disabled>구간 비교</button>
-              <button id="gps-handling-toggle" type="button" disabled>핸들링 분석</button>
+              <button id="gps-handling-toggle" type="button" aria-pressed="false" disabled>핸들링 분석</button>
               <div id="gps-axis-mode" class="gps-axis-mode" aria-label="GPS 그래프 가로축"><button type="button" class="active" data-mode="time">시간 s</button><button type="button" data-mode="distance">거리 m</button></div>
               <label>최소 랩
                 <input id="gps-lap-min-time" type="number" min="5" max="600" step="1" value="20">
@@ -490,7 +490,7 @@
               <span class="over">오버스티어 <strong id="gps-oversteer-count">0</strong></span>
             </div>
             <div id="gps-handling-events" class="gps-handling-events"></div>
-            <p class="gps-handling-note">타이어 슬립각 센서가 없는 추정 결과입니다. 신뢰도와 지속시간을 함께 확인하십시오.</p>
+            <p class="gps-handling-note">타이어 슬립각 센서가 없는 추정 결과입니다. 추정 점수와 지속시간을 함께 확인하십시오.</p>
           </div>
 
           <div class="motec-chart-card imu-g-card">
@@ -832,6 +832,6 @@
   <script src="steering.js?v=20260820-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
-  <script src="app.js?v=20260824-3"></script>
+  <script src="app.js?v=20260824-4"></script>
 </body>
 </html>

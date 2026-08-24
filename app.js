@@ -359,7 +359,8 @@ let gpsSelectedLapIndex = -1;
 let gpsSelectedLapIndices = [];
 let gpsCompareMarkers = [];
 let gpsHandlingEventsData = [];
-let gpsHandlingVisible = true;
+let gpsHandlingVisible = false;
+let gpsHandlingAnalysisReady = false;
 let gpsHandlingSteeringRatio = 12;
 let gpsDetailCharts = [];
 let gpsDetailSourceData = null;
@@ -1450,6 +1451,7 @@ function gpsPositionAtTelemetryTime(time) {
 
 function analyzeGpsHandlingBalance() {
   gpsHandlingEventsData = [];
+  gpsHandlingAnalysisReady = false;
   gpsHandlingLayer?.clearLayers();
   if (!gpsLapResults.length || !globalData.length) {
     if (gpsHandlingCard) gpsHandlingCard.hidden = true;
@@ -1463,6 +1465,8 @@ function analyzeGpsHandlingBalance() {
   let signSum = 0;
   for (let index = 0; index < globalData.length; index += 5) {
     const row = globalData[index];
+    const time = Number(row.time_sec);
+    if (!gpsLapResults.some(lap => time >= lap.startTime && time <= lap.endTime)) continue;
     const speed = Number(row.gps_speed_kmh) / 3.6;
     const steering = getCalibratedSteering(row.steering_raw);
     const yaw = Number(row.imu_gyro_z_dps);
@@ -1480,6 +1484,7 @@ function analyzeGpsHandlingBalance() {
   let smoothLat = 0;
   globalData.forEach((row, index) => {
     const time = Number(row.time_sec);
+    if (!gpsLapResults.some(lap => time >= lap.startTime && time <= lap.endTime)) return;
     const speedKmh = Number(row.gps_speed_kmh) || 0;
     const speed = speedKmh / 3.6;
     const steering = getCalibratedSteering(row.steering_raw);
@@ -1522,6 +1527,7 @@ function analyzeGpsHandlingBalance() {
     event.lapIndex = gpsLapResults.findIndex(lap => event.peak.time >= lap.startTime && event.peak.time <= lap.endTime);
     event.position = gpsPositionAtTelemetryTime(event.peak.time);
   });
+  gpsHandlingAnalysisReady = true;
   renderGpsHandlingAnalysis(steeringRatio);
 }
 
@@ -1534,15 +1540,16 @@ function renderGpsHandlingAnalysis(steeringRatio) {
   if (gpsUndersteerCount) gpsUndersteerCount.textContent = String(under.length);
   if (gpsOversteerCount) gpsOversteerCount.textContent = String(over.length);
   if (gpsHandlingCalibration) gpsHandlingCalibration.textContent = `자동 조향비 ${gpsHandlingSteeringRatio.toFixed(1)}:1`;
-  if (gpsHandlingCard) gpsHandlingCard.hidden = false;
+  if (gpsHandlingCard) gpsHandlingCard.hidden = !gpsHandlingVisible;
   if (gpsHandlingToggle) gpsHandlingToggle.disabled = false;
   gpsHandlingToggle?.classList.toggle('active', gpsHandlingVisible);
+  gpsHandlingToggle?.setAttribute('aria-pressed', String(gpsHandlingVisible));
   const ordered = [...visibleEvents].sort((a, b) => b.maxSeverity - a.maxSeverity).slice(0, 20);
   if (gpsHandlingEvents) gpsHandlingEvents.innerHTML = ordered.length ? ordered.map(event => {
     const lap = event.lapIndex >= 0 ? `LAP ${gpsLapResults[event.lapIndex].number}` : '랩 외';
     const label = event.type === 'under' ? '언더스티어' : '오버스티어';
     const phase = event.peak.brake >= 5 ? '제동 중' : event.peak.throttle >= 35 ? '가속 중' : '코너 중간';
-    return `<button type="button" class="${event.type}" data-handling-time="${event.peak.time.toFixed(3)}"><b>${label}</b><span>${lap} · ${event.peak.speedKmh.toFixed(1)} km/h</span><small>${phase} · ${event.duration.toFixed(2)}초 · 신뢰도 ${event.confidence}%</small></button>`;
+    return `<button type="button" class="${event.type}" data-handling-time="${event.peak.time.toFixed(3)}"><b>${label}</b><span>${lap} · ${event.peak.speedKmh.toFixed(1)} km/h</span><small>${phase} · ${event.duration.toFixed(2)}초 · 추정 점수 ${event.confidence}%</small></button>`;
   }).join('') : '<div class="gps-handling-empty">조건을 충족한 오버/언더스티어 구간이 없습니다.</div>';
   drawGpsHandlingEvents();
 }
@@ -2727,7 +2734,7 @@ function selectGpsLapView(index) {
   }
   if (gpsCursorMarker) gpsCursorMarker.setZIndexOffset(10000);
   if (gpsCheckpoints.length) renderGpsSectorComparison();
-  renderGpsHandlingAnalysis(gpsHandlingSteeringRatio);
+  if (gpsHandlingVisible && gpsHandlingAnalysisReady) renderGpsHandlingAnalysis(gpsHandlingSteeringRatio);
 }
 
 function renderGpsLapResults(crossings, laps) {
@@ -2766,7 +2773,16 @@ function renderGpsLapResults(crossings, laps) {
     });
   }
   drawGpsLapRoutes(laps);
-  analyzeGpsHandlingBalance();
+  gpsHandlingVisible = false;
+  gpsHandlingAnalysisReady = false;
+  gpsHandlingEventsData = [];
+  gpsHandlingLayer?.clearLayers();
+  if (gpsHandlingCard) gpsHandlingCard.hidden = true;
+  if (gpsHandlingToggle) {
+    gpsHandlingToggle.disabled = !laps.length;
+    gpsHandlingToggle.classList.remove('active');
+    gpsHandlingToggle.setAttribute('aria-pressed', 'false');
+  }
   updateGpsCursorLapColor(Number(scrollBar?.value));
   if (tabGps?.classList.contains('active') && activeSampledData.length) {
     syncGpsTimelineRange(currentStartSec, currentEndSec, scrollBar.value);
@@ -3051,9 +3067,15 @@ function clearGpsLapAnalysis(removeSaved = false, clearCPs = false) {
   gpsLapResults = [];
   refreshPage4Selectors();
   gpsHandlingEventsData = [];
+  gpsHandlingVisible = false;
+  gpsHandlingAnalysisReady = false;
   gpsHandlingLayer?.clearLayers();
   if (gpsHandlingCard) gpsHandlingCard.hidden = true;
-  if (gpsHandlingToggle) gpsHandlingToggle.disabled = true;
+  if (gpsHandlingToggle) {
+    gpsHandlingToggle.disabled = true;
+    gpsHandlingToggle.classList.remove('active');
+    gpsHandlingToggle.setAttribute('aria-pressed', 'false');
+  }
   gpsSelectedLapIndex = -1;
   gpsSelectedLapIndices = [];
   gpsLapRouteLines = [];
@@ -3244,7 +3266,14 @@ gpsSectorOverlayClose?.addEventListener('click', closeGpsSectorOverlay);
 gpsHandlingToggle?.addEventListener('click', () => {
   gpsHandlingVisible = !gpsHandlingVisible;
   gpsHandlingToggle.classList.toggle('active', gpsHandlingVisible);
-  drawGpsHandlingEvents();
+  gpsHandlingToggle.setAttribute('aria-pressed', String(gpsHandlingVisible));
+  if (gpsHandlingVisible && !gpsHandlingAnalysisReady) {
+    analyzeGpsHandlingBalance();
+    return;
+  }
+  if (gpsHandlingCard) gpsHandlingCard.hidden = !gpsHandlingVisible;
+  if (gpsHandlingVisible) renderGpsHandlingAnalysis(gpsHandlingSteeringRatio);
+  else drawGpsHandlingEvents();
 });
 gpsHandlingEvents?.addEventListener('click', event => {
   const button = event.target.closest('[data-handling-time]');
