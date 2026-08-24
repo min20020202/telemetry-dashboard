@@ -2809,6 +2809,7 @@ function updatePage4ComparisonHeaders(primaryTime = page4CursorTime) {
     const output = document.getElementById(id);
     if (!output) return;
     output.classList.add('p4-live-values');
+    output.classList.toggle('p4-multi-values', values.length > 1);
     output.innerHTML = values.map(value => `<span style="--lap-value-color:${value.color}"><i>${escapePage4SessionHtml(value.item.session.driver)} L${value.item.lap.number}</i>${value[key]}</span>`).join('');
   };
   render('p4-speed', 'speed');
