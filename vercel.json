@@ -5,6 +5,7 @@
     { "src": "*", "use": "@vercel/static" }
   ],
   "routes": [
+    { "src": "/api/youtube-metadata", "dest": "/api/youtube-metadata.js" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
