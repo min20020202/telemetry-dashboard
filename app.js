@@ -1649,15 +1649,36 @@ function drawGpsDistanceReference() {
   gpsDistanceReferenceLayer?.clearLayers();
   if (gpsAxisMode !== 'distance' || !gpsDistanceReferenceLayer) return;
   const points = page4ReferencePoints();
-  for (let distance = 0; distance <= 800; distance += 100) {
-    const point = points.reduce((best, item) => Math.abs(item[2] - distance) < Math.abs(best[2] - distance) ? item : best, points[0]);
-    if (!point) continue;
+  const total = Number(window.NSSUR_TRACK_REFERENCE?.totalDistanceMeters) || points.at(-1)?.[2] || 0;
+  const markers = [];
+  for (let distance = 0; distance <= 800; distance += 100) markers.push(distance);
+  markers.push(total);
+  markers.forEach(distance => {
+    let pointIndex = 0;
+    points.forEach((item, index) => {
+      if (Math.abs(item[2] - distance) < Math.abs(points[pointIndex][2] - distance)) pointIndex = index;
+    });
+    const point = points[pointIndex];
+    if (!point) return;
+    const previous = points[Math.max(0, pointIndex - 1)];
+    const next = points[Math.min(points.length - 1, pointIndex + 1)];
+    const meanLat = point[0] * Math.PI / 180;
+    const dx = (next[1] - previous[1]) * 111320 * Math.cos(meanLat);
+    const dy = (next[0] - previous[0]) * 111320;
+    const length = Math.hypot(dx, dy) || 1;
+    const halfWidth = 5;
+    const offsetX = -dy / length * halfWidth;
+    const offsetY = dx / length * halfWidth;
+    const endpointA = [point[0] + offsetY / 111320, point[1] + offsetX / (111320 * Math.cos(meanLat))];
+    const endpointB = [point[0] - offsetY / 111320, point[1] - offsetX / (111320 * Math.cos(meanLat))];
+    L.polyline([endpointA, endpointB], { color: '#22d3ee', weight: 3, opacity: 0.95, interactive: false }).addTo(gpsDistanceReferenceLayer);
+    L.circleMarker([point[0], point[1]], { radius: 4, color: '#fff', weight: 2, fillColor: '#f97316', fillOpacity: 1, interactive: false }).addTo(gpsDistanceReferenceLayer);
     L.marker([point[0], point[1]], {
       interactive: false,
       zIndexOffset: 8000,
-      icon: L.divIcon({ className: 'gps-distance-marker-wrap', html: `<span class="gps-distance-marker">${distance}m</span>`, iconSize: [36, 18], iconAnchor: [18, 9] })
+      icon: L.divIcon({ className: 'gps-distance-marker-wrap', html: `<span class="gps-distance-marker">${distance === total ? `${total.toFixed(1)}m` : `${distance}m`}</span>`, iconSize: [44, 18], iconAnchor: [22, 25] })
     }).addTo(gpsDistanceReferenceLayer);
-  }
+  });
 }
 
 function updateGpsDistancePosition(targetTime) {
