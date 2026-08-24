@@ -360,6 +360,8 @@
     boundChartCanvases.add(canvas);
     let dragStartPx = null;
     let suppressClick = false;
+    let zoomFrame = 0;
+    let pendingZoom = null;
     const chartAndPoint = event => {
       const chart = Object.values(state.charts).find(candidate => candidate.canvas === canvas);
       if (!chart?.chartArea) return null;
@@ -374,11 +376,23 @@
       event.preventDefault();
       const { chart, x } = hit;
       const anchor = chart.scales.x.getValueForPixel(x);
-      const currentMin = chart.scales.x.min, currentMax = chart.scales.x.max;
-      const factor = event.deltaY > 0 ? 1.22 : .82;
-      const nextWidth = Math.max(2, Math.min(totalDistance(), (currentMax - currentMin) * factor));
-      const ratio = Math.max(0, Math.min(1, (anchor - currentMin) / Math.max(.001, currentMax - currentMin)));
-      setChartViewRange(anchor - nextWidth * ratio, anchor + nextWidth * (1 - ratio));
+      pendingZoom = { anchor, zoomOut: event.deltaY > 0 };
+      if (zoomFrame) return;
+      zoomFrame = requestAnimationFrame(() => {
+        zoomFrame = 0;
+        if (!pendingZoom) return;
+        const request = pendingZoom;
+        pendingZoom = null;
+        const activeChart = Object.values(state.charts).find(candidate => candidate.canvas === canvas);
+        if (!activeChart) return;
+        const currentMin = activeChart.scales.x.min, currentMax = activeChart.scales.x.max;
+        // Page 4 and the main charts use a restrained zoom step. Keep the
+        // comparison page at the same pace instead of its previous 22% jump.
+        const factor = request.zoomOut ? 1.08 : .92;
+        const nextWidth = Math.max(2, Math.min(totalDistance(), (currentMax - currentMin) * factor));
+        const ratio = Math.max(0, Math.min(1, (request.anchor - currentMin) / Math.max(.001, currentMax - currentMin)));
+        setChartViewRange(request.anchor - nextWidth * ratio, request.anchor + nextWidth * (1 - ratio));
+      });
     }, { passive: false });
     canvas.addEventListener('pointerdown', event => {
       const hit = chartAndPoint(event);
