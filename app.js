@@ -2337,10 +2337,30 @@ function applyPage4Selection() {
   drawPage4GTrace();
 }
 
-function drawPage4GTrace() {
-  if (!p4GTrace || page4SelectedLapIndex < 0 || !globalData.length) return;
-  const lap = gpsLapResults[page4SelectedLapIndex];
-  if (!lap) return;
+function page4RowIndexAtTime(rows, targetTime) {
+  if (!rows?.length) return -1;
+  let lo = 0, hi = rows.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (Number(rows[mid]?.time_sec) < targetTime) lo = mid + 1; else hi = mid;
+  }
+  if (lo <= 0) return 0;
+  if (lo >= rows.length) return rows.length - 1;
+  return Math.abs(Number(rows[lo]?.time_sec) - targetTime) < Math.abs(Number(rows[lo - 1]?.time_sec) - targetTime) ? lo : lo - 1;
+}
+
+function page4AlignedItemTime(item, primaryLap, primaryTime = page4CursorTime) {
+  const elapsed = Math.max(0, Number(primaryTime) - primaryLap.startTime);
+  return Math.max(item.lap.startTime, Math.min(item.lap.endTime, item.lap.startTime + elapsed));
+}
+
+let page4GTraceCache = null;
+
+function drawPage4GTrace(targetTime = page4CursorTime) {
+  if (!p4GTrace) return;
+  const items = page4SelectedItems();
+  const primary = items[0];
+  if (!primary) return;
   const rect = p4GTrace.getBoundingClientRect();
   const size = Math.max(1, Math.min(rect.width || 218, rect.height || 218));
   const pixelRatio = window.devicePixelRatio || 1;
@@ -2349,27 +2369,69 @@ function drawPage4GTrace() {
   const ctx = p4GTrace.getContext('2d');
   ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   ctx.clearRect(0, 0, size, size);
-  const first = findGlobalIndexAtTime(lap.startTime);
-  const last = findGlobalIndexAtTime(lap.endTime);
-  const points = [];
-  let previousTime = -Infinity;
-  for (let index = first; index <= last; index += 1) {
-    const time = Number(globalData[index]?.time_sec);
-    if (!Number.isFinite(time) || time - previousTime < 0.015) continue;
-    const gx = page4SeriesValue(PAGE4_CHART_SPECS[5].series[0], globalData[index], index);
-    const gy = page4SeriesValue(PAGE4_CHART_SPECS[5].series[1], globalData[index], index);
-    if (!Number.isFinite(gx) || !Number.isFinite(gy)) continue;
-    points.push({ x: size * (0.5 - Math.max(-2, Math.min(2, gy)) * 0.22), y: size * (0.5 - Math.max(-2, Math.min(2, gx)) * 0.22) });
-    previousTime = time;
+  const mapGPoint = (gx, gy) => ({ x: size * (0.5 - Math.max(-2, Math.min(2, gy)) * 0.22), y: size * (0.5 - Math.max(-2, Math.min(2, gx)) * 0.22) });
+  const cacheKey = `${Math.round(size * pixelRatio)}:${items.map(item => `${item.session.id}:${item.selection.lapIndex}`).join('|')}`;
+  if (!page4GTraceCache || page4GTraceCache.key !== cacheKey) {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(size * pixelRatio);
+    canvas.height = Math.round(size * pixelRatio);
+    const traceContext = canvas.getContext('2d');
+    traceContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    items.forEach(item => {
+      const rows = item.session.rows || [];
+      const first = page4RowIndexAtTime(rows, item.lap.startTime);
+      const last = page4RowIndexAtTime(rows, item.lap.endTime);
+      const points = [];
+      let previousTime = -Infinity;
+      for (let index = first; index <= last; index += 1) {
+        const time = Number(rows[index]?.time_sec);
+        if (!Number.isFinite(time) || time - previousTime < 0.015) continue;
+        const gx = page4SeriesValue(PAGE4_CHART_SPECS[5].series[0], rows[index], item.session.id === page4ActiveSessionId ? index : undefined);
+        const gy = page4SeriesValue(PAGE4_CHART_SPECS[5].series[1], rows[index], item.session.id === page4ActiveSessionId ? index : undefined);
+        if (!Number.isFinite(gx) || !Number.isFinite(gy)) continue;
+        points.push(mapGPoint(gx, gy));
+        previousTime = time;
+      }
+      if (!points.length) return;
+      const color = items.length > 1 ? PAGE4_LAP_COLORS[item.selectionIndex] : '#f97316';
+      traceContext.beginPath();
+      points.forEach((point, index) => index ? traceContext.lineTo(point.x, point.y) : traceContext.moveTo(point.x, point.y));
+      traceContext.strokeStyle = `${color}70`;
+      traceContext.lineWidth = 1.25;
+      traceContext.stroke();
+      traceContext.fillStyle = `${color}55`;
+      points.forEach(point => { traceContext.beginPath(); traceContext.arc(point.x, point.y, 1.05, 0, Math.PI * 2); traceContext.fill(); });
+    });
+    page4GTraceCache = { key: cacheKey, canvas };
   }
-  if (!points.length) return;
-  ctx.beginPath();
-  points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
-  ctx.strokeStyle = 'rgba(249,115,22,.38)';
-  ctx.lineWidth = 1.25;
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(249,115,22,.32)';
-  points.forEach(point => { ctx.beginPath(); ctx.arc(point.x, point.y, 1.15, 0, Math.PI * 2); ctx.fill(); });
+  ctx.drawImage(page4GTraceCache.canvas, 0, 0, size, size);
+  items.forEach(item => {
+    if (items.length === 1) return;
+    const rows = item.session.rows || [];
+    const color = PAGE4_LAP_COLORS[item.selectionIndex];
+    const itemTime = page4AlignedItemTime(item, primary.lap, targetTime);
+    const rowIndex = page4RowIndexAtTime(rows, itemTime);
+    const row = rows[rowIndex];
+    if (!row) return;
+    const gx = page4SeriesValue(PAGE4_CHART_SPECS[5].series[0], row, item.session.id === page4ActiveSessionId ? rowIndex : undefined);
+    const gy = page4SeriesValue(PAGE4_CHART_SPECS[5].series[1], row, item.session.id === page4ActiveSessionId ? rowIndex : undefined);
+    if (!Number.isFinite(gx) || !Number.isFinite(gy)) return;
+    const point = mapGPoint(gx, gy);
+    ctx.beginPath(); ctx.arc(point.x, point.y, 5.5, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+  });
+  if (p4GDot) p4GDot.style.display = items.length > 1 ? 'none' : '';
+}
+
+function page4GpsPositionAtTime(points, lap, targetTime) {
+  const source = (points || []).filter(point => point.time >= lap.startTime - 0.5 && point.time <= lap.endTime + 0.5);
+  if (!source.length) return null;
+  let nextIndex = source.findIndex(point => point.time >= targetTime);
+  if (nextIndex < 0) nextIndex = source.length - 1;
+  const next = source[nextIndex], previous = source[Math.max(0, nextIndex - 1)];
+  const span = Math.max(1e-9, next.time - previous.time);
+  const ratio = Math.max(0, Math.min(1, (targetTime - previous.time) / span));
+  return { lat: previous.lat + (next.lat - previous.lat) * ratio, lon: previous.lon + (next.lon - previous.lon) * ratio };
 }
 
 function refreshPage4VisibleRange(startTime, endTime, rebuildToggles = false) {
@@ -2476,6 +2538,7 @@ function updatePage4PlaybackCursor(targetTime) {
   if (row) updateNumericDisplays(row, null, page4CursorTime);
   drawCssIntersectionDots(currentCursorIndex, page4Charts, page4CursorTime);
   drawPage4Cursor(page4CursorTime);
+  drawPage4GTrace(page4CursorTime);
   drawPage4TrackMap(page4CursorTime);
 }
 
@@ -2513,6 +2576,8 @@ function setPage4Playback(active) {
 
 function drawPage4TrackMap(targetTime) {
   if (!p4TrackMap) return;
+  const selectedItems = page4SelectedItems();
+  const primaryItem = selectedItems[0];
   const lap = page4SelectedLapIndex >= 0 ? gpsLapResults[page4SelectedLapIndex] : null;
   const points = (lap && gpsLapPoints.length)
     ? gpsLapPoints.filter(point => point.time >= lap.startTime && point.time <= lap.endTime)
@@ -2526,7 +2591,8 @@ function drawPage4TrackMap(targetTime) {
   }
   const ctx = p4TrackMap.getContext('2d'); ctx.setTransform(scale, 0, 0, scale, 0, 0); ctx.clearRect(0, 0, width, height);
 
-  const allMapPoints = [...points];
+  const comparisonPointSets = selectedItems.map(item => (item.session.gpsPoints || []).filter(point => point.time >= item.lap.startTime && point.time <= item.lap.endTime));
+  const allMapPoints = [...points, ...comparisonPointSets.flat()];
   if (Array.isArray(gpsFinishPoints) && gpsFinishPoints.length === 2) {
     allMapPoints.push(...gpsFinishPoints);
   }
@@ -2654,7 +2720,15 @@ function drawPage4TrackMap(targetTime) {
     }
     trackTimeText = formatLapTime(Math.max(0, targetTime));
   }
-  if (position) { const p = project(position); ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fillStyle = '#f97316'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke(); }
+  if (selectedItems.length > 1 && primaryItem) {
+    selectedItems.forEach(item => {
+      const itemTime = page4AlignedItemTime(item, primaryItem.lap, targetTime);
+      const cursorPosition = page4GpsPositionAtTime(item.session.gpsPoints, item.lap, itemTime);
+      if (!cursorPosition) return;
+      const p = project(cursorPosition);
+      ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fillStyle = PAGE4_LAP_COLORS[item.selectionIndex]; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+    });
+  } else if (position) { const p = project(position); ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fillStyle = PAGE4_LAP_COLORS[0]; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke(); }
   if (p4TrackTime) p4TrackTime.textContent = trackTimeText;
 }
 
