@@ -286,7 +286,7 @@
       interaction: { mode: 'index', intersect: false },
       plugins: { legend: { display: false }, tooltip: { enabled: true } },
       scales: {
-        x: { type: 'linear', min: state.viewMin, max: state.viewMax ?? distance, title: { display: true, text: '공통 중심선 거리 [m]', font: { size: 9 } }, ticks: { maxTicksLimit: 9, font: { size: 9 } } },
+        x: { type: 'linear', min: state.viewMin, max: state.viewMax ?? distance, title: { display: true, text: '공통 중심선 거리 [m]', font: { size: 9 }, padding: { top: 2 } }, ticks: { display: true, autoSkip: true, maxTicksLimit: 7, padding: 3, font: { size: 9 } } },
         y: { title: { display: true, text: yTitle, font: { size: 9 } }, ticks: { maxTicksLimit: 6, font: { size: 9 } } }
       }
     };
@@ -722,7 +722,11 @@
     const isActive = index => state.activeSector !== null && index >= state.activeSector && index <= state.activeSectorEnd;
     const options = bounds.slice(0, -1).map((_, index) => `<option value="${index}" ${index === state.activeSector ? 'selected' : ''}>S${index + 1}</option>`).join('');
     const endOptions = bounds.slice(0, -1).map((_, index) => `<option value="${index}" ${index === state.activeSectorEnd ? 'selected' : ''}>S${index + 1}</option>`).join('');
-    const controls = `<div class="comparison-sector-controls"><div class="comparison-sector-buttons">${bounds.slice(0, -1).map((_, index) => `<button type="button" data-sector="${index}" aria-pressed="${isActive(index)}" class="${isActive(index) ? 'active' : ''}">S${index + 1}</button>`).join('')}</div><div class="comparison-sector-range"><span>다중 구간</span><label>시작 <select data-sector-range-start>${options}</select></label><i>→</i><label>종료 <select data-sector-range-end>${endOptions}</select></label><button type="button" data-sector-range-apply>적용</button></div></div>`;
+    const rangeSummary = state.activeSector === null ? '' : `<div class="comparison-sector-selection-summary"><b>S${state.activeSector + 1}${state.activeSectorEnd > state.activeSector ? `–S${state.activeSectorEnd + 1}` : ''} 소요시간</b>${cells.map(cell => {
+      const timing = sectorRangeTiming(cell.item, state.activeSector, state.activeSectorEnd, items);
+      return `<span style="--session-color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)} L${cell.item.lap.number} <strong>${timing ? `${timing.duration.toFixed(3)}s` : '통과 기록 없음'}</strong></span>`;
+    }).join('')}</div>`;
+    const controls = `<div class="comparison-sector-controls"><div class="comparison-sector-buttons">${bounds.slice(0, -1).map((_, index) => `<button type="button" data-sector="${index}" aria-pressed="${isActive(index)}" class="${isActive(index) ? 'active' : ''}">S${index + 1}</button>`).join('')}</div><div class="comparison-sector-range"><span>다중 구간</span><label>시작 <select data-sector-range-start>${options}</select></label><i>→</i><label>종료 <select data-sector-range-end>${endOptions}</select></label><button type="button" data-sector-range-apply>적용</button></div>${rangeSummary}</div>`;
     ui.sector.innerHTML = `${controls}<table><thead><tr><th>구간</th>${cells.map(cell => `<th style="color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)} L${cell.item.lap.number}</th>`).join('')}</tr></thead><tbody>${bounds.slice(0, -1).map((start, sectorIndex) => {
       const end = bounds[sectorIndex + 1];
       const durations = cells.map(cell => sectorDuration(cell.item, sectorIndex, items));

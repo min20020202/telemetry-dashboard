@@ -66,7 +66,9 @@
 .comparison-series-toggles i.dashed { background:repeating-linear-gradient(90deg,var(--series-color) 0 7px,transparent 7px 11px); }
 .comparison-live-item { white-space:nowrap; font-weight:800; }
 .comparison-live-separator { color:var(--text-secondary); font-style:normal; opacity:.65; }
-.comparison-chart-stack canvas, .comparison-track-card canvas { width: 100% !important; height: 100% !important; min-width: 0; }
+.comparison-chart-canvas { position:relative; min-width:0; min-height:0; overflow:hidden; }
+.comparison-chart-canvas canvas { position:absolute; inset:0; width:100% !important; height:100% !important; min-width:0; }
+.comparison-track-card canvas { width: 100% !important; height: 100% !important; min-width: 0; }
 .comparison-chart-stack canvas { cursor:crosshair; }
 .comparison-track-card canvas { cursor:pointer; }
 .comparison-bottom-grid { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); grid-template-rows:minmax(0,1fr); min-height:0; gap:10px; overflow:hidden; }
@@ -90,15 +92,19 @@
 .comparison-sector-table td:first-child small { font-size:7px; opacity:.7; }
 .comparison-sector-table th:first-child, .comparison-sector-table td:first-child { text-align: left; position: sticky; left: 0; background: var(--panel-bg); }
 .comparison-sector-table thead th:first-child { z-index:4; }
-.comparison-sector-controls { display:flex; align-items:center; gap:5px; position:sticky; top:0; z-index:3; padding:2px 0 6px; background:var(--panel-bg); }
-.comparison-sector-buttons { display:flex; flex:1 1 auto; flex-wrap:wrap; gap:4px; min-width:0; }
-.comparison-sector-range { display:flex; flex:0 0 auto; align-items:center; gap:4px; padding-left:5px; border-left:1px solid var(--border-color); color:var(--text-secondary); font:800 7px var(--font-mono); white-space:nowrap; }
+.comparison-sector-controls { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:5px 10px; position:sticky; top:0; z-index:3; padding:2px 0 6px; background:var(--panel-bg); }
+.comparison-sector-buttons { display:grid; grid-column:1/-1; grid-template-columns:repeat(auto-fit,minmax(35px,1fr)); gap:4px; min-width:0; }
+.comparison-sector-range { display:flex; grid-column:1; align-items:center; gap:4px; min-width:0; color:var(--text-secondary); font:800 7px var(--font-mono); white-space:nowrap; }
 .comparison-sector-range label { display:flex; align-items:center; gap:3px; }
 .comparison-sector-range select { height:23px; padding:0 4px; border:1px solid var(--border-color); border-radius:5px; background:var(--panel-bg); color:var(--text-primary); font:800 8px var(--font-mono); cursor:pointer; }
 .comparison-sector-range i { color:var(--accent-orange); font-style:normal; }
 .comparison-sector-controls button,.comparison-sector-table td:first-child button { border:1px solid var(--border-color); border-radius:5px; background:var(--panel-bg); color:var(--text-secondary); font:800 8px var(--font-mono); cursor:pointer; }
 .comparison-sector-controls button { min-width:35px; height:23px; padding:0 7px; }
 .comparison-sector-range button { border-color:var(--accent-orange); color:var(--accent-orange); }
+.comparison-sector-selection-summary { display:flex; grid-column:2; align-items:center; justify-content:flex-end; gap:5px 10px; min-width:0; color:var(--text-secondary); font:800 8px var(--font-mono); white-space:nowrap; }
+.comparison-sector-selection-summary > b { color:var(--accent-orange); }
+.comparison-sector-selection-summary span { color:var(--session-color); }
+.comparison-sector-selection-summary strong { color:inherit; font-size:10px; }
 .comparison-sector-table td:first-child button { padding:1px 5px; }
 .comparison-sector-controls button.active,.comparison-sector-table tr.active td:first-child button { border-color:var(--accent-orange); background:rgba(249,115,22,.12); color:var(--accent-orange); }
 .comparison-sector-table tr.active td { background:rgba(249,115,22,.08); }
@@ -3998,6 +4004,10 @@ body.dark-theme .help-video-output button { border-color: #475569; background: #
   #page-comparison .comparison-layout { grid-template-columns:minmax(180px,210px) minmax(0,1fr); }
   #page-comparison .comparison-chart-stack { grid-template-columns:repeat(2,minmax(0,1fr)); }
   #page-comparison .comparison-bottom-grid { grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); }
+}
+@media (max-width:900px) {
+  .comparison-sector-controls { grid-template-columns:minmax(0,1fr); }
+  .comparison-sector-range,.comparison-sector-selection-summary { grid-column:1; justify-content:flex-start; overflow-x:auto; }
 }
 @media (max-width:760px) {
   #page-comparison .comparison-toolbar { align-items:center; flex-direction:row; }
