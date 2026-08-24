@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NS26F IMU Data Viewer</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">NS26F TELEMETRY TOOLS</p>
+        <h1>IMU Data Viewer</h1>
+        <p class="subtitle">원시 50Hz 데이터와 후처리 결과를 같은 시간축에서 비교합니다.</p>
+      </div>
+      <label class="file-button">
+        <input id="fileInput" type="file" accept=".csv,text/csv" />
+        CSV 불러오기
+      </label>
+    </header>
+
+    <main>
+      <section id="dropZone" class="drop-zone">
+        <div class="drop-icon">CSV</div>
+        <div>
+          <strong>Telemetry CSV를 여기에 놓으세요</strong>
+          <span>파일은 서버로 전송되지 않고 브라우저 안에서만 처리됩니다.</span>
+        </div>
+      </section>
+
+      <section class="control-panel">
+        <div class="control-group legend-control">
+          <span class="control-label">표시 데이터</span>
+          <label><input id="showRaw" type="checkbox" checked /> <i class="dot raw"></i>원시값</label>
+          <label><input id="showFiltered" type="checkbox" checked /> <i class="dot filtered"></i>필터값</label>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="filterMode">후처리</label>
+          <select id="filterMode">
+            <option value="butter5">5Hz Butterworth</option>
+            <option value="median_butter5">3-sample Median + 5Hz Butterworth</option>
+            <option value="butter10">10Hz Butterworth</option>
+            <option value="median3">3-sample Median</option>
+            <option value="ma5">5-sample Moving Average</option>
+          </select>
+        </div>
+        <div class="control-group range-control">
+          <label class="control-label">표시 구간</label>
+          <input id="startTime" type="number" value="0" min="0" step="0.1" />
+          <span>~</span>
+          <input id="endTime" type="number" value="0" min="0" step="0.1" />
+          <span>초</span>
+          <button id="applyRange" type="button">적용</button>
+          <button id="resetRange" class="secondary" type="button">전체</button>
+        </div>
+      </section>
+
+      <section id="statusGrid" class="status-grid">
+        <article><span>파일</span><strong id="fileName">불러오지 않음</strong></article>
+        <article><span>IMU 샘플</span><strong id="sampleCount">-</strong></article>
+        <article><span>기록 시간</span><strong id="duration">-</strong></article>
+        <article><span>샘플 간격</span><strong id="sampleInterval">-</strong></article>
+        <article><span>통신 오류</span><strong id="errorCount">-</strong></article>
+        <article><span>IMU 배터리</span><strong id="batteryRange">-</strong></article>
+      </section>
+
+      <section class="live-section">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">VEHICLE DYNAMICS</p>
+            <h2>실시간 G-Force 시각화</h2>
+          </div>
+          <div class="playback-controls">
+            <button id="playButton" type="button">▶ 재생</button>
+            <select id="playbackSpeed" aria-label="재생 속도">
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="2">2×</option>
+              <option value="5">5×</option>
+            </select>
+            <label><input id="gUseFiltered" type="checkbox" checked /> 필터값 사용</label>
+          </div>
+        </div>
+        <div class="dynamics-grid">
+          <article class="gball-card">
+            <div class="instrument-title"><strong>G-G DIAGRAM</strong><span id="cursorTime">0.00 s</span></div>
+            <canvas id="gBall"></canvas>
+            <div class="gball-values">
+              <div><span>종가속 X</span><strong id="liveAx">0.00 g</strong></div>
+              <div><span>횡가속 Y</span><strong id="liveAy">0.00 g</strong></div>
+              <div><span>합성 XY</span><strong id="liveAxy">0.00 g</strong></div>
+            </div>
+          </article>
+          <div class="side-instruments">
+            <article class="meter-card">
+              <div class="instrument-title"><strong>VERTICAL G</strong><span>Z축 충격</span></div>
+              <canvas id="verticalGauge"></canvas>
+              <strong id="liveAz" class="meter-value">0.00 g</strong>
+            </article>
+            <article class="meter-card">
+              <div class="instrument-title"><strong>YAW RATE</strong><span>Z축 회전</span></div>
+              <canvas id="yawGauge"></canvas>
+              <strong id="liveGz" class="meter-value">0.0 °/s</strong>
+            </article>
+          </div>
+        </div>
+        <div class="timeline-wrap">
+          <input id="timeCursor" type="range" min="0" max="0" value="0" step="1" />
+          <div><span id="timelineStart">0.00s</span><span id="timelineEnd">0.00s</span></div>
+        </div>
+        <article class="gps-card">
+          <div class="gps-map-wrap">
+            <div id="gpsMap"><div class="map-placeholder">GPS 경로를 불러오는 중입니다.</div></div>
+            <div class="map-time-badge"><span>경과시간</span><strong id="mapElapsed">0.00초</strong><small id="mapGpsTime">GPS 00:00:00.00</small></div>
+          </div>
+          <div class="gps-readout">
+            <div><span>현재 위치</span><strong id="mapPosition">FIX 없음</strong></div>
+            <div><span>GPS 속도</span><strong id="mapSpeed">0.0 km/h</strong></div>
+            <div><span>위성 / 품질</span><strong id="mapSat">0 / 0</strong></div>
+            <div><span>IMU</span><strong id="mapImu">X +0.00 · Y +0.00 g</strong></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="stats-section">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">VISIBLE RANGE STATISTICS</p>
+            <h2>현재 구간 가속도 범위</h2>
+          </div>
+          <span>일반 범위는 상·하위 1%를 제외한 98% 구간입니다.</span>
+        </div>
+        <div id="statsGrid" class="stats-grid"></div>
+      </section>
+
+      <section class="charts">
+        <article class="chart-card">
+          <div class="chart-header">
+            <div><span>LINEAR ACCELERATION</span><h2>가속도 X / Y / Z</h2></div>
+            <span class="unit">g</span>
+          </div>
+          <canvas id="accelChart"></canvas>
+        </article>
+
+        <article class="chart-card">
+          <div class="chart-header">
+            <div><span>ANGULAR VELOCITY</span><h2>자이로 X / Y / Z</h2></div>
+            <span class="unit">°/s</span>
+          </div>
+          <canvas id="gyroChart"></canvas>
+        </article>
+
+        <article class="chart-card compact">
+          <div class="chart-header">
+            <div><span>RESULTANT VECTOR</span><h2>합성 가속도</h2></div>
+            <span class="unit">g</span>
+          </div>
+          <canvas id="magnitudeChart"></canvas>
+        </article>
+      </section>
+    </main>
+
+    <div id="loading" class="loading hidden"><div class="spinner"></div><strong>CSV 처리 중...</strong><span id="loadingText"></span></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="app.js"></script>
+  </body>
+</html>
