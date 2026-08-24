@@ -758,7 +758,7 @@
     if (state.playStamp) state.playElapsed += ((timestamp - state.playStamp) / 1000) * state.playRate;
     state.playStamp = timestamp;
     if (state.playElapsed >= duration) { state.playElapsed = duration; setPlaying(false); return; }
-    if (!state.playRenderStamp || timestamp - state.playRenderStamp >= 1000 / 30) {
+    if (!state.playRenderStamp || timestamp - state.playRenderStamp >= 15) {
       state.playRenderStamp = timestamp;
       syncPlaybackUi(items);
       renderMap(items);
@@ -829,8 +829,9 @@
   });
   ui.sector?.addEventListener('click', event => {
     const button = event.target.closest('[data-sector]');
-    if (!button) return;
-    const index = Number(button.dataset.sector);
+    const row = event.target.closest('[data-sector-row]');
+    if (!button && !row) return;
+    const index = Number(button?.dataset.sector ?? row?.dataset.sectorRow);
     selectSector(state.activeSector === index ? null : index);
   });
   ui.map?.addEventListener('click', event => {
