@@ -2,7 +2,7 @@
   'use strict';
 
   const COLORS = ['#06b6d4', '#ff3d9a', '#76ff03', '#ffca28'];
-  const state = { sessions: [], selected: new Set(), cache: new Map(), sectorCache: new Map(), charts: {}, chartEnabled: { speed: true, pedal: true, steering: true, delta: true }, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, playRenderStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, lastSector: 0, mapGeometry: null };
+  const state = { sessions: [], selected: new Set(), cache: new Map(), distanceMapCache: new Map(), sourceSeriesCache: new Map(), sectorCache: new Map(), charts: {}, chartEnabled: { speed: true, pedal: true, steering: true, delta: true }, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, playRenderStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, lastSector: 0, mapGeometry: null };
   const boundChartCanvases = new WeakSet();
   const $ = id => document.getElementById(id);
   const ui = {
@@ -135,6 +135,7 @@
   }
 
   function buildDistanceMap(item) {
+    if (state.distanceMapCache.has(item.key)) return state.distanceMapCache.get(item.key);
     const fixes = item.session.gpsPoints.filter(point => point.time >= item.lap.startTime - .05 && point.time <= item.lap.endTime + .05);
     const map = [{ time: item.lap.startTime, distance: 0 }];
     let segment = 0, distance = 0;
@@ -146,7 +147,9 @@
       map.push({ time: point.time, distance });
     });
     map.push({ time: item.lap.endTime, distance: totalDistance() });
-    return map.sort((a, b) => a.distance - b.distance || a.time - b.time);
+    map.sort((a, b) => a.distance - b.distance || a.time - b.time);
+    state.distanceMapCache.set(item.key, map);
+    return map;
   }
 
   function interpolate(map, target, input, output) {
@@ -176,6 +179,47 @@
     if (gpsValid) return gpsSpeed;
     const flSpeed = Number(row.fl_speed_kmh);
     return Number.isFinite(flSpeed) && flSpeed >= 0 ? flSpeed : 0;
+  }
+
+  const COMPARISON_MAX_VISIBLE_POINTS = 4500;
+  const COMPARISON_SOURCE_HZ = { speed: 10, tps: 25, brake: 100, steering: 100, yaw: 50 };
+
+  function comparisonSourceValue(key, row) {
+    if (key === 'speed') return vehicleSpeed(row);
+    if (key === 'tps') return Number(row.decoded_tps) || 0;
+    if (key === 'brake') return getCalibratedBrake(row.front_brake_raw);
+    if (key === 'steering') return getCalibratedSteering(row.steering_raw);
+    if (key === 'yaw') return Number(row.imu_gyro_z_dps) || 0;
+    return 0;
+  }
+
+  function fullComparisonSourceSeries(item, key, sourceHz) {
+    const cacheKey = `${item.key}|${key}|${sourceHz}`;
+    if (state.sourceSeriesCache.has(cacheKey)) return state.sourceSeriesCache.get(cacheKey);
+    const map = [...buildDistanceMap(item)].sort((a, b) => a.time - b.time || a.distance - b.distance);
+    const interval = 1 / Math.max(1, sourceHz);
+    const points = [];
+    let nextTime = item.lap.startTime;
+    item.session.rows.forEach(row => {
+      const time = Number(row.time_sec);
+      if (!Number.isFinite(time) || time < item.lap.startTime || time > item.lap.endTime || time + 1e-9 < nextTime) return;
+      points.push({ x: interpolate(map, time, 'time', 'distance'), y: comparisonSourceValue(key, row) });
+      nextTime = time + interval;
+    });
+    state.sourceSeriesCache.set(cacheKey, points);
+    return points;
+  }
+
+  function visibleComparisonSourceSeries(item, key, sourceHz) {
+    const min = state.viewMin;
+    const max = state.viewMax ?? totalDistance();
+    const source = fullComparisonSourceSeries(item, key, sourceHz);
+    const visible = source.filter(point => point.x >= min - 1e-6 && point.x <= max + 1e-6);
+    if (visible.length <= COMPARISON_MAX_VISIBLE_POINTS) return visible;
+    const result = [];
+    const step = (visible.length - 1) / (COMPARISON_MAX_VISIBLE_POINTS - 1);
+    for (let index = 0; index < COMPARISON_MAX_VISIBLE_POINTS; index += 1) result.push(visible[Math.round(index * step)]);
+    return result;
   }
 
   function sampleLap(item) {
@@ -218,6 +262,10 @@
     Object.values(state.charts).forEach(chart => {
       chart.options.scales.x.min = state.viewMin;
       chart.options.scales.x.max = state.viewMax;
+      chart.data.datasets.forEach(dataset => {
+        if (!dataset.comparisonItem || !dataset.comparisonKey) return;
+        dataset.data = visibleComparisonSourceSeries(dataset.comparisonItem, dataset.comparisonKey, dataset.comparisonSourceHz);
+      });
       chart.update('none');
     });
   }
@@ -412,15 +460,21 @@
     button.setAttribute('aria-pressed', String(enabled));
   }
 
-  function line(label, color, samples, key, dashed = false, comparisonIndex = 0) {
-    return { label, comparisonIndex, data: samples.map(point => ({ x: point.x, y: point[key] })), borderColor: color, backgroundColor: color, borderWidth: dashed ? 2 : 1.7, borderDash: dashed ? [9, 6] : [], pointRadius: 0, fill: false };
+  function sourceLine(label, color, item, key, dashed = false, comparisonIndex = 0) {
+    const sourceHz = COMPARISON_SOURCE_HZ[key] || 100;
+    return {
+      label, comparisonIndex, comparisonItem: item, comparisonKey: key, comparisonSourceHz: sourceHz,
+      data: visibleComparisonSourceSeries(item, key, sourceHz),
+      borderColor: color, backgroundColor: color, borderWidth: dashed ? 2 : 1.7,
+      borderDash: dashed ? [9, 6] : [], pointRadius: 0, fill: false
+    };
   }
 
   function renderCharts(items) {
     const sampled = items.map((item, index) => ({ item, color: COLORS[index], data: sampleLap(item), label: `${item.session.driver} · L${item.lap.number}` }));
-    rebuildChart('speed', 'comparison-speed-chart', sampled.map((s, i) => line(s.label, s.color, s.data, 'speed', false, i)), 'km/h', { min: 0 });
-    rebuildChart('pedal', 'comparison-pedal-chart', sampled.flatMap((s, i) => [line(`${s.label} TPS`, s.color, s.data, 'tps', false, i), line(`${s.label} Brake`, s.color, s.data, 'brake', true, i)]), '%', { min: 0, max: 100 });
-    rebuildChart('steering', 'comparison-steering-chart', sampled.flatMap((s, i) => [line(`${s.label} Steering`, s.color, s.data, 'steering', false, i), line(`${s.label} Yaw`, s.color, s.data, 'yaw', true, i)]), '° / °/s');
+    rebuildChart('speed', 'comparison-speed-chart', sampled.map((s, i) => sourceLine(s.label, s.color, s.item, 'speed', false, i)), 'km/h', { min: 0 });
+    rebuildChart('pedal', 'comparison-pedal-chart', sampled.flatMap((s, i) => [sourceLine(`${s.label} TPS`, s.color, s.item, 'tps', false, i), sourceLine(`${s.label} Brake`, s.color, s.item, 'brake', true, i)]), '%', { min: 0, max: 100 });
+    rebuildChart('steering', 'comparison-steering-chart', sampled.flatMap((s, i) => [sourceLine(`${s.label} Steering`, s.color, s.item, 'steering', false, i), sourceLine(`${s.label} Yaw`, s.color, s.item, 'yaw', true, i)]), '° / °/s');
     const baseline = sampled[0]?.data || [];
     rebuildChart('delta', 'comparison-delta-chart', sampled.map(s => ({
       label: s.label, data: s.data.map((point, index) => ({ x: point.x, y: point.elapsed - (baseline[index]?.elapsed || 0) })),
@@ -808,7 +862,7 @@
   ui.files?.addEventListener('change', event => { const files = [...event.target.files]; event.target.value = ''; importFiles(files); });
   ui.clear?.addEventListener('click', () => {
     setPlaying(false);
-    state.sessions = []; state.selected.clear(); state.cache.clear(); state.sectorCache.clear(); state.viewMin = 0; state.viewMax = null; state.hoverDistance = null; state.activeSector = null; state.lastSector = 0; state.mapGeometry = null;
+    state.sessions = []; state.selected.clear(); state.cache.clear(); state.distanceMapCache.clear(); state.sourceSeriesCache.clear(); state.sectorCache.clear(); state.viewMin = 0; state.viewMax = null; state.hoverDistance = null; state.activeSector = null; state.lastSector = 0; state.mapGeometry = null;
     Object.values(state.charts).forEach(chart => chart.destroy()); state.charts = {};
     renderSessions(); render(); setStatus('CSV를 추가한 뒤 비교할 랩을 2~4개 선택하세요.');
   });
