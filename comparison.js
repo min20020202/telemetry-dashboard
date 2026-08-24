@@ -2,7 +2,7 @@
   'use strict';
 
   const COLORS = ['#06b6d4', '#ff3d9a', '#76ff03', '#ffca28'];
-  const state = { sessions: [], selected: new Set(), cache: new Map(), charts: {}, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, mapGeometry: null };
+  const state = { sessions: [], selected: new Set(), cache: new Map(), charts: {}, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, lastSector: 0, mapGeometry: null };
   const boundChartCanvases = new WeakSet();
   const $ = id => document.getElementById(id);
   const ui = {
@@ -94,7 +94,7 @@
       <section class="comparison-session" data-session="${session.id}">
         <input type="text" value="${escapeHtml(session.driver)}" aria-label="드라이버 이름" data-driver="${session.id}">
         <small title="${escapeHtml(session.fileName)}">${escapeHtml(session.fileName)} · ${session.laps.length}개 완성 랩</small>
-        <div class="comparison-session-actions"><button type="button" data-session-pick="fast" data-session-id="${session.id}">빠른 4랩</button><button type="button" data-session-pick="spread" data-session-id="${session.id}">베스트·워스트</button><button type="button" data-session-pick="clear" data-session-id="${session.id}">해제</button></div>
+        <div class="comparison-session-actions"><button type="button" data-session-pick="fast" data-session-id="${session.id}">빠른 4랩</button><button type="button" data-session-pick="best" data-session-id="${session.id}">베스트만</button><button type="button" data-session-pick="clear" data-session-id="${session.id}">해제</button></div>
         <div class="comparison-laps">${session.laps.map((lap, lapIndex) => {
           const key = selectionKey(session.id, lapIndex);
           return `<label class="comparison-lap-choice"><input type="checkbox" data-lap-key="${key}" ${state.selected.has(key) ? 'checked' : ''}><span>L${lap.number} ${formatLap(lap.duration)}</span></label>`;
@@ -401,6 +401,7 @@
   function selectSector(index) {
     const items = selectedLaps(), bounds = sectorBounds(items);
     state.activeSector = Number.isInteger(index) && index >= 0 && index < bounds.length - 1 ? index : null;
+    if (state.activeSector !== null) state.lastSector = state.activeSector;
     if (state.activeSector === null) setChartViewRange(0, totalDistance());
     else {
       const start = bounds[state.activeSector], end = bounds[state.activeSector + 1];
@@ -417,7 +418,7 @@
     if (items.length < 2) { ui.sector.innerHTML = '<p class="comparison-empty">두 개 이상의 랩을 선택하세요.</p>'; return; }
     const bounds = sectorBounds(items);
     const cells = items.map((item, index) => ({ item, index, data: sampleLap(item) }));
-    const controls = `<div class="comparison-sector-controls"><button type="button" data-sector="all" class="${state.activeSector === null ? 'active' : ''}">전체</button>${bounds.slice(0, -1).map((_, index) => `<button type="button" data-sector="${index}" class="${state.activeSector === index ? 'active' : ''}">S${index + 1}</button>`).join('')}</div>`;
+    const controls = `<div class="comparison-sector-controls"><button type="button" data-sector-toggle aria-pressed="${state.activeSector !== null}" class="comparison-sector-toggle ${state.activeSector !== null ? 'active' : ''}">구간 보기 ${state.activeSector !== null ? 'ON' : 'OFF'}</button>${bounds.slice(0, -1).map((_, index) => `<button type="button" data-sector="${index}" class="${state.activeSector === index ? 'active' : ''}">S${index + 1}</button>`).join('')}</div>`;
     ui.sector.innerHTML = `${controls}<table><thead><tr><th>구간</th>${cells.map(cell => `<th style="color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)} L${cell.item.lap.number}</th>`).join('')}</tr></thead><tbody>${bounds.slice(0, -1).map((start, sectorIndex) => {
       const end = bounds[sectorIndex + 1];
       return `<tr class="${state.activeSector === sectorIndex ? 'active' : ''}" data-sector-row="${sectorIndex}"><td><button type="button" data-sector="${sectorIndex}">S${sectorIndex + 1}</button><br><small>${start.toFixed(0)}–${end.toFixed(0)}m</small></td>${cells.map(cell => {
@@ -600,7 +601,7 @@
   ui.files?.addEventListener('change', event => { const files = [...event.target.files]; event.target.value = ''; importFiles(files); });
   ui.clear?.addEventListener('click', () => {
     setPlaying(false);
-    state.sessions = []; state.selected.clear(); state.cache.clear(); state.viewMin = 0; state.viewMax = null; state.hoverDistance = null; state.activeSector = null; state.mapGeometry = null;
+    state.sessions = []; state.selected.clear(); state.cache.clear(); state.viewMin = 0; state.viewMax = null; state.hoverDistance = null; state.activeSector = null; state.lastSector = 0; state.mapGeometry = null;
     Object.values(state.charts).forEach(chart => chart.destroy()); state.charts = {};
     renderSessions(); render(); setStatus('CSV를 추가한 뒤 비교할 랩을 2~4개 선택하세요.');
   });
@@ -625,7 +626,7 @@
     const ordered = session.laps.map((lap, lapIndex) => ({ lap, lapIndex })).sort((a, b) => a.lap.duration - b.lap.duration);
     let picks = [];
     if (button.dataset.sessionPick === 'fast') picks = ordered.slice(0, 4);
-    if (button.dataset.sessionPick === 'spread' && ordered.length) picks = ordered.length === 1 ? ordered : [ordered[0], ordered.at(-1)];
+    if (button.dataset.sessionPick === 'best' && ordered.length) picks = [ordered[0]];
     picks.slice(0, Math.max(0, 4 - state.selected.size)).forEach(item => state.selected.add(selectionKey(session.id, item.lapIndex)));
     renderSessions();
     render();
@@ -641,9 +642,14 @@
     renderMap(selectedLaps());
   });
   ui.sector?.addEventListener('click', event => {
+    const toggle = event.target.closest('[data-sector-toggle]');
+    if (toggle) {
+      selectSector(state.activeSector === null ? state.lastSector : null);
+      return;
+    }
     const button = event.target.closest('[data-sector]');
     if (!button) return;
-    selectSector(button.dataset.sector === 'all' ? null : Number(button.dataset.sector));
+    selectSector(Number(button.dataset.sector));
   });
   ui.map?.addEventListener('click', event => {
     const geometry = state.mapGeometry;
