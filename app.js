@@ -1888,8 +1888,7 @@ function page4AlignedSeries(item, series, primaryLap, startTime, endTime) {
   // 20초 이하에서는 원본 센서 표본을 그대로 유지한다.
   const visibleCount = Math.max(0, last - first);
   const pointLimit = sourceEnd - sourceStart <= 20 ? visibleCount : 2200;
-  const indices = downsampleIndices(visibleCount, pointLimit).map(index => first + index);
-  return indices.map(index => {
+  const points = Array.from({ length: visibleCount }, (_, offset) => first + offset).map(index => {
     const row = rows[index];
     const alignedTime = primaryLap.startTime + (Number(row.time_sec) - item.lap.startTime);
     const x = page4AxisMode === 'distance'
@@ -1898,6 +1897,7 @@ function page4AlignedSeries(item, series, primaryLap, startTime, endTime) {
     const globalIndex = item.session.id === page4ActiveSessionId ? index : undefined;
     return { x, y: page4SeriesValue(series, row, globalIndex) };
   });
+  return downsampleEnvelopePoints(points, pointLimit);
 }
 
 function page4ChartDatasets(spec, startTime = page4ViewStart, endTime = page4ViewEnd) {
@@ -5968,6 +5968,31 @@ function downsampleIndices(len, limit) {
   return idx;
 }
 
+// Preserve the visible shape while limiting draw cost. Each horizontal
+// bucket keeps its first, minimum, maximum and last sample, so short spikes
+// are not discarded as they are by uniform interval sampling.
+function downsampleEnvelopePoints(points, limit) {
+  if (!Array.isArray(points) || points.length <= limit || limit < 6) return points || [];
+  const bucketCount = Math.max(1, Math.floor((limit - 2) / 4));
+  const interiorEnd = points.length - 1;
+  const result = [points[0]];
+  let previousIndex = 0;
+  for (let bucket = 0; bucket < bucketCount; bucket += 1) {
+    const start = Math.max(1, Math.floor(1 + bucket * (interiorEnd - 1) / bucketCount));
+    const end = Math.min(interiorEnd, Math.max(start + 1, Math.floor(1 + (bucket + 1) * (interiorEnd - 1) / bucketCount)));
+    let minIndex = start, maxIndex = start;
+    for (let index = start + 1; index < end; index += 1) {
+      if (Number(points[index]?.y) < Number(points[minIndex]?.y)) minIndex = index;
+      if (Number(points[index]?.y) > Number(points[maxIndex]?.y)) maxIndex = index;
+    }
+    [start, minIndex, maxIndex, end - 1].sort((a, b) => a - b).forEach(index => {
+      if (index > previousIndex) { result.push(points[index]); previousIndex = index; }
+    });
+  }
+  if (previousIndex !== points.length - 1) result.push(points.at(-1));
+  return result;
+}
+
 // Effective sensor rates measured from 김도현1.csv using each source's own
 // timestamp/counter (not by counting the logger's repeated 100 Hz rows).
 const CHANNEL_SOURCE_HZ = {
@@ -5980,7 +6005,7 @@ const CHANNEL_SOURCE_HZ = {
 };
 const MAX_VISIBLE_SENSOR_POINTS = 4500;
 
-function visibleSensorIndices(startTime, endTime, sourceHz) {
+function visibleSensorIndices(startTime, endTime, sourceHz, preserveAllSourceSamples = false) {
   let lo = 0;
   let hi = globalData.length - 1;
   while (lo < hi) {
@@ -5999,7 +6024,9 @@ function visibleSensorIndices(startTime, endTime, sourceHz) {
   const last = Math.min(globalData.length - 1, lo + 1);
   const duration = Math.max(0.01, endTime - startTime);
   const sourceInterval = 1 / Math.max(1, sourceHz);
-  const displayInterval = Math.max(sourceInterval, duration / Math.max(1, MAX_VISIBLE_SENSOR_POINTS - 1));
+  const displayInterval = preserveAllSourceSamples
+    ? sourceInterval
+    : Math.max(sourceInterval, duration / Math.max(1, MAX_VISIBLE_SENSOR_POINTS - 1));
   const indices = [first];
   let nextTime = Number(globalData[first].time_sec) + displayInterval;
   for (let index = first + 1; index < last; index += 1) {
@@ -6029,11 +6056,17 @@ function refreshVisibleSensorSeries(startTime, endTime, updateNow = true) {
     if (!keys) return;
     keys.forEach((key, datasetIndex) => {
       const hz = CHANNEL_SOURCE_HZ[key] || 100;
-      if (!indexCache.has(hz)) indexCache.set(hz, visibleSensorIndices(startTime, endTime, hz));
+      // Inspect every real source update before reducing the draw series. The
+      // envelope reducer below then retains short peaks instead of skipping
+      // them with uniform interval sampling.
+      if (!indexCache.has(hz)) indexCache.set(hz, visibleSensorIndices(startTime, endTime, hz, true));
       const indices = indexCache.get(hz);
       const times = indices.map(index => globalData[index].time_sec);
       if (chart.data.datasets[datasetIndex]) {
-        chart.data.datasets[datasetIndex].data = channelSeries(key, indices, times);
+        chart.data.datasets[datasetIndex].data = downsampleEnvelopePoints(
+          channelSeries(key, indices, times),
+          MAX_VISIBLE_SENSOR_POINTS
+        );
       }
     });
     if (updateNow) chart.update('none');

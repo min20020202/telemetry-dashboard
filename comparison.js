@@ -276,9 +276,28 @@
       { x: max, y: seriesValueAt(source, max) }
     ];
     if (visible.length <= COMPARISON_MAX_VISIBLE_POINTS) return visible;
-    const result = [];
-    const step = (visible.length - 1) / (COMPARISON_MAX_VISIBLE_POINTS - 1);
-    for (let index = 0; index < COMPARISON_MAX_VISIBLE_POINTS; index += 1) result.push(visible[Math.round(index * step)]);
+    return envelopeSeries(visible, COMPARISON_MAX_VISIBLE_POINTS);
+  }
+
+  function envelopeSeries(points, limit) {
+    if (points.length <= limit || limit < 6) return points;
+    const bucketCount = Math.max(1, Math.floor((limit - 2) / 4));
+    const interiorEnd = points.length - 1;
+    const result = [points[0]];
+    let previousIndex = 0;
+    for (let bucket = 0; bucket < bucketCount; bucket += 1) {
+      const start = Math.max(1, Math.floor(1 + bucket * (interiorEnd - 1) / bucketCount));
+      const end = Math.min(interiorEnd, Math.max(start + 1, Math.floor(1 + (bucket + 1) * (interiorEnd - 1) / bucketCount)));
+      let minIndex = start, maxIndex = start;
+      for (let index = start + 1; index < end; index += 1) {
+        if (points[index].y < points[minIndex].y) minIndex = index;
+        if (points[index].y > points[maxIndex].y) maxIndex = index;
+      }
+      [start, minIndex, maxIndex, end - 1].sort((a, b) => a - b).forEach(index => {
+        if (index > previousIndex) { result.push(points[index]); previousIndex = index; }
+      });
+    }
+    if (previousIndex !== points.length - 1) result.push(points.at(-1));
     return result;
   }
 
