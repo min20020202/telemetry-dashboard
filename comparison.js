@@ -2,7 +2,7 @@
   'use strict';
 
   const COLORS = ['#06b6d4', '#ff3d9a', '#76ff03', '#ffca28'];
-  const state = { sessions: [], selected: new Set(), cache: new Map(), sectorCache: new Map(), charts: {}, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, lastSector: 0, mapGeometry: null };
+  const state = { sessions: [], selected: new Set(), cache: new Map(), sectorCache: new Map(), charts: {}, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, playRenderStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, lastSector: 0, mapGeometry: null };
   const boundChartCanvases = new WeakSet();
   const $ = id => document.getElementById(id);
   const ui = {
@@ -746,6 +746,7 @@
     if (active && state.playElapsed >= duration - .001) state.playElapsed = 0;
     state.playing = active;
     state.playStamp = 0;
+    state.playRenderStamp = 0;
     if (state.playFrame) cancelAnimationFrame(state.playFrame);
     state.playFrame = active ? requestAnimationFrame(playTick) : 0;
     syncPlaybackUi(items);
@@ -757,8 +758,11 @@
     if (state.playStamp) state.playElapsed += ((timestamp - state.playStamp) / 1000) * state.playRate;
     state.playStamp = timestamp;
     if (state.playElapsed >= duration) { state.playElapsed = duration; setPlaying(false); return; }
-    syncPlaybackUi(items);
-    renderMap(items);
+    if (!state.playRenderStamp || timestamp - state.playRenderStamp >= 1000 / 30) {
+      state.playRenderStamp = timestamp;
+      syncPlaybackUi(items);
+      renderMap(items);
+    }
     state.playFrame = requestAnimationFrame(playTick);
   }
 
