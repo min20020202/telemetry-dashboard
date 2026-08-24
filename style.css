@@ -85,6 +85,7 @@
 .comparison-sector-table table { width: 100%; border-collapse: collapse; font-size: 10px; white-space: nowrap; }
 .comparison-sector-table thead th { position:sticky; top:var(--sector-controls-height, 31px); z-index:2; background:var(--panel-bg); box-shadow:0 1px 0 var(--border-color),0 3px 7px rgba(15,23,42,.08); }
 .comparison-sector-table th, .comparison-sector-table td { height:24px; padding:2px 6px; border-bottom:1px solid var(--border-color); text-align:right; line-height:1.05; }
+.comparison-sector-table thead th:not(:first-child) { text-align:center; }
 .comparison-sector-table td b { font-size:10px; }
 .comparison-sector-table td:first-child small { font-size:7px; opacity:.7; }
 .comparison-sector-table th:first-child, .comparison-sector-table td:first-child { text-align: left; position: sticky; left: 0; background: var(--panel-bg); }
