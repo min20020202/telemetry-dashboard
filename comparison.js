@@ -828,8 +828,18 @@
       } else if (run) { rawRuns.push(run); run = null; }
     }
     if (run) rawRuns.push(run);
-    // 0.12초보다 짧은 단발성 ADC/TPS 튐은 운전자 조작으로 세지 않는다.
-    const events = rawRuns.filter(event => event.endTime - event.startTime >= .12);
+    // 임계값 아래로 아주 잠깐 떨어진 구간은 페달을 새로 밟은 것이 아니라
+    // 한 번의 연속 조작으로 본다. 그 뒤 0.12초 미만 단발성 튐을 제외한다.
+    const mergedRuns = [];
+    rawRuns.forEach(event => {
+      const previous = mergedRuns.at(-1);
+      if (previous && (event.startTime - previous.endTime <= .2 || event.start - previous.end <= 3)) {
+        previous.end = event.end;
+        previous.endTime = event.endTime;
+        previous.maximum = Math.max(previous.maximum, event.maximum);
+      } else mergedRuns.push({ ...event });
+    });
+    const events = mergedRuns.filter(event => event.endTime - event.startTime >= .12);
     return {
       events,
       activeTime: events.reduce((sum, event) => sum + event.endTime - event.startTime, 0),
@@ -858,23 +868,33 @@
   }
 
   function eventStartComparison(referenceEvents, comparisonEvents) {
-    const count = Math.max(referenceEvents.length, comparisonEvents.length);
-    if (!count) return '조작 없음';
-    return Array.from({ length: count }, (_, index) => {
-      const referenceEvent = referenceEvents[index], comparisonEvent = comparisonEvents[index];
-      if (!referenceEvent) return `${index + 1}차 추가 ${comparisonEvent.start.toFixed(0)}m`;
-      if (!comparisonEvent) return `${index + 1}차 ${referenceEvent.start.toFixed(0)}m → 없음`;
-      return `${index + 1}차 ${referenceEvent.start.toFixed(0)} → ${comparisonEvent.start.toFixed(0)}m (${signed(comparisonEvent.start - referenceEvent.start, 0, 'm')})`;
-    }).join(' · ');
+    if (!referenceEvents.length && !comparisonEvents.length) return '두 랩 모두 조작 없음';
+    const remainingReference = referenceEvents.map((event, index) => ({ event, index }));
+    const results = [];
+    comparisonEvents.forEach(comparisonEvent => {
+      let bestIndex = -1, bestGap = Infinity;
+      remainingReference.forEach((candidate, index) => {
+        const gap = Math.abs(comparisonEvent.start - candidate.event.start);
+        if (gap < bestGap) { bestGap = gap; bestIndex = index; }
+      });
+      if (bestIndex >= 0 && bestGap <= 20) {
+        const referenceEvent = remainingReference.splice(bestIndex, 1)[0].event;
+        const difference = comparisonEvent.start - referenceEvent.start;
+        const timing = Math.abs(difference) < .5 ? '같은 위치' : `${Math.abs(difference).toFixed(0)}m ${difference < 0 ? '먼저' : '늦게'}`;
+        results.push(`${referenceEvent.start.toFixed(0)}m → ${comparisonEvent.start.toFixed(0)}m (${timing})`);
+      } else results.push(`비교 랩에서만 ${comparisonEvent.start.toFixed(0)}m`);
+    });
+    remainingReference.forEach(({ event }) => results.push(`기준 랩에서만 ${event.start.toFixed(0)}m`));
+    return results.join(' · ');
   }
 
-  function sectorComparisonMarkup(referenceAnalysis, analysis) {
+  function sectorComparisonMarkup(referenceAnalysis, analysis, referenceLabel = '기준 랩', comparisonLabel = '비교 랩') {
     if (!referenceAnalysis || !analysis?.metrics || !referenceAnalysis.metrics || !Number.isFinite(referenceAnalysis.duration) || !Number.isFinite(analysis.duration)) return '';
     const timeDelta = analysis.duration - referenceAnalysis.duration;
     const distanceDelta = analysis.metrics.actualDistance - referenceAnalysis.metrics.actualDistance;
     const speedDelta = analysis.metrics.averageSpeed - referenceAnalysis.metrics.averageSpeed;
     return `<span class="sector-direct-comparison">
-      <small class="comparison-caption">기준 랩과 직접 비교</small>
+      <small class="comparison-caption">${escapeHtml(referenceLabel)} 대비 ${escapeHtml(comparisonLabel)}</small>
       <span class="comparison-key-deltas">
         <em class="${timeDelta < 0 ? 'gain' : timeDelta > 0 ? 'loss' : ''}">기록 ${signed(timeDelta, 3, 's')}</em>
         <em class="${distanceDelta < 0 ? 'gain' : distanceDelta > 0 ? 'loss' : ''}">거리 ${signed(distanceDelta, 1, 'm')}</em>
@@ -889,7 +909,7 @@
     const metrics = analysis.metrics;
     const positions = events => events.length ? events.map(event => `${event.start.toFixed(0)}m`).join(', ') : '없음';
     return `<section class="sector-detail-lap" style="--lap-color:${color}">
-      <h3><i></i>${escapeHtml(cell.item.session.driver)} L${cell.item.lap.number}<strong>${analysis.duration.toFixed(3)}s</strong></h3>
+      <h3><i></i><span>${escapeHtml(cell.item.session.driver)}&nbsp;L${cell.item.lap.number}</span><strong>${analysis.duration.toFixed(3)}s</strong></h3>
       <dl>
         <div><dt>실제 주행거리</dt><dd>${metrics?.actualDistance.toFixed(1) ?? '—'}m <small>중심선 대비 ${metrics ? signed(metrics.extraDistance, 1, 'm') : '—'}</small></dd></div>
         <div><dt>속도</dt><dd>평균 ${metrics?.averageSpeed.toFixed(1) ?? '—'} · 최저 ${analysis.minSpeed.toFixed(1)} · 탈출 ${analysis.exitSpeed.toFixed(1)} km/h</dd></div>
@@ -919,14 +939,16 @@
         if (event.target === dialog || event.target.closest('[data-sector-detail-close]')) dialog.close();
       });
     }
+    const referenceLabel = `${cells[0].item.session.driver} L${cells[0].item.lap.number}`;
+    const comparisonLabel = `${cells[comparisonIndex].item.session.driver} L${cells[comparisonIndex].item.lap.number}`;
     const brakeComparison = eventStartComparison(referenceAnalysis.brake.events, comparisonAnalysis.brake.events);
     const throttleComparison = eventStartComparison(referenceAnalysis.throttle.events, comparisonAnalysis.throttle.events);
     dialog.innerHTML = `<div class="sector-detail-shell">
       <header><div><span>CHECKPOINT ANALYSIS</span><h2>S${sectorIndex + 1} 상세 비교</h2><p>${start.toFixed(0)}–${end.toFixed(0)}m · 첫 번째 선택 랩 기준</p></div><button type="button" data-sector-detail-close aria-label="닫기">×</button></header>
       <div class="sector-detail-body">
-        <div class="sector-detail-summary">${sectorComparisonMarkup(referenceAnalysis, comparisonAnalysis)}</div>
+        <div class="sector-detail-summary">${sectorComparisonMarkup(referenceAnalysis, comparisonAnalysis, referenceLabel, comparisonLabel)}</div>
         <div class="sector-detail-laps">${sectorAnalysisCard(cells[0], referenceAnalysis, COLORS[0])}${sectorAnalysisCard(cells[comparisonIndex], comparisonAnalysis, COLORS[comparisonIndex])}</div>
-        <section class="sector-event-comparison"><h3>조작 시작 위치 비교</h3><p><b>브레이크</b>${brakeComparison}</p><p><b>가속</b>${throttleComparison}</p><small>0.12초 미만의 짧은 신호는 조작 횟수에서 제외합니다.</small></section>
+        <section class="sector-event-comparison"><h3>조작 시작 위치 비교</h3><p><b>브레이크</b>${brakeComparison}</p><p><b>가속</b>${throttleComparison}</p><small>화살표는 ${escapeHtml(referenceLabel)} → ${escapeHtml(comparisonLabel)} 순서입니다. 0.2초 이내로 잠깐 끊긴 신호는 한 번의 조작으로 합치고, 0.12초 미만 신호는 제외합니다.</small></section>
       </div>
     </div>`;
     dialog.showModal();

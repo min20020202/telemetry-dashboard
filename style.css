@@ -160,6 +160,7 @@
 .sector-detail-lap { padding:12px; border:1px solid var(--border-color); border-top:3px solid var(--lap-color); border-radius:8px; background:var(--card-bg); }
 .sector-detail-lap h3 { display:flex; align-items:center; gap:7px; margin:0 0 10px; font-size:13px; }
 .sector-detail-lap h3 i { width:8px; height:8px; border-radius:50%; background:var(--lap-color); }
+.sector-detail-lap h3 > span { white-space:nowrap; }
 .sector-detail-lap h3 strong { margin-left:auto; color:var(--lap-color); font:900 14px var(--font-mono); }
 .sector-detail-lap dl { display:grid; gap:0; margin:0; }
 .sector-detail-lap dl div { display:grid; grid-template-columns:105px 1fr; gap:10px; padding:6px 0; border-top:1px dashed var(--border-color); }
