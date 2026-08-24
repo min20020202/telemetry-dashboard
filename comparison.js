@@ -425,12 +425,36 @@
     }).join('');
   }
 
+  function checkpointReferenceDistance(line) {
+    const points = reference();
+    if (!line?.[0] || !line?.[1] || points.length < 2) return NaN;
+    const origin = line[0];
+    const lat0 = origin.lat * Math.PI / 180, mLat = 111320, mLon = mLat * Math.cos(lat0);
+    const local = point => ({
+      x: (Number(point.lon ?? point[1]) - origin.lon) * mLon,
+      y: (Number(point.lat ?? point[0]) - origin.lat) * mLat
+    });
+    const a = local(line[0]), b = local(line[1]), rx = b.x - a.x, ry = b.y - a.y;
+    for (let index = 1; index < points.length; index += 1) {
+      const p = local(points[index - 1]), q = local(points[index]);
+      const sx = q.x - p.x, sy = q.y - p.y, denominator = sx * ry - sy * rx;
+      if (Math.abs(denominator) < 1e-9) continue;
+      const dx = a.x - p.x, dy = a.y - p.y;
+      const referenceRatio = (dx * ry - dy * rx) / denominator;
+      const lineRatio = (dx * sy - dy * sx) / denominator;
+      if (referenceRatio < 0 || referenceRatio > 1 || lineRatio < 0 || lineRatio > 1) continue;
+      const startDistance = Number(points[index - 1][2]) || 0;
+      const endDistance = Number(points[index][2]) || startDistance;
+      return startDistance + (endDistance - startDistance) * referenceRatio;
+    }
+    const mid = { lat: (line[0].lat + line[1].lat) / 2, lon: (line[0].lon + line[1].lon) / 2 };
+    return projectPoint(mid.lat, mid.lon)?.distance ?? NaN;
+  }
+
   function checkpointDistances(items) {
     const source = items[0]?.session.checkpoints || [];
-    return source.map(line => {
-      const mid = { lat: (line[0].lat + line[1].lat) / 2, lon: (line[0].lon + line[1].lon) / 2 };
-      return projectPoint(mid.lat, mid.lon)?.distance;
-    }).filter(Number.isFinite).filter(distance => distance > 2 && distance < totalDistance() - 2).sort((a, b) => a - b);
+    return source.map(checkpointReferenceDistance)
+      .filter(Number.isFinite).filter(distance => distance > 2 && distance < totalDistance() - 2).sort((a, b) => a - b);
   }
 
   function sectorBounds(items) {
@@ -441,8 +465,7 @@
     const source = items[0]?.session.checkpoints || [];
     return source.map((line, sourceIndex) => {
       if (!line?.[0] || !line?.[1]) return null;
-      const mid = { lat: (line[0].lat + line[1].lat) / 2, lon: (line[0].lon + line[1].lon) / 2 };
-      const distance = projectPoint(mid.lat, mid.lon)?.distance;
+      const distance = checkpointReferenceDistance(line);
       return Number.isFinite(distance) && distance > 2 && distance < totalDistance() - 2
         ? { line, sourceIndex, distance }
         : null;
