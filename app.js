@@ -35,6 +35,9 @@ const page4LapDistanceCache = new Map();
 const page4SessionStore = [];
 let page4SessionSerial = 0;
 let page4ActiveSessionId = null;
+let page4SelectedSessionLaps = [];
+const PAGE4_LAP_COLORS = ['#06b6d4', '#ec4899'];
+const page4HiddenSeries = new Set();
 let gpsAxisMode = 'time';
 
 // Global state variables for Page 3 IMU charts
@@ -1806,6 +1809,81 @@ function page4SeriesValue(series, row, globalIndex) {
   return series[2](row);
 }
 
+function page4SelectedItems() {
+  return page4SelectedSessionLaps.map((selection, selectionIndex) => {
+    const session = page4SessionStore.find(item => item.id === selection.sessionId);
+    const lap = session?.laps?.[selection.lapIndex];
+    return session && lap ? { session, lap, selection, selectionIndex } : null;
+  }).filter(Boolean);
+}
+
+function page4AlignedSeries(item, series, primaryLap, startTime, endTime) {
+  const relativeStart = Math.max(0, startTime - primaryLap.startTime);
+  const relativeEnd = Math.max(relativeStart, endTime - primaryLap.startTime);
+  const sourceStart = item.lap.startTime + relativeStart;
+  const sourceEnd = Math.min(item.lap.endTime, item.lap.startTime + relativeEnd);
+  const rows = item.session.rows || [];
+  let first = 0;
+  while (first < rows.length && Number(rows[first]?.time_sec) < sourceStart) first += 1;
+  let last = first;
+  while (last < rows.length && Number(rows[last]?.time_sec) <= sourceEnd) last += 1;
+  const indices = downsampleIndices(Math.max(0, last - first), 4500).map(index => first + index);
+  return indices.map(index => {
+    const row = rows[index];
+    const alignedTime = primaryLap.startTime + (Number(row.time_sec) - item.lap.startTime);
+    const x = page4AxisMode === 'distance'
+      ? page4AxisValue(alignedTime)
+      : alignedTime;
+    const globalIndex = item.session.id === page4ActiveSessionId ? index : undefined;
+    return { x, y: page4SeriesValue(series, row, globalIndex) };
+  });
+}
+
+function page4ChartDatasets(spec, startTime = page4ViewStart, endTime = page4ViewEnd) {
+  const items = page4SelectedItems();
+  const primary = items[0];
+  if (!primary) return [];
+  return items.flatMap(item => spec.series.map((series, seriesIndex) => ({
+    label: `${item.session.driver} · L${item.lap.number} ${series[0]}`,
+    data: page4AlignedSeries(item, series, primary.lap, startTime, endTime),
+    borderColor: PAGE4_LAP_COLORS[item.selectionIndex],
+    borderWidth: item.selectionIndex === 0 ? 1.45 : 1.3,
+    borderDash: series[4]?.length ? series[4] : (seriesIndex === 0 ? [] : [7, 3 + seriesIndex]),
+    pointRadius: 0,
+    stepped: spec.stepped ? 'before' : false,
+    fill: false,
+    yAxisID: series[3] || 'y',
+    page4SelectionIndex: item.selectionIndex,
+    page4SeriesIndex: seriesIndex
+  })));
+}
+
+function syncPage4SeriesToggles(chart) {
+  const header = chart?.canvas?.parentElement?.querySelector('header');
+  if (!header) return;
+  header.querySelector('.p4-series-toggles')?.remove();
+  const toggles = document.createElement('div');
+  toggles.className = 'p4-series-toggles';
+  chart.data.datasets.forEach((dataset, datasetIndex) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    const visible = !page4HiddenSeries.has(dataset.label);
+    chart.setDatasetVisibility(datasetIndex, visible);
+    button.className = visible ? 'active' : '';
+    button.innerHTML = `<i style="background:${dataset.borderColor}"></i>${escapePage4SessionHtml(dataset.label)}`;
+    button.addEventListener('click', () => {
+      const isVisible = chart.isDatasetVisible(datasetIndex);
+      chart.setDatasetVisibility(datasetIndex, !isVisible);
+      if (isVisible) page4HiddenSeries.add(dataset.label); else page4HiddenSeries.delete(dataset.label);
+      button.classList.toggle('active', !isVisible);
+      chart.update('none');
+      drawCssIntersectionDots(currentCursorIndex, page4Charts, page4CursorTime);
+    });
+    toggles.appendChild(button);
+  });
+  header.insertBefore(toggles, header.querySelector('output'));
+}
+
 function buildPage4WorkspaceCharts(S, makeCommonOptions) {
   page4Charts.forEach(chart => chart?.destroy());
   page4Charts = PAGE4_CHART_SPECS.map((spec, chartIndex) => {
@@ -1828,11 +1906,7 @@ function buildPage4WorkspaceCharts(S, makeCommonOptions) {
     }
     const chart = new Chart(canvas.getContext('2d'), {
       type: 'line',
-      data: { datasets: spec.series.map((series) => ({
-        label: series[0], data: activeSampledData.map((row, index) => ({ x: page4AxisValue(row.time_sec), y: page4SeriesValue(series, row, sampleIndices[index]) })),
-        borderColor: series[1], borderWidth: 1.35, borderDash: series[4] || [], pointRadius: 0,
-        stepped: spec.stepped ? 'before' : false, fill: false, yAxisID: series[3] || 'y'
-      })) },
+      data: { datasets: page4ChartDatasets(spec, page4RangeStart, page4RangeEnd) },
       options
     });
     const scrub = event => {
@@ -1914,27 +1988,7 @@ function buildPage4WorkspaceCharts(S, makeCommonOptions) {
     canvas.addEventListener('pointerup', stopScrub);
     canvas.addEventListener('pointercancel', stopScrub);
     canvas._page4ScrubHandlers = { down, move, stop: stopScrub, stopEdgePan };
-    const header = canvas.parentElement?.querySelector('header');
-    header?.querySelector('.p4-series-toggles')?.remove();
-    if (header && spec.series.length > 1) {
-      const toggles = document.createElement('div');
-      toggles.className = 'p4-series-toggles';
-      spec.series.forEach((series, datasetIndex) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'active';
-        button.innerHTML = `<i style="background:${series[1]}"></i>${series[0]}`;
-        button.addEventListener('click', () => {
-          const visible = chart.isDatasetVisible(datasetIndex);
-          chart.setDatasetVisibility(datasetIndex, !visible);
-          button.classList.toggle('active', !visible);
-          chart.update('none');
-          drawCssIntersectionDots(currentCursorIndex, page4Charts, page4CursorTime);
-        });
-        toggles.appendChild(button);
-      });
-      header.insertBefore(toggles, header.querySelector('output'));
-    }
+    syncPage4SeriesToggles(chart);
     return chart;
   }).filter(Boolean);
   refreshPage4Selectors();
@@ -2004,15 +2058,17 @@ function renderPage4SessionDrawer() {
     return;
   }
   p4SessionList.innerHTML = page4SessionStore.map(session => `
-    <section class="p4-session-card ${session.id === page4ActiveSessionId ? 'active' : ''}" data-p4-session="${session.id}">
+    <section class="p4-session-card ${page4SelectedSessionLaps.some(item => item.sessionId === session.id) ? 'active' : ''}" data-p4-session="${session.id}">
       <div class="p4-session-card-head">
         <input type="text" value="${escapePage4SessionHtml(session.driver)}" data-p4-session-driver="${session.id}" aria-label="드라이버 이름">
         <button class="p4-session-card-remove" type="button" data-p4-session-remove="${session.id}" aria-label="${escapePage4SessionHtml(session.driver)} 세션 제거" title="이 세션 제거">×</button>
       </div>
       <small title="${escapePage4SessionHtml(session.fileName)}">${escapePage4SessionHtml(session.fileName)} · ${session.laps.length}개 완성 랩</small>
-      <div class="p4-session-laps">${session.laps.map((lap, lapIndex) => `
-        <button type="button" class="p4-session-lap ${session.id === page4ActiveSessionId && lapIndex === page4SelectedLapIndex ? 'active' : ''}" data-p4-session-lap="${session.id}:${lapIndex}"><i></i>L${lap.number} ${formatLapTime(lap.duration)}</button>
-      `).join('')}</div>
+      <div class="p4-session-laps">${session.laps.map((lap, lapIndex) => {
+        const selectedIndex = page4SelectedSessionLaps.findIndex(item => item.sessionId === session.id && item.lapIndex === lapIndex);
+        const selected = selectedIndex >= 0;
+        return `<button type="button" class="p4-session-lap ${selected ? 'active' : ''}" style="--lap-color:${selected ? PAGE4_LAP_COLORS[selectedIndex] : '#f97316'}" data-p4-session-lap="${session.id}:${lapIndex}"><i></i>L${lap.number} ${formatLapTime(lap.duration)}</button>`;
+      }).join('')}</div>
     </section>
   `).join('');
 }
@@ -2034,6 +2090,7 @@ function registerPage4Session(snapshot, makeActive = true) {
     const bestLapIndex = page4BestLapIndex(session);
     page4ActiveSessionId = session.id;
     page4SelectedLapIndex = bestLapIndex;
+    page4SelectedSessionLaps = bestLapIndex >= 0 ? [{ sessionId: session.id, lapIndex: bestLapIndex }] : [];
     refreshPage4Selectors();
     page4SelectedLapIndex = bestLapIndex;
     if (bestLapIndex >= 0 && p4LapSelect) {
@@ -2062,6 +2119,7 @@ function activatePage4SessionLap(sessionId, lapIndex) {
   }
   page4ActiveSessionId = sessionId;
   page4SelectedLapIndex = lapIndex;
+  page4SelectedSessionLaps = [{ sessionId, lapIndex }, ...page4SelectedSessionLaps.filter(item => item.sessionId !== sessionId || item.lapIndex !== lapIndex)].slice(0, 2);
   refreshPage4Selectors();
   page4SelectedLapIndex = lapIndex;
   if (p4LapSelect) p4LapSelect.value = String(lapIndex);
@@ -2174,16 +2232,11 @@ function refreshPage4VisibleRange(startTime, endTime) {
   page4ViewStart = Math.max(page4RangeStart, Number(startTime));
   page4ViewEnd = Math.min(page4RangeEnd, Number(endTime));
   if (!(page4ViewEnd > page4ViewStart)) return;
-  const first = findGlobalIndexAtTime(page4ViewStart);
-  const last = findGlobalIndexAtTime(page4ViewEnd);
-  const count = Math.max(1, last - first + 1);
-  const relativeIndices = downsampleIndices(count, 4500).map(index => first + index);
   PAGE4_CHART_SPECS.forEach((spec, chartIndex) => {
     const chart = page4Charts[chartIndex];
     if (!chart) return;
-    spec.series.forEach((series, datasetIndex) => {
-      chart.data.datasets[datasetIndex].data = relativeIndices.map(index => ({ x: page4AxisValue(globalData[index].time_sec), y: page4SeriesValue(series, globalData[index], index) }));
-    });
+    chart.data.datasets = page4ChartDatasets(spec, page4ViewStart, page4ViewEnd);
+    syncPage4SeriesToggles(chart);
     chart.options.scales.x.min = page4AxisValue(page4ViewStart);
     chart.options.scales.x.max = page4AxisValue(page4ViewEnd);
     chart.options.scales.x.ticks.callback = value => page4AxisMode === 'distance' ? `${Math.round(Number(value))}m` : Number(value).toFixed(1);
@@ -2510,6 +2563,7 @@ p4SessionList?.addEventListener('click', event => {
     const session = page4SessionStore[sessionIndex];
     if (!session || !window.confirm(`“${session.driver}” 세션(${session.fileName})을 제거하시겠습니까?`)) return;
     page4SessionStore.splice(sessionIndex, 1);
+    page4SelectedSessionLaps = page4SelectedSessionLaps.filter(item => item.sessionId !== sessionId);
     if (page4ActiveSessionId === sessionId) {
       const next = page4SessionStore[Math.min(sessionIndex, page4SessionStore.length - 1)];
       page4ActiveSessionId = null;
@@ -2521,10 +2575,27 @@ p4SessionList?.addEventListener('click', event => {
   const lap = event.target.closest('[data-p4-session-lap]');
   if (!lap) return;
   const [sessionId, lapIndex] = lap.dataset.p4SessionLap.split(':').map(Number);
-  activatePage4SessionLap(sessionId, lapIndex);
+  const selectedIndex = page4SelectedSessionLaps.findIndex(item => item.sessionId === sessionId && item.lapIndex === lapIndex);
+  if (selectedIndex >= 0) {
+    if (page4SelectedSessionLaps.length === 1) return;
+    page4SelectedSessionLaps.splice(selectedIndex, 1);
+    if (selectedIndex === 0) activatePage4SessionLap(page4SelectedSessionLaps[0].sessionId, page4SelectedSessionLaps[0].lapIndex);
+    else { renderPage4SessionDrawer(); applyPage4Selection(); }
+    return;
+  }
+  if (page4SelectedSessionLaps.length >= 2) {
+    alert('4페이지 비교는 최대 2개 랩까지 선택할 수 있습니다. 선택된 랩 하나를 먼저 해제해 주세요.');
+    return;
+  }
+  page4SelectedSessionLaps.push({ sessionId, lapIndex });
+  renderPage4SessionDrawer();
+  applyPage4Selection();
 });
 p4LapSelect?.addEventListener('change', () => {
   page4SelectedLapIndex = Number(p4LapSelect.value);
+  if (page4ActiveSessionId !== null) {
+    page4SelectedSessionLaps = [{ sessionId: page4ActiveSessionId, lapIndex: page4SelectedLapIndex }, ...page4SelectedSessionLaps.filter(item => item.sessionId !== page4ActiveSessionId || item.lapIndex !== page4SelectedLapIndex)].slice(0, 2);
+  }
   refreshPage4SectorOptions();
   renderPage4SessionDrawer();
 });
