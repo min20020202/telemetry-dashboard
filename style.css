@@ -717,6 +717,9 @@ body {
 .lap-strip header { position:absolute; top:3px; left:43px; right:4px; z-index:12; display:flex; align-items:center; gap:6px; min-height:20px; pointer-events:none; color:#334155; font:900 9px var(--font-mono); }
 .lap-strip header output { color:#0f172a; font-weight:800; }
 .lap-strip header output { margin-left:auto; padding:1px 4px; white-space:nowrap; background:rgba(255,255,255,.82); border-radius:3px; }
+.lap-strip header output.p4-live-values { display:grid; justify-items:end; gap:1px; padding-block:1px; font-size:7px; line-height:1; }
+.p4-live-values span { color:var(--lap-value-color); }
+.p4-live-values span i { margin-right:5px; color:inherit; font-style:normal; font-weight:900; }
 .p4-series-menu-button { flex:0 0 20px; display:grid; place-content:center; gap:2px; width:20px; height:20px; padding:0; border:1px solid #cbd5e1; border-radius:5px; background:rgba(255,255,255,.94); cursor:pointer; pointer-events:auto; }
 .p4-series-menu-button span { display:block; width:11px; height:1.5px; border-radius:2px; background:#475569; }
 .p4-series-menu-button[aria-expanded="true"] { border-color:#f97316; background:#fff7ed; }

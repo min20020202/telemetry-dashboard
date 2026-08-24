@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260825-20">
+  <link rel="stylesheet" href="style.css?v=20260825-21">
 </head>
 <body>
 
@@ -580,7 +580,7 @@
           <div class="lap-strip"><header>COOLANT / OIL TEMPERATURE <output id="p4-temp">-- · -- °C</output></header><canvas id="p4-chart-temp"></canvas></div>
         </main>
         <aside class="lap-workspace-side">
-          <section class="lap-side-card p4-play-card"><div class="p4-lap-card-head"><label for="p4-lap-select">랩 선택</label><div id="p4-axis-mode" class="p4-axis-mode" aria-label="그래프 가로축"><button type="button" class="active" data-mode="time">시간 s</button><button type="button" data-mode="distance">거리 m</button></div></div><select id="p4-lap-select"><option value="">피니시라인 설정 필요</option></select><div class="p4-play-controls"><button id="p4-play-toggle" type="button">▶ 재생</button><select id="p4-play-rate" aria-label="재생 속도"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></div><output id="p4-play-time">0.000 s</output></section>
+          <section class="lap-side-card p4-play-card"><div class="p4-lap-card-head"><label for="p4-lap-select">랩 선택</label><div id="p4-axis-mode" class="p4-axis-mode" aria-label="그래프 가로축"><button type="button" data-mode="time">시간 s</button><button type="button" class="active" data-mode="distance">거리 m</button></div></div><select id="p4-lap-select"><option value="">피니시라인 설정 필요</option></select><div class="p4-play-controls"><button id="p4-play-toggle" type="button">▶ 재생</button><select id="p4-play-rate" aria-label="재생 속도"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></div><output id="p4-play-time">0.0 m</output></section>
           <section class="lap-side-card lap-sector-select"><strong>분석 구간</strong><div><label>시작<select id="p4-sector-start"></select></label><span>→</span><label>종료<select id="p4-sector-end"></select></label></div><small id="p4-sector-status">랩 전체 구간</small></section>
           <section class="lap-side-card p4-g-card"><strong>IMU G / STEERING</strong><div class="p4-g-meter"><canvas id="p4-g-trace"></canvas><i></i><i></i><b>↑</b><span class="p4-g-scale top outer">+2g</span><span class="p4-g-scale top inner">+1g</span><span id="p4-g-dot"></span></div><div class="p4-g-values"><span>종G <b id="p4-gx">--.--</b></span><span>횡G <b id="p4-gy">--.--</b></span></div><div class="p4-steering-widget"><svg id="p4-steering-wheel" viewBox="0 0 100 100" aria-label="조향 핸들"><circle cx="50" cy="50" r="40" stroke="var(--text-primary)" stroke-width="8" fill="none" opacity="0.8"></circle><line x1="50" y1="50" x2="50" y2="90" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round"></line><line x1="50" y1="50" x2="10" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round"></line><line x1="50" y1="50" x2="90" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round"></line><circle cx="50" cy="50" r="10" fill="var(--accent-magenta)"></circle><rect x="47" y="6" width="6" height="8" fill="var(--accent-orange)" rx="1"></rect></svg><span>핸들 <b id="p4-steering-value">--.-°</b></span></div></section>
           <section class="lap-side-card p4-track-card"><canvas id="p4-track-map" aria-label="현재 랩 위치"></canvas><small id="p4-track-time">--:--.---</small></section>
@@ -991,7 +991,7 @@
   <script src="steering.js?v=20260820-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
-  <script src="app.js?v=20260825-15"></script>
+  <script src="app.js?v=20260825-16"></script>
   <script src="comparison.js?v=20260825-30"></script>
 </body>
 </html>

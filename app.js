@@ -30,7 +30,7 @@ let page4ViewEnd = 0;
 const steeringWheelDisplayAngle = steeringAngle => -(Number(steeringAngle) || 0);
 let page4CursorTime = 0;
 let page4SelectedLapIndex = -1;
-let page4AxisMode = 'time';
+let page4AxisMode = 'distance';
 const page4LapDistanceCache = new Map();
 const page4SessionStore = [];
 let page4SessionSerial = 0;
@@ -1649,9 +1649,8 @@ function page4ReferencePoints() {
   return source.points;
 }
 
-function buildPage4LapDistanceMap(lapIndex = page4SelectedLapIndex) {
-  if (page4LapDistanceCache.has(lapIndex)) return page4LapDistanceCache.get(lapIndex);
-  const lap = gpsLapResults[lapIndex];
+function buildPage4DistanceMap(lap, gpsPoints, cacheKey) {
+  if (page4LapDistanceCache.has(cacheKey)) return page4LapDistanceCache.get(cacheKey);
   const reference = page4ReferencePoints();
   if (!lap || reference.length < 2) return [];
   const originLat = reference[0][0] * Math.PI / 180;
@@ -1662,7 +1661,7 @@ function buildPage4LapDistanceMap(lapIndex = page4SelectedLapIndex) {
     y: (point[0] - reference[0][0]) * metersPerLat,
     d: Number(point[2]) || 0
   }));
-  const fixes = gpsLapPoints.filter(point => point.time >= lap.startTime - 0.05 && point.time <= lap.endTime + 0.05);
+  const fixes = (gpsPoints || []).filter(point => point.time >= lap.startTime - 0.5 && point.time <= lap.endTime + 0.5);
   const map = [{ time: lap.startTime, distance: 0 }];
   let previousSegment = 0;
   let previousDistance = 0;
@@ -1689,12 +1688,19 @@ function buildPage4LapDistanceMap(lapIndex = page4SelectedLapIndex) {
   const total = Number(window.NSSUR_TRACK_REFERENCE.totalDistanceMeters) || ref.at(-1).d;
   map.push({ time: lap.endTime, distance: total });
   map.sort((a, b) => a.time - b.time);
-  page4LapDistanceCache.set(lapIndex, map);
+  page4LapDistanceCache.set(cacheKey, map);
   return map;
 }
 
-function interpolateLapDistanceMap(value, inputKey, outputKey, lapIndex = page4SelectedLapIndex) {
-  const map = buildPage4LapDistanceMap(lapIndex);
+function buildPage4LapDistanceMap(lapIndex = page4SelectedLapIndex) {
+  return buildPage4DistanceMap(gpsLapResults[lapIndex], gpsLapPoints, `active:${lapIndex}`);
+}
+
+function buildPage4ItemDistanceMap(item) {
+  return buildPage4DistanceMap(item?.lap, item?.session?.gpsPoints, `session:${item?.session?.id}:${item?.selection?.lapIndex}`);
+}
+
+function interpolatePage4DistanceMap(map, value, inputKey, outputKey) {
   if (!map.length) return Number(value) || 0;
   const target = Number(value) || 0;
   let low = 0, high = map.length - 1;
@@ -1707,6 +1713,11 @@ function interpolateLapDistanceMap(value, inputKey, outputKey, lapIndex = page4S
   if (!left || left === right || right[inputKey] === left[inputKey]) return right[outputKey];
   const ratio = Math.max(0, Math.min(1, (target - left[inputKey]) / (right[inputKey] - left[inputKey])));
   return left[outputKey] + (right[outputKey] - left[outputKey]) * ratio;
+}
+
+function interpolateLapDistanceMap(value, inputKey, outputKey, lapIndex = page4SelectedLapIndex) {
+  const map = buildPage4LapDistanceMap(lapIndex);
+  return interpolatePage4DistanceMap(map, value, inputKey, outputKey);
 }
 
 function page4AxisValue(time) { return page4AxisMode === 'distance' ? interpolateLapDistanceMap(time, 'time', 'distance') : Number(time); }
@@ -1851,8 +1862,15 @@ function page4SelectedItems() {
 function page4AlignedSeries(item, series, primaryLap, startTime, endTime) {
   const relativeStart = Math.max(0, startTime - primaryLap.startTime);
   const relativeEnd = Math.max(relativeStart, endTime - primaryLap.startTime);
-  const sourceStart = item.lap.startTime + relativeStart;
-  const sourceEnd = Math.min(item.lap.endTime, item.lap.startTime + relativeEnd);
+  const primaryStartDistance = page4AxisValue(startTime);
+  const primaryEndDistance = page4AxisValue(endTime);
+  const itemDistanceMap = buildPage4ItemDistanceMap(item);
+  const sourceStart = page4AxisMode === 'distance'
+    ? interpolatePage4DistanceMap(itemDistanceMap, primaryStartDistance, 'distance', 'time')
+    : item.lap.startTime + relativeStart;
+  const sourceEnd = page4AxisMode === 'distance'
+    ? interpolatePage4DistanceMap(itemDistanceMap, primaryEndDistance, 'distance', 'time')
+    : Math.min(item.lap.endTime, item.lap.startTime + relativeEnd);
   const rows = item.session.rows || [];
   let lo = 0, hi = rows.length;
   while (lo < hi) {
@@ -1875,7 +1893,7 @@ function page4AlignedSeries(item, series, primaryLap, startTime, endTime) {
     const row = rows[index];
     const alignedTime = primaryLap.startTime + (Number(row.time_sec) - item.lap.startTime);
     const x = page4AxisMode === 'distance'
-      ? page4AxisValue(alignedTime)
+      ? interpolatePage4DistanceMap(itemDistanceMap, Number(row.time_sec), 'time', 'distance')
       : alignedTime;
     const globalIndex = item.session.id === page4ActiveSessionId ? index : undefined;
     return { x, y: page4SeriesValue(series, row, globalIndex) };
@@ -2350,6 +2368,11 @@ function page4RowIndexAtTime(rows, targetTime) {
 }
 
 function page4AlignedItemTime(item, primaryLap, primaryTime = page4CursorTime) {
+  if (page4AxisMode === 'distance') {
+    const distance = page4AxisValue(primaryTime);
+    return Math.max(item.lap.startTime, Math.min(item.lap.endTime,
+      interpolatePage4DistanceMap(buildPage4ItemDistanceMap(item), distance, 'distance', 'time')));
+  }
   const elapsed = Math.max(0, Number(primaryTime) - primaryLap.startTime);
   return Math.max(item.lap.startTime, Math.min(item.lap.endTime, item.lap.startTime + elapsed));
 }
@@ -2753,7 +2776,48 @@ function updatePage4Widgets(row) {
   }
   set('p4-steering-value', `${steering >= 0 ? '+' : ''}${steering.toFixed(1)}°`);
   if (p4SteeringWheel) p4SteeringWheel.style.transform = `rotate(${steeringWheelDisplayAngle(steering)}deg)`;
+  updatePage4ComparisonHeaders(Number(row.time_sec));
   drawPage4TrackMap(Number(row.time_sec));
+}
+
+function updatePage4ComparisonHeaders(primaryTime = page4CursorTime) {
+  const items = page4SelectedItems();
+  const primary = items[0];
+  if (!primary) return;
+  const values = items.map(item => {
+    const rows = item.session.rows || [];
+    const time = page4AlignedItemTime(item, primary.lap, primaryTime);
+    const index = page4RowIndexAtTime(rows, time);
+    const row = rows[index];
+    if (!row) return null;
+    const steering = page4SeriesValue(PAGE4_CHART_SPECS[4].series[0], row, item.session.id === page4ActiveSessionId ? index : undefined);
+    const yaw = page4SeriesValue(PAGE4_CHART_SPECS[4].series[1], row, item.session.id === page4ActiveSessionId ? index : undefined);
+    const gx = page4SeriesValue(PAGE4_CHART_SPECS[5].series[0], row, item.session.id === page4ActiveSessionId ? index : undefined);
+    const gy = page4SeriesValue(PAGE4_CHART_SPECS[5].series[1], row, item.session.id === page4ActiveSessionId ? index : undefined);
+    return {
+      item, color: PAGE4_LAP_COLORS[item.selectionIndex],
+      speed: `GPS ${(Number(row.gps_speed_kmh) || 0).toFixed(1)} · FL ${(Number(row.fl_speed_kmh) || 0).toFixed(1)} · RL ${(Number(row.rl_speed_kmh) || 0).toFixed(1)} · RR ${(Number(row.rr_speed_kmh) || 0).toFixed(1)} km/h`,
+      rpm: `${Math.round(Number(row.rpm) || 0)} rpm · ${(Number(row.decoded_tps) || 0).toFixed(1)}%`,
+      gear: Number(row.gear) > 0 ? String(Math.round(row.gear)) : 'N',
+      pedals: `T ${(Number(row.decoded_tps) || 0).toFixed(1)} · B ${getCalibratedBrake(row.front_brake_raw).toFixed(1)}%`,
+      steering: `${steering.toFixed(1)}° · ${yaw.toFixed(1)}°/s`,
+      imu: `X ${gx.toFixed(2)} · Y ${gy.toFixed(2)} g`,
+      temp: `${Math.round(Number(row.water_c) || 0)} · ${Math.round(Number(row.oil_c) || 0)} °C`
+    };
+  }).filter(Boolean);
+  const render = (id, key) => {
+    const output = document.getElementById(id);
+    if (!output) return;
+    output.classList.add('p4-live-values');
+    output.innerHTML = values.map(value => `<span style="--lap-value-color:${value.color}"><i>${escapePage4SessionHtml(value.item.session.driver)} L${value.item.lap.number}</i>${value[key]}</span>`).join('');
+  };
+  render('p4-speed', 'speed');
+  render('p4-rpm-tps', 'rpm');
+  render('p4-gear', 'gear');
+  render('p4-pedals', 'pedals');
+  render('p4-steering-yaw', 'steering');
+  render('p4-imu', 'imu');
+  render('p4-temp', 'temp');
 }
 
 p4SessionDrawerToggle?.addEventListener('click', () => setPage4SessionDrawer(!document.getElementById('page-temperature')?.classList.contains('p4-session-drawer-open')));
