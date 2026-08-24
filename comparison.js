@@ -838,6 +838,53 @@
     };
   }
 
+  function sectorLapAnalysis(cell, sectorIndex, items, start, end, duration) {
+    const points = cell.data.filter(point => point.x >= start && point.x <= end);
+    const speeds = points.map(point => point.speed);
+    return {
+      duration,
+      points,
+      minSpeed: speeds.length ? Math.min(...speeds) : NaN,
+      exitSpeed: Number(points.at(-1)?.speed) || 0,
+      metrics: sectorPathMetrics(cell.item, sectorIndex, items, start, end),
+      brake: pedalEventSummary(points, 'brake', 5),
+      throttle: pedalEventSummary(points, 'tps', 20),
+      fullThrottle: pedalEventSummary(points, 'tps', 90)
+    };
+  }
+
+  function signed(value, digits = 1, suffix = '') {
+    return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}${suffix}`;
+  }
+
+  function eventStartComparison(referenceEvents, comparisonEvents) {
+    const count = Math.max(referenceEvents.length, comparisonEvents.length);
+    if (!count) return '조작 없음';
+    return Array.from({ length: count }, (_, index) => {
+      const referenceEvent = referenceEvents[index], comparisonEvent = comparisonEvents[index];
+      if (!referenceEvent) return `${index + 1}차 추가 ${comparisonEvent.start.toFixed(0)}m`;
+      if (!comparisonEvent) return `${index + 1}차 ${referenceEvent.start.toFixed(0)}m → 없음`;
+      return `${index + 1}차 ${referenceEvent.start.toFixed(0)} → ${comparisonEvent.start.toFixed(0)}m (${signed(comparisonEvent.start - referenceEvent.start, 0, 'm')})`;
+    }).join(' · ');
+  }
+
+  function sectorComparisonMarkup(referenceAnalysis, analysis) {
+    if (!referenceAnalysis || !analysis?.metrics || !referenceAnalysis.metrics || !Number.isFinite(referenceAnalysis.duration) || !Number.isFinite(analysis.duration)) return '';
+    const timeDelta = analysis.duration - referenceAnalysis.duration;
+    const distanceDelta = analysis.metrics.actualDistance - referenceAnalysis.metrics.actualDistance;
+    const speedDelta = analysis.metrics.averageSpeed - referenceAnalysis.metrics.averageSpeed;
+    return `<span class="sector-direct-comparison">
+      <small class="comparison-caption">기준 랩과 직접 비교</small>
+      <span class="comparison-key-deltas">
+        <em class="${timeDelta < 0 ? 'gain' : timeDelta > 0 ? 'loss' : ''}">기록 ${signed(timeDelta, 3, 's')}</em>
+        <em class="${distanceDelta < 0 ? 'gain' : distanceDelta > 0 ? 'loss' : ''}">거리 ${signed(distanceDelta, 1, 'm')}</em>
+        <em class="${speedDelta > 0 ? 'gain' : speedDelta < 0 ? 'loss' : ''}">평균속도 ${signed(speedDelta, 1)}</em>
+      </span>
+      <small class="comparison-pedal-delta brake">B ${referenceAnalysis.brake.events.length}→${analysis.brake.events.length}회 · 시간 ${signed(analysis.brake.activeTime - referenceAnalysis.brake.activeTime, 2, 's')} · MAX ${signed(analysis.brake.maximum - referenceAnalysis.brake.maximum, 0, '%')}</small>
+      <small class="comparison-pedal-delta throttle">T ${referenceAnalysis.throttle.events.length}→${analysis.throttle.events.length}회 · 평균 ${signed(analysis.throttle.average - referenceAnalysis.throttle.average, 0, '%')} · FULL ${signed(analysis.fullThrottle.activeTime - referenceAnalysis.fullThrottle.activeTime, 2, 's')}</small>
+    </span>`;
+  }
+
   function renderSectors(items) {
     if (!ui.sector) return;
     if (items.length < 2) { ui.sector.innerHTML = '<p class="comparison-empty">두 개 이상의 랩을 선택하세요.</p>'; return; }
@@ -857,29 +904,23 @@
       const validDurations = durations.filter(Number.isFinite);
       const fastest = validDurations.length ? Math.min(...validDurations) : NaN;
       const referenceDuration = durations[0];
+      const referenceAnalysis = sectorLapAnalysis(cells[0], sectorIndex, items, start, end, referenceDuration);
       return `<tr class="${isActive(sectorIndex) ? 'active' : ''}" data-sector-row="${sectorIndex}"><td><button type="button" data-sector="${sectorIndex}">S${sectorIndex + 1}</button><br><small>${start.toFixed(0)}–${end.toFixed(0)}m</small></td>${cells.map(cell => {
-        const points = cell.data.filter(point => point.x >= start && point.x <= end);
-        const last = points.at(-1);
         const duration = durations[cell.index];
+        const analysis = cell.index === 0 ? referenceAnalysis : sectorLapAnalysis(cell, sectorIndex, items, start, end, duration);
         const isFastest = Number.isFinite(duration) && Math.abs(duration - fastest) < .0005;
-        const minSpeed = Math.min(...points.map(point => point.speed));
-        const brakeStats = pedalEventSummary(points, 'brake', 5);
-        const throttleStats = pedalEventSummary(points, 'tps', 20);
-        const fullThrottleStats = pedalEventSummary(points, 'tps', 90);
-        const metrics = sectorPathMetrics(cell.item, sectorIndex, items, start, end);
+        const { minSpeed, exitSpeed, brake: brakeStats, throttle: throttleStats, fullThrottle: fullThrottleStats, metrics } = analysis;
         const brakePositions = brakeStats.events.length ? brakeStats.events.map(event => `${event.start.toFixed(0)}m`).join(', ') : '없음';
         const throttlePositions = throttleStats.events.length ? throttleStats.events.map(event => `${event.start.toFixed(0)}m`).join(', ') : '없음';
-        const detail = `주행 분석\n실제 GPS 주행거리 ${metrics?.actualDistance.toFixed(1) ?? '—'} m · 공통 중심선 구간 ${metrics?.commonDistance.toFixed(1) ?? '—'} m · 추가거리 ${metrics && metrics.extraDistance >= 0 ? '+' : ''}${metrics?.extraDistance.toFixed(1) ?? '—'} m\n평균속도 ${metrics?.averageSpeed.toFixed(1) ?? '—'} km/h · 최저속도 ${minSpeed.toFixed(1)} km/h · 탈출속도 ${(last?.speed || 0).toFixed(1)} km/h\n중심선 이탈 평균/최대 ${metrics?.meanDeviation.toFixed(1) ?? '—'}/${metrics?.maxDeviation.toFixed(1) ?? '—'} m\n\n페달 분석 (0.12초 미만 신호 제외)\n브레이크 ${brakeStats.events.length}회 · 총 ${brakeStats.activeTime.toFixed(2)}초 · 최대 ${brakeStats.maximum.toFixed(1)}% · 시작 ${brakePositions}\n가속 ${throttleStats.events.length}회 · 총 ${throttleStats.activeTime.toFixed(2)}초 · 평균 ${throttleStats.average.toFixed(1)}% · 시작 ${throttlePositions}\n풀가속(90% 이상) ${fullThrottleStats.activeTime.toFixed(2)}초`;
-        const delta = Number.isFinite(duration) && Number.isFinite(referenceDuration) ? duration - referenceDuration : NaN;
-        const deltaMarkup = cell.index > 0 && Number.isFinite(delta)
-          ? `<small class="sector-time-delta ${delta < -.0005 ? 'faster' : delta > .0005 ? 'slower' : 'equal'}">${delta >= 0 ? '+' : ''}${delta.toFixed(3)}s</small>`
-          : '<small class="sector-time-delta sector-time-delta-placeholder" aria-hidden="true">&nbsp;</small>';
+        const comparisonDetail = cell.index > 0 ? `\n\n기준 랩과 이벤트 시작 비교\n브레이크: ${eventStartComparison(referenceAnalysis.brake.events, brakeStats.events)}\n가속: ${eventStartComparison(referenceAnalysis.throttle.events, throttleStats.events)}` : '';
+        const detail = `주행 분석\n실제 GPS 주행거리 ${metrics?.actualDistance.toFixed(1) ?? '—'} m · 공통 중심선 구간 ${metrics?.commonDistance.toFixed(1) ?? '—'} m · 추가거리 ${metrics && metrics.extraDistance >= 0 ? '+' : ''}${metrics?.extraDistance.toFixed(1) ?? '—'} m\n평균속도 ${metrics?.averageSpeed.toFixed(1) ?? '—'} km/h · 최저속도 ${minSpeed.toFixed(1)} km/h · 탈출속도 ${exitSpeed.toFixed(1)} km/h\n중심선 이탈 평균/최대 ${metrics?.meanDeviation.toFixed(1) ?? '—'}/${metrics?.maxDeviation.toFixed(1) ?? '—'} m\n\n페달 분석 (0.12초 미만 신호 제외)\n브레이크 ${brakeStats.events.length}회 · 총 ${brakeStats.activeTime.toFixed(2)}초 · 최대 ${brakeStats.maximum.toFixed(1)}% · 시작 ${brakePositions}\n가속 ${throttleStats.events.length}회 · 총 ${throttleStats.activeTime.toFixed(2)}초 · 평균 ${throttleStats.average.toFixed(1)}% · 시작 ${throttlePositions}\n풀가속(90% 이상) ${fullThrottleStats.activeTime.toFixed(2)}초${comparisonDetail}`;
         const metricsMarkup = metrics
           ? `<small class="sector-line-metrics">${metrics.actualDistance.toFixed(1)}m <i>${metrics.extraDistance >= 0 ? '+' : ''}${metrics.extraDistance.toFixed(1)}m</i> · 평균 ${metrics.averageSpeed.toFixed(1)}</small>`
           : '';
         const pedalMarkup = `<span class="sector-pedal-metrics"><small class="brake">B <b>${brakeStats.events.length}회</b> · ${brakeStats.activeTime.toFixed(2)}s · MAX ${brakeStats.maximum.toFixed(0)}%</small><small class="throttle">T <b>${throttleStats.events.length}회</b> · AVG ${throttleStats.average.toFixed(0)}% · FULL ${fullThrottleStats.activeTime.toFixed(2)}s</small></span>`;
+        const directComparison = cell.index > 0 ? sectorComparisonMarkup(referenceAnalysis, analysis) : '<span class="sector-reference-label">● 기준 랩</span>';
         return Number.isFinite(duration)
-          ? `<td class="${isFastest ? 'sector-fastest' : ''}" title="${escapeHtml(detail)}"><span class="sector-time-row"><b>${duration.toFixed(3)}s</b>${isFastest ? '<span class="sector-fastest-badge">★ FAST</span>' : ''}</span><span class="sector-cell-meta">${deltaMarkup}${metricsMarkup}</span>${pedalMarkup}</td>`
+          ? `<td class="${isFastest ? 'sector-fastest' : ''}" title="${escapeHtml(detail)}"><span class="sector-time-row"><b>${duration.toFixed(3)}s</b>${isFastest ? '<span class="sector-fastest-badge">★ FAST</span>' : ''}</span><span class="sector-cell-meta">${metricsMarkup}</span>${pedalMarkup}${directComparison}</td>`
           : '<td title="해당 체크포인트의 실제 교차점을 찾지 못했습니다."><b>통과 기록 없음</b></td>';
       }).join('')}</tr>`;
     }).join('')}</tbody></table>`;

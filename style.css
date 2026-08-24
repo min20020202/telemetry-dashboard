@@ -131,6 +131,16 @@
 .sector-pedal-metrics small.brake { color:#ef4444; }
 .sector-pedal-metrics small.throttle { color:#16a34a; }
 .sector-pedal-metrics b { font-size:inherit !important; color:inherit; }
+.sector-reference-label { display:inline-block; margin-top:5px; padding:2px 6px; border-radius:8px; background:rgba(6,182,212,.1); color:#0891b2; font:800 6.5px var(--font-mono); }
+.sector-direct-comparison { display:block; margin-top:5px; padding:4px 5px; border:1px solid rgba(249,115,22,.22); border-radius:5px; background:rgba(249,115,22,.055); }
+.comparison-caption { display:block; margin-bottom:3px; color:var(--accent-orange); font:900 6.5px var(--font-mono); text-align:left; }
+.comparison-key-deltas { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:3px; }
+.comparison-key-deltas em { padding:2px 4px; border-radius:4px; background:rgba(100,116,139,.1); color:var(--text-secondary); font:800 6.5px var(--font-mono); font-style:normal; }
+.comparison-key-deltas em.gain { background:rgba(34,197,94,.13); color:#15803d; }
+.comparison-key-deltas em.loss { background:rgba(239,68,68,.1); color:#dc2626; }
+.comparison-pedal-delta { display:block; margin-top:3px; font:750 6.5px var(--font-mono); }
+.comparison-pedal-delta.brake { color:#dc2626; }
+.comparison-pedal-delta.throttle { color:#15803d; }
 .sector-time-delta.faster { color:#16a34a; }
 .sector-time-delta.slower { color:#ef4444; }
 .sector-time-delta.equal { opacity:.7; }
