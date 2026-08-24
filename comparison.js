@@ -2,7 +2,7 @@
   'use strict';
 
   const COLORS = ['#06b6d4', '#ff3d9a', '#76ff03', '#ffca28'];
-  const state = { sessions: [], selected: new Set(), primarySourceKey: null, cache: new Map(), distanceMapCache: new Map(), sourceSeriesCache: new Map(), sectorCache: new Map(), charts: {}, seriesEnabled: new Map(), serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, playRenderStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, activeSectorEnd: null, lastSector: 0, mapGeometry: null };
+  const state = { sessions: [], selected: new Set(), primarySourceKey: null, cache: new Map(), distanceMapCache: new Map(), sourceSeriesCache: new Map(), sectorCache: new Map(), sectorMetricsCache: new Map(), charts: {}, seriesEnabled: new Map(), serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, playRenderStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, activeSectorEnd: null, lastSector: 0, mapGeometry: null };
   const boundChartCanvases = new WeakSet();
   const $ = id => document.getElementById(id);
   const ui = {
@@ -732,6 +732,38 @@
     return sectorTiming(item, sectorIndex, items)?.duration ?? NaN;
   }
 
+  function gpsDistanceMeters(left, right) {
+    const meanLat = (left.lat + right.lat) * Math.PI / 360;
+    const dy = (right.lat - left.lat) * 111320;
+    const dx = (right.lon - left.lon) * 111320 * Math.cos(meanLat);
+    return Math.hypot(dx, dy);
+  }
+
+  function sectorPathMetrics(item, sectorIndex, items, commonStart, commonEnd) {
+    const timing = sectorTiming(item, sectorIndex, items);
+    if (!timing) return null;
+    const cacheKey = `${item.key}|path|${sectorIndex}|${timing.start.time.toFixed(4)}|${timing.end.time.toFixed(4)}`;
+    if (state.sectorMetricsCache.has(cacheKey)) return state.sectorMetricsCache.get(cacheKey);
+    const interior = item.session.gpsPoints
+      .filter(point => point.time > timing.start.time && point.time < timing.end.time)
+      .sort((a, b) => a.time - b.time);
+    const points = [timing.start, ...interior, timing.end];
+    let actualDistance = 0;
+    for (let index = 1; index < points.length; index += 1) actualDistance += gpsDistanceMeters(points[index - 1], points[index]);
+    const deviations = points.map(point => projectPoint(point.lat, point.lon)).filter(Boolean).map(hit => Math.sqrt(hit.error2));
+    const commonDistance = Math.max(0, commonEnd - commonStart);
+    const metrics = {
+      actualDistance,
+      commonDistance,
+      extraDistance: actualDistance - commonDistance,
+      averageSpeed: timing.duration > 0 ? actualDistance / timing.duration * 3.6 : NaN,
+      meanDeviation: deviations.length ? deviations.reduce((sum, value) => sum + value, 0) / deviations.length : NaN,
+      maxDeviation: deviations.length ? Math.max(...deviations) : NaN
+    };
+    state.sectorMetricsCache.set(cacheKey, metrics);
+    return metrics;
+  }
+
   function sectorRangeTiming(item, startIndex, endIndex, items) {
     if (!Number.isInteger(startIndex)) return null;
     const boundaries = lapSectorBoundaries(item, items);
@@ -807,13 +839,17 @@
         const brake = points.find(point => point.brake >= 5);
         const minIndex = points.findIndex(point => point.speed === minSpeed);
         const throttle = points.slice(Math.max(0, minIndex)).find(point => point.tps >= 20);
-        const detail = `최저속도 ${minSpeed.toFixed(1)} km/h · 브레이크 ${brake ? `${brake.x.toFixed(0)}m` : '없음'} · 재가속 ${throttle ? `${throttle.x.toFixed(0)}m` : '없음'} · 탈출속도 ${(last?.speed || 0).toFixed(1)} km/h`;
+        const metrics = sectorPathMetrics(cell.item, sectorIndex, items, start, end);
+        const detail = `실제 GPS 주행거리 ${metrics?.actualDistance.toFixed(1) ?? '—'} m · 공통 중심선 구간 ${metrics?.commonDistance.toFixed(1) ?? '—'} m · 추가거리 ${metrics && metrics.extraDistance >= 0 ? '+' : ''}${metrics?.extraDistance.toFixed(1) ?? '—'} m · 평균속도 ${metrics?.averageSpeed.toFixed(1) ?? '—'} km/h · 중심선 이탈 평균/최대 ${metrics?.meanDeviation.toFixed(1) ?? '—'}/${metrics?.maxDeviation.toFixed(1) ?? '—'} m · 최저속도 ${minSpeed.toFixed(1)} km/h · 브레이크 ${brake ? `${brake.x.toFixed(0)}m` : '없음'} · 재가속 ${throttle ? `${throttle.x.toFixed(0)}m` : '없음'} · 탈출속도 ${(last?.speed || 0).toFixed(1)} km/h`;
         const delta = Number.isFinite(duration) && Number.isFinite(referenceDuration) ? duration - referenceDuration : NaN;
         const deltaMarkup = cell.index > 0 && Number.isFinite(delta)
           ? `<small class="sector-time-delta ${delta < -.0005 ? 'faster' : delta > .0005 ? 'slower' : 'equal'}">${delta >= 0 ? '+' : ''}${delta.toFixed(3)}s</small>`
           : '<small class="sector-time-delta sector-time-delta-placeholder" aria-hidden="true">&nbsp;</small>';
+        const metricsMarkup = metrics
+          ? `<small class="sector-line-metrics">${metrics.actualDistance.toFixed(1)}m <i>${metrics.extraDistance >= 0 ? '+' : ''}${metrics.extraDistance.toFixed(1)}m</i> · 평균 ${metrics.averageSpeed.toFixed(1)}</small>`
+          : '';
         return Number.isFinite(duration)
-          ? `<td class="${isFastest ? 'sector-fastest' : ''}" title="${detail}"><b>${duration.toFixed(3)}s</b>${isFastest ? '<span class="sector-fastest-badge">★ FAST</span>' : ''}${deltaMarkup}</td>`
+          ? `<td class="${isFastest ? 'sector-fastest' : ''}" title="${detail}"><b>${duration.toFixed(3)}s</b>${isFastest ? '<span class="sector-fastest-badge">★ FAST</span>' : ''}<span class="sector-cell-meta">${deltaMarkup}${metricsMarkup}</span></td>`
           : '<td title="해당 체크포인트의 실제 교차점을 찾지 못했습니다."><b>통과 기록 없음</b></td>';
       }).join('')}</tr>`;
     }).join('')}</tbody></table>`;
@@ -1023,6 +1059,7 @@
       state.distanceMapCache.clear();
       state.sourceSeriesCache.clear();
       state.sectorCache.clear();
+      state.sectorMetricsCache.clear();
       state.playElapsed = 0;
       state.viewMin = 0;
       state.viewMax = null;
@@ -1076,7 +1113,7 @@
       setPlaying(false);
       state.sessions = state.sessions.filter(item => item.id !== sessionId);
       [...state.selected].forEach(key => { if (key.startsWith(`${sessionId}:`)) state.selected.delete(key); });
-      state.cache.clear(); state.distanceMapCache.clear(); state.sourceSeriesCache.clear(); state.sectorCache.clear(); state.seriesEnabled.clear();
+      state.cache.clear(); state.distanceMapCache.clear(); state.sourceSeriesCache.clear(); state.sectorCache.clear(); state.sectorMetricsCache.clear(); state.seriesEnabled.clear();
       state.playElapsed = 0; state.viewMin = 0; state.viewMax = null; state.hoverDistance = null; state.activeSector = null; state.activeSectorEnd = null; state.lastSector = 0; state.mapGeometry = null;
       renderSessions(); render(); syncSelectionToPage4();
       setStatus(`${session.fileName} 세션을 제거했습니다.`);
