@@ -25,6 +25,9 @@ let page4RangeStart = 0;
 let page4RangeEnd = 0;
 let page4ViewStart = 0;
 let page4ViewEnd = 0;
+
+// 그래프와 수치의 조향 부호는 유지하고, 시각적인 핸들만 반대 방향으로 회전합니다.
+const steeringWheelDisplayAngle = steeringAngle => -(Number(steeringAngle) || 0);
 let page4CursorTime = 0;
 let page4SelectedLapIndex = -1;
 let page4AxisMode = 'time';
@@ -2289,7 +2292,7 @@ function updatePage4Widgets(row) {
     p4GDot.style.top = `${50 - Math.max(-2, Math.min(2, gx)) * 22}%`;
   }
   set('p4-steering-value', `${steering >= 0 ? '+' : ''}${steering.toFixed(1)}°`);
-  if (p4SteeringWheel) p4SteeringWheel.style.transform = `rotate(${-steering}deg)`;
+  if (p4SteeringWheel) p4SteeringWheel.style.transform = `rotate(${steeringWheelDisplayAngle(steering)}deg)`;
   drawPage4TrackMap(Number(row.time_sec));
 }
 
@@ -4728,7 +4731,7 @@ function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverr
   cursorSteering.textContent = (steeringDeg >= 0 ? '+' : '') + steeringDeg.toFixed(1);
 
   if (steeringWheelGraphic) {
-    steeringWheelGraphic.style.transform = `rotate(${-steeringDeg}deg)`;
+    steeringWheelGraphic.style.transform = `rotate(${steeringWheelDisplayAngle(steeringDeg)}deg)`;
   }
 
   const throttleVal = cursorChannelValue('throttle', row.decoded_tps || 0).toFixed(1);
@@ -4745,12 +4748,12 @@ function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverr
   // 2페이지 핸들 그래픽 회전 연동
   const diagWheel = document.getElementById('diag-steering-wheel-graphic');
   if (diagWheel) {
-    diagWheel.style.transform = `rotate(${steeringDeg}deg)`;
+    diagWheel.style.transform = `rotate(${steeringWheelDisplayAngle(steeringDeg)}deg)`;
   }
 
   // 3페이지(GPS 지도) 우측 상단 조향각 위젯 연동
   if (gpsSteeringWheelGraphic) {
-    gpsSteeringWheelGraphic.style.transform = `rotate(${steeringDeg}deg)`;
+    gpsSteeringWheelGraphic.style.transform = `rotate(${steeringWheelDisplayAngle(steeringDeg)}deg)`;
   }
   if (gpsCursorSteering) {
     gpsCursorSteering.textContent = (steeringDeg >= 0 ? '+' : '') + steeringDeg.toFixed(1);
