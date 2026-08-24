@@ -110,13 +110,15 @@ const pageDiagnostics = document.getElementById('page-diagnostics');
 const pageGps = document.getElementById('page-gps');
 const tabTemperature = document.getElementById('tab-temperature');
 const pageTemperature = document.getElementById('page-temperature');
+const tabCooling = document.getElementById('tab-cooling');
+const pageCooling = document.getElementById('page-cooling');
 const tabRealtime = document.getElementById('tab-realtime');
 const pageRealtime = document.getElementById('page-realtime');
 const tabHelp = document.getElementById('tab-help');
 const pageHelp = document.getElementById('page-help');
 const timelineNavigator = document.querySelector('.timeline-navigator');
 
-// Temperature DOMs (Page 4)
+// Temperature DOMs (Page 5)
 const tempCursorCoolant = document.getElementById('temp-cursor-coolant');
 const tempCursorOil = document.getElementById('temp-cursor-oil');
 const tempCursorIat = document.getElementById('temp-cursor-iat');
@@ -3551,6 +3553,9 @@ if (tabGps) {
 if (tabTemperature) {
   tabTemperature.addEventListener('click', () => switchTab('temperature'));
 }
+if (tabCooling) {
+  tabCooling.addEventListener('click', () => switchTab('cooling'));
+}
 if (tabRealtime) {
   tabRealtime.addEventListener('click', () => switchTab('realtime'));
 }
@@ -3572,7 +3577,7 @@ helpDistanceMethodDialog?.addEventListener('click', event => {
   if (event.target === helpDistanceMethodDialog) helpDistanceMethodDialog.close();
 });
 
-// Keyboard shortcuts: number row and numeric keypad 1–6 switch pages.
+// Keyboard shortcuts: number row and numeric keypad 1–7 switch pages.
 document.addEventListener('keydown', (event) => {
   const target = event.target;
   const isTyping = target instanceof HTMLInputElement ||
@@ -3591,10 +3596,12 @@ document.addEventListener('keydown', (event) => {
     Numpad3: 'gps',
     Digit4: 'temperature',
     Numpad4: 'temperature',
-    Digit5: 'realtime',
-    Numpad5: 'realtime',
-    Digit6: 'help',
-    Numpad6: 'help'
+    Digit5: 'cooling',
+    Numpad5: 'cooling',
+    Digit6: 'realtime',
+    Numpad6: 'realtime',
+    Digit7: 'help',
+    Numpad7: 'help'
   };
   const mode = pageByKey[event.code];
   if (!mode) return;
@@ -3612,6 +3619,7 @@ function switchTab(mode) {
   tabDiagnostics.classList.remove('active');
   if (tabGps) tabGps.classList.remove('active');
   if (tabTemperature) tabTemperature.classList.remove('active');
+  if (tabCooling) tabCooling.classList.remove('active');
   if (tabRealtime) tabRealtime.classList.remove('active');
   if (tabHelp) tabHelp.classList.remove('active');
 
@@ -3619,6 +3627,7 @@ function switchTab(mode) {
   pageDiagnostics.classList.remove('active');
   if (pageGps) pageGps.classList.remove('active');
   if (pageTemperature) pageTemperature.classList.remove('active');
+  if (pageCooling) pageCooling.classList.remove('active');
   if (pageRealtime) pageRealtime.classList.remove('active');
   if (pageHelp) pageHelp.classList.remove('active');
 
@@ -3647,6 +3656,20 @@ function switchTab(mode) {
       });
       if (typeof rtScheduleRender === 'function') rtScheduleRender();
     }, 50);
+    return;
+  }
+
+  if (mode === 'cooling') {
+    if (tabCooling) tabCooling.classList.add('active');
+    if (pageCooling) pageCooling.classList.add('active');
+    if (lblScrollType) lblScrollType.textContent = '🌡️ 온도 그래프 좌우 스크롤:';
+    setTimeout(() => {
+      [chartCoolantOil, chartIntakeEcu].forEach(chart => {
+        if (chart) { chart.resize(); chart.update('none'); }
+      });
+      drawCssIntersectionDots(currentCursorIndex, [chartCoolantOil, chartIntakeEcu]);
+    }, 50);
+    applyZoomRange(currentStartSec, currentEndSec);
     return;
   }
 
@@ -5844,6 +5867,38 @@ function renderMotecCharts(data) {
   // ==================== PAGE 4 LAP / SECTOR WORKSPACE ====================
   buildPage4WorkspaceCharts(S, getCommonOptions);
 
+  // ==================== PAGE 5 COOLING / TEMPERATURE ====================
+  const coolantOilCanvas = document.getElementById('chart-coolant-oil');
+  if (coolantOilCanvas) {
+    const coolantOptions = getCommonOptions(0, 150, { stepSize: 25 });
+    coolantOptions.scales.ySpeed = {
+      position: 'right', min: 0, max: 120, display: true,
+      grid: { drawOnChartArea: false },
+      ticks: { color: tickColor, font: { family: "'JetBrains Mono', monospace", size: 10 } }
+    };
+    chartCoolantOil = new Chart(coolantOilCanvas.getContext('2d'), {
+      type: 'line',
+      data: { datasets: [
+        { label: 'Coolant', data: S('water', r => r.water_c || 0), borderColor: '#2563eb', borderWidth: 1.5, pointRadius: 0, fill: false },
+        { label: 'Oil', data: S('oil', r => r.oil_c || 0), borderColor: '#f97316', borderWidth: 1.5, pointRadius: 0, fill: false },
+        { label: 'FL Speed', data: S('fl_speed', r => r.fl_speed_kmh || 0), borderColor: '#06b6d4', borderWidth: 1.1, borderDash: [6, 4], pointRadius: 0, fill: false, yAxisID: 'ySpeed' }
+      ] },
+      options: coolantOptions
+    });
+  }
+
+  const intakeEcuCanvas = document.getElementById('chart-intake-ecu');
+  if (intakeEcuCanvas) {
+    chartIntakeEcu = new Chart(intakeEcuCanvas.getContext('2d'), {
+      type: 'line',
+      data: { datasets: [
+        { label: 'Intake Air', data: S('iat', r => r.iat_c || 0), borderColor: '#16a34a', borderWidth: 1.5, pointRadius: 0, fill: false },
+        { label: 'ECU', data: S('ecu', r => r.ecu_c || 0), borderColor: '#db2777', borderWidth: 1.5, pointRadius: 0, fill: false }
+      ] },
+      options: getCommonOptions(0, 150, { stepSize: 25 })
+    });
+  }
+
   const ctxSusFr = document.getElementById('chart-sus-fr').getContext('2d');
   chartFR = new Chart(ctxSusFr, {
     type: 'line',
@@ -5898,7 +5953,7 @@ if (typeof initSuspensionCalibration === 'function') {
   initSuspensionCalibration();
 }
 
-// 5번 탭: 실시간 무선 텔레메트리 초기화
+// 6번 탭: 실시간 무선 텔레메트리 초기화
 if (typeof rtInit === 'function') {
   rtInit();
 }

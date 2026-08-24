@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260824-4">
+  <link rel="stylesheet" href="style.css?v=20260824-5">
 </head>
 <body>
 
@@ -45,8 +45,9 @@
           <button id="tab-diagnostics" class="view-tab">2: 입력 및 서스펜션 분석</button>
           <button id="tab-gps" class="view-tab">3: GPS + IMU 주행 분석</button>
           <button id="tab-temperature" class="view-tab">4: 랩 구간 분석</button>
-          <button id="tab-realtime" class="view-tab">5: 실시간 텔레메트리</button>
-          <button id="tab-help" class="view-tab">6: 도움말</button>
+          <button id="tab-cooling" class="view-tab">5: 냉각 및 온도 분석</button>
+          <button id="tab-realtime" class="view-tab">6: 실시간 텔레메트리</button>
+          <button id="tab-help" class="view-tab">7: 도움말</button>
         </nav>
       </div>
       
@@ -581,7 +582,47 @@
         </aside>
       </section>
 
-      <!-- [페이지 5] 실시간 무선 텔레메트리 -->
+      <!-- [페이지 5] 냉각 및 온도 분석 -->
+      <section id="page-cooling" class="temperature-panel page-view">
+        <div class="temperature-summary-grid">
+          <article class="temperature-metric">
+            <span class="temperature-metric-label">Coolant Temperature</span>
+            <strong><span id="temp-cursor-coolant">--</span> °C</strong>
+            <small>전체 최대 <span id="temp-max-coolant">--</span> °C</small>
+            <span class="temperature-source">ECU Water Temperature</span>
+          </article>
+          <article class="temperature-metric oil">
+            <span class="temperature-metric-label">Oil Temperature</span>
+            <strong><span id="temp-cursor-oil">--</span> °C</strong>
+            <small>전체 최대 <span id="temp-max-oil">--</span> °C</small>
+            <span class="temperature-source">ECU Oil Temperature</span>
+          </article>
+          <article class="temperature-metric intake">
+            <span class="temperature-metric-label">Intake Air Temperature</span>
+            <strong><span id="temp-cursor-iat">--</span> °C</strong>
+            <small>전체 최대 <span id="temp-max-iat">--</span> °C</small>
+            <span class="temperature-source">Intake Air Sensor</span>
+          </article>
+          <article class="temperature-metric ecu">
+            <span class="temperature-metric-label">ECU Temperature</span>
+            <strong><span id="temp-cursor-ecu">--</span> °C</strong>
+            <small>전체 최대 <span id="temp-max-ecu">--</span> °C</small>
+            <span class="temperature-source">ECU Internal Sensor</span>
+          </article>
+        </div>
+        <div class="temperature-chart-grid">
+          <article class="motec-chart-card temperature-chart-card">
+            <div class="chart-label-bar"><span class="signal-title">Coolant / Oil Temperature &amp; Vehicle Speed</span><span class="signal-val">°C · km/h</span></div>
+            <div class="chart-wrapper"><canvas id="chart-coolant-oil"></canvas></div>
+          </article>
+          <article class="motec-chart-card temperature-chart-card">
+            <div class="chart-label-bar"><span class="signal-title">Intake Air / ECU Temperature</span><span class="signal-val">°C</span></div>
+            <div class="chart-wrapper"><canvas id="chart-intake-ecu"></canvas></div>
+          </article>
+        </div>
+      </section>
+
+      <!-- [페이지 6] 실시간 무선 텔레메트리 -->
       <section id="page-realtime" class="realtime-panel page-view">
 
         <!-- 접속 및 링크 상태 바 -->
@@ -634,7 +675,7 @@
         </div>
       </section>
 
-      <!-- [페이지 6] 사용자 도움말 -->
+      <!-- [페이지 7] 사용자 도움말 -->
       <section id="page-help" class="help-panel page-view">
         <div class="help-hero">
           <div>
@@ -648,7 +689,7 @@
 
         <div class="help-quick-start" id="help-start">
           <article><b>01</b><div><strong>CSV 열기</strong><p>오른쪽 위 <em>CSV 열기</em>를 누르거나 CSV 파일을 화면에 끌어 놓습니다.</p></div></article>
-          <article><b>02</b><div><strong>분석 페이지 선택</strong><p>상단의 1~5번 탭에서 확인하려는 데이터를 선택합니다.</p></div></article>
+          <article><b>02</b><div><strong>분석 페이지 선택</strong><p>상단의 1~6번 탭에서 확인하려는 데이터를 선택합니다.</p></div></article>
           <article><b>03</b><div><strong>시점과 구간 조절</strong><p>아래 타임라인과 그래프의 마우스 조작으로 원하는 구간을 자세히 봅니다.</p></div></article>
         </div>
 
@@ -661,7 +702,8 @@
             <a href="#help-page3"><span>3</span>GPS·IMU·랩</a>
             <a href="#help-video"><span>▶</span>영상 동기화</a>
             <a href="#help-page4"><span>4</span>랩 구간 분석</a>
-            <a href="#help-page5"><span>5</span>실시간 텔레메트리</a>
+            <a href="#help-page5"><span>5</span>냉각·온도</a>
+            <a href="#help-page6"><span>6</span>실시간 텔레메트리</a>
             <a href="#help-trouble"><span>!</span>문제 해결</a>
           </nav>
 
@@ -681,7 +723,7 @@
                 </article>
               </div>
               <div class="help-shortcuts">
-                <span><kbd>1</kbd>~<kbd>6</kbd> 페이지 이동</span><span><kbd>Space</kbd> GPS 재생·정지</span><span><kbd>←</kbd><kbd>→</kbd> 커서 이동</span><span><kbd>Esc</kbd> GPS 전체화면 종료</span>
+                <span><kbd>1</kbd>~<kbd>7</kbd> 페이지 이동</span><span><kbd>Space</kbd> GPS 재생·정지</span><span><kbd>←</kbd><kbd>→</kbd> 커서 이동</span><span><kbd>Esc</kbd> GPS 전체화면 종료</span>
               </div>
             </section>
 
@@ -767,7 +809,12 @@
             </section>
 
             <section class="help-section" id="help-page5">
-              <div class="help-section-title"><span>5</span><div><h2>실시간 텔레메트리</h2><p>차량 RF 중계 서버에서 들어오는 데이터를 실시간으로 표시합니다.</p></div><button type="button" data-help-tab="realtime">5페이지 열기</button></div>
+              <div class="help-section-title"><span>5</span><div><h2>냉각 및 온도 분석</h2><p>냉각수·유온·흡기온·ECU 온도의 변화와 최대값을 한 화면에서 확인합니다.</p></div><button type="button" data-help-tab="cooling">5페이지 열기</button></div>
+              <div class="help-grid two"><article class="help-card"><h3>온도 상태 카드</h3><p>현재 커서 시점의 네 가지 온도와 CSV 전체 구간의 최대 온도를 함께 표시합니다.</p></article><article class="help-card"><h3>온도 추세 차트</h3><p>냉각수·유온을 차량 속도와 비교하고, 흡기온·ECU 온도는 별도 차트에서 확인합니다. 하단 공통 타임라인과 확대·커서를 그대로 사용할 수 있습니다.</p></article></div>
+            </section>
+
+            <section class="help-section" id="help-page6">
+              <div class="help-section-title"><span>6</span><div><h2>실시간 텔레메트리</h2><p>차량 RF 중계 서버에서 들어오는 데이터를 실시간으로 표시합니다.</p></div><button type="button" data-help-tab="realtime">6페이지 열기</button></div>
               <div class="help-grid two"><article class="help-card"><h3>실제 연결</h3><ol><li>수신 서버 주소를 입력합니다.</li><li>전송 방식을 선택하거나 자동으로 둡니다.</li><li><b>연결</b>을 누르고 수신률·손실률·RSSI·SNR을 확인합니다.</li></ol></article><article class="help-card"><h3>화면 시험</h3><p>하드웨어나 중계 서버가 없을 때 <b>데모 모드</b>를 누르면 가상 데이터로 카드와 그래프 동작을 확인할 수 있습니다.</p></article></div>
             </section>
 
@@ -872,6 +919,6 @@
   <script src="steering.js?v=20260820-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
-  <script src="app.js?v=20260824-5"></script>
+  <script src="app.js?v=20260824-6"></script>
 </body>
 </html>
