@@ -20,6 +20,7 @@ let page4Charts = [];
 let page4PlaybackActive = false;
 let page4PlaybackFrame = 0;
 let page4PlaybackLastStamp = 0;
+let page4PlaybackElapsed = NaN;
 let page4PointerDragging = null;
 let page4RangeStart = 0;
 let page4RangeEnd = 0;
@@ -2370,6 +2371,41 @@ function page4AlignedItemTime(item, primaryLap, primaryTime = page4CursorTime) {
   return Math.max(item.lap.startTime, Math.min(item.lap.endTime, item.lap.startTime + elapsed));
 }
 
+function page4ItemRange(item, primary) {
+  const primaryStart = page4RangeEnd > page4RangeStart ? page4RangeStart : primary.lap.startTime;
+  const primaryEnd = page4RangeEnd > page4RangeStart ? page4RangeEnd : primary.lap.endTime;
+  if (item === primary) return { start: primaryStart, end: primaryEnd, duration: Math.max(0, primaryEnd - primaryStart) };
+  let start;
+  let end;
+  if (page4AxisMode === 'distance') {
+    const distanceMap = buildPage4ItemDistanceMap(item);
+    start = interpolatePage4DistanceMap(distanceMap, page4AxisValue(primaryStart), 'distance', 'time');
+    end = interpolatePage4DistanceMap(distanceMap, page4AxisValue(primaryEnd), 'distance', 'time');
+  } else {
+    start = item.lap.startTime + (primaryStart - primary.lap.startTime);
+    end = item.lap.startTime + (primaryEnd - primary.lap.startTime);
+  }
+  start = Math.max(item.lap.startTime, Math.min(item.lap.endTime, start));
+  end = Math.max(item.lap.startTime, Math.min(item.lap.endTime, end));
+  if (end < start) [start, end] = [end, start];
+  return { start, end, duration: Math.max(0, end - start) };
+}
+
+function page4ItemDisplayTime(item, primary, primaryTime = page4CursorTime) {
+  if (Number.isFinite(page4PlaybackElapsed) && page4SelectedItems().length > 1) {
+    const range = page4ItemRange(item, primary);
+    return Math.min(range.end, range.start + Math.max(0, page4PlaybackElapsed));
+  }
+  return page4AlignedItemTime(item, primary.lap, primaryTime);
+}
+
+function page4ItemAxisValue(item, itemTime, primary) {
+  if (page4AxisMode === 'distance') {
+    return interpolatePage4DistanceMap(buildPage4ItemDistanceMap(item), itemTime, 'time', 'distance');
+  }
+  return primary.lap.startTime + (itemTime - item.lap.startTime);
+}
+
 let page4GTraceCache = null;
 
 function drawPage4GTrace(targetTime = page4CursorTime) {
@@ -2437,7 +2473,7 @@ function drawPage4GTrace(targetTime = page4CursorTime) {
     if (items.length === 1) return;
     const rows = item.session.rows || [];
     const color = PAGE4_LAP_COLORS[item.selectionIndex];
-    const itemTime = page4AlignedItemTime(item, primary.lap, targetTime);
+    const itemTime = page4ItemDisplayTime(item, primary, targetTime);
     const rowIndex = page4RowIndexAtTime(rows, itemTime);
     const row = rows[rowIndex];
     if (!row) return;
@@ -2538,27 +2574,41 @@ function keepPage4CursorInView(targetTime, direction = 0) {
 }
 
 function drawPage4Cursor(targetTime) {
+  const items = page4SelectedItems();
+  const primary = items[0];
   page4Charts.forEach(chart => {
     if (!chart?.chartArea || !chart.scales?.x) return;
     const holder = chart.canvas.parentElement;
-    let line = holder.querySelector('.p4-cursor-line');
-    if (!line) { line = document.createElement('div'); line.className = 'p4-cursor-line'; holder.appendChild(line); }
-    const x = chart.scales.x.getPixelForValue(page4AxisValue(targetTime));
-    line.style.display = x >= chart.chartArea.left && x <= chart.chartArea.right ? 'block' : 'none';
-    line.style.left = `${x}px`;
+    const cursorItems = primary && Number.isFinite(page4PlaybackElapsed) && items.length > 1 ? items : [primary].filter(Boolean);
+    holder.querySelectorAll('.p4-cursor-line').forEach((line, index) => { if (index >= cursorItems.length) line.remove(); });
+    cursorItems.forEach((item, index) => {
+      let line = holder.querySelector(`.p4-cursor-line[data-selection="${index}"]`);
+      if (!line) { line = document.createElement('div'); line.className = 'p4-cursor-line'; line.dataset.selection = String(index); holder.appendChild(line); }
+      const itemTime = page4ItemDisplayTime(item, primary, targetTime);
+      const axisValue = cursorItems.length > 1 ? page4ItemAxisValue(item, itemTime, primary) : page4AxisValue(targetTime);
+      const x = chart.scales.x.getPixelForValue(axisValue);
+      const color = cursorItems.length > 1 ? PAGE4_LAP_COLORS[item.selectionIndex] : '#f97316';
+      line.style.background = color;
+      line.style.boxShadow = `0 0 7px ${color}88`;
+      line.style.display = x >= chart.chartArea.left && x <= chart.chartArea.right ? 'block' : 'none';
+      line.style.left = `${x}px`;
+    });
   });
 }
 
-function updatePage4PlaybackCursor(targetTime) {
+function updatePage4PlaybackCursor(targetTime, synchronizedElapsed = NaN) {
   if (!globalData.length) return;
   const validRange = page4RangeEnd > page4RangeStart;
   const rangeStart = validRange ? page4RangeStart : 0;
   const rangeEnd = validRange ? page4RangeEnd : totalDurationSec;
   page4CursorTime = Math.max(rangeStart, Math.min(rangeEnd, Number(targetTime) || rangeStart));
+  page4PlaybackElapsed = Number.isFinite(synchronizedElapsed) ? Math.max(0, synchronizedElapsed) : NaN;
   preciseCursorTimeSec = page4CursorTime;
   currentCursorIndex = findSampleIndexAtTime(page4CursorTime);
   if (p4PlayTimeline) p4PlayTimeline.value = String(page4CursorTime);
-  if (p4PlayTime) p4PlayTime.textContent = page4AxisMode === 'distance'
+  if (p4PlayTime) p4PlayTime.textContent = Number.isFinite(page4PlaybackElapsed)
+    ? `${page4PlaybackElapsed.toFixed(3)} s`
+    : page4AxisMode === 'distance'
     ? `${(page4AxisValue(page4CursorTime) - page4AxisValue(rangeStart)).toFixed(1)} m`
     : `${(page4CursorTime - rangeStart).toFixed(3)} s`;
   if (tabTemperature?.classList.contains('active')) syncPage4Navigator();
@@ -2581,8 +2631,16 @@ function setPage4Playback(active) {
   if (p4PlayToggle) p4PlayToggle.textContent = page4PlaybackActive ? 'Ⅱ 일시정지' : '▶ 재생';
   if (!page4PlaybackActive) return;
 
+  const items = page4SelectedItems();
+  const primary = items[0];
+  const ranges = primary ? items.map(item => page4ItemRange(item, primary)) : [];
+  const playbackDuration = ranges.length ? Math.max(...ranges.map(range => range.duration)) : rangeEnd - rangeStart;
+
   if (page4CursorTime >= rangeEnd - 0.005 || page4CursorTime < rangeStart) {
-    updatePage4PlaybackCursor(rangeStart);
+    page4PlaybackElapsed = 0;
+    updatePage4PlaybackCursor(rangeStart, 0);
+  } else if (!Number.isFinite(page4PlaybackElapsed)) {
+    page4PlaybackElapsed = Math.max(0, page4CursorTime - rangeStart);
   }
 
   const tick = stamp => {
@@ -2590,13 +2648,15 @@ function setPage4Playback(active) {
     if (page4PlaybackLastStamp) {
       const rate = Number(p4PlayRate?.value) || 1;
       const dt = Math.min(0.1, (stamp - page4PlaybackLastStamp) / 1000) * rate;
-      let nextTime = page4CursorTime + dt;
-      if (nextTime >= rangeEnd) {
-        updatePage4PlaybackCursor(rangeEnd);
+      const nextElapsed = page4PlaybackElapsed + dt;
+      const primaryDuration = ranges[0]?.duration || rangeEnd - rangeStart;
+      const nextTime = rangeStart + Math.min(primaryDuration, nextElapsed);
+      if (nextElapsed >= playbackDuration) {
+        updatePage4PlaybackCursor(rangeEnd, playbackDuration);
         setPage4Playback(false);
         return;
       }
-      updatePage4PlaybackCursor(nextTime);
+      updatePage4PlaybackCursor(nextTime, nextElapsed);
     }
     page4PlaybackLastStamp = stamp;
     page4PlaybackFrame = requestAnimationFrame(tick);
@@ -2752,7 +2812,7 @@ function drawPage4TrackMap(targetTime) {
   }
   if (selectedItems.length > 1 && primaryItem) {
     selectedItems.forEach(item => {
-      const itemTime = page4AlignedItemTime(item, primaryItem.lap, targetTime);
+      const itemTime = page4ItemDisplayTime(item, primaryItem, targetTime);
       const cursorPosition = page4GpsPositionAtTime(item.session.gpsPoints, item.lap, itemTime);
       if (!cursorPosition) return;
       const p = project(cursorPosition);
@@ -2793,7 +2853,7 @@ function updatePage4ComparisonHeaders(primaryTime = page4CursorTime) {
   if (!primary) return;
   const values = items.map(item => {
     const rows = item.session.rows || [];
-    const time = page4AlignedItemTime(item, primary.lap, primaryTime);
+    const time = page4ItemDisplayTime(item, primary, primaryTime);
     const index = page4RowIndexAtTime(rows, time);
     const row = rows[index];
     if (!row) return null;
@@ -4641,17 +4701,31 @@ function drawCssIntersectionDots(index, chartSubset = null, targetTimeOverride =
     const exactGlobalIndex = page4ChartIndex >= 0 ? findGlobalIndexAtTime(targetTime) : -1;
     const exactRow = exactGlobalIndex >= 0 ? globalData[exactGlobalIndex] : null;
     const exactX = chart.scales?.x?.getPixelForValue(page4ChartIndex >= 0 ? page4AxisValue(targetTime) : targetTime);
+    const page4Items = page4ChartIndex >= 0 ? page4SelectedItems() : [];
+    const page4Primary = page4Items[0];
     chart.data.datasets.forEach((dataset, datasetIndex) => {
       const meta = chart.getDatasetMeta(datasetIndex);
       if (!meta.hidden) {
+        const synchronizedItem = page4ChartIndex >= 0 && Number.isFinite(page4PlaybackElapsed) && page4Items.length > 1
+          ? page4Items.find(item => item.selectionIndex === dataset.page4SelectionIndex)
+          : null;
+        const synchronizedTime = synchronizedItem ? page4ItemDisplayTime(synchronizedItem, page4Primary, targetTime) : NaN;
+        const synchronizedRowIndex = synchronizedItem ? page4RowIndexAtTime(synchronizedItem.session.rows || [], synchronizedTime) : -1;
+        const synchronizedRow = synchronizedRowIndex >= 0 ? synchronizedItem.session.rows[synchronizedRowIndex] : null;
+        const synchronizedAxis = synchronizedItem ? page4ItemAxisValue(synchronizedItem, synchronizedTime, page4Primary) : NaN;
         // Datasets may use different visible-range resolutions. Match each dot
         // by timestamp instead of assuming every dataset shares one index.
-        const pointIndex = nearestDatasetPointIndex(dataset.data, page4ChartIndex >= 0 ? page4AxisValue(targetTime) : targetTime);
+        const targetAxis = Number.isFinite(synchronizedAxis) ? synchronizedAxis : (page4ChartIndex >= 0 ? page4AxisValue(targetTime) : targetTime);
+        const pointIndex = nearestDatasetPointIndex(dataset.data, targetAxis);
         const point = meta.data[pointIndex];
-        const page4Series = page4ChartIndex >= 0 ? PAGE4_CHART_SPECS[page4ChartIndex]?.series?.[datasetIndex] : null;
-        const exactValue = page4Series && exactRow ? page4SeriesValue(page4Series, exactRow, exactGlobalIndex) : NaN;
+        const page4SeriesIndex = Number.isInteger(dataset.page4SeriesIndex) ? dataset.page4SeriesIndex : datasetIndex;
+        const page4Series = page4ChartIndex >= 0 ? PAGE4_CHART_SPECS[page4ChartIndex]?.series?.[page4SeriesIndex] : null;
+        const valueRow = synchronizedRow || exactRow;
+        const valueIndex = synchronizedItem?.session.id === page4ActiveSessionId ? synchronizedRowIndex : exactGlobalIndex;
+        const exactValue = page4Series && valueRow ? page4SeriesValue(page4Series, valueRow, valueIndex) : NaN;
         const yScale = chart.scales?.[dataset.yAxisID || 'y'];
-        const dotX = Number.isFinite(exactX) ? exactX : point?.x;
+        const synchronizedX = Number.isFinite(synchronizedAxis) ? chart.scales?.x?.getPixelForValue(synchronizedAxis) : NaN;
+        const dotX = Number.isFinite(synchronizedX) ? synchronizedX : (Number.isFinite(exactX) ? exactX : point?.x);
         const dotY = Number.isFinite(exactValue) && yScale ? yScale.getPixelForValue(exactValue) : point?.y;
         if (point && Number.isFinite(dotX) && Number.isFinite(dotY)) {
           let dot = holder.querySelector(`.visual-cursor-dot-ds-${datasetIndex}`);
