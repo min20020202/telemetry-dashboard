@@ -22,6 +22,8 @@
   const selectionKey = (sessionId, lapIndex) => `${sessionId}:${lapIndex}`;
   const reference = () => window.NSSUR_TRACK_REFERENCE?.points || [];
   const totalDistance = () => Number(window.NSSUR_TRACK_REFERENCE?.totalDistanceMeters) || Number(reference().at(-1)?.[2]) || 0;
+  let referenceMetricCache = null;
+  let referenceMetricSource = null;
   const COMPARISON_IMU_FIELDS = [
     ['imu_accel_x_g', 'imu_filtered_ax_g'], ['imu_accel_y_g', 'imu_filtered_ay_g'],
     ['imu_gyro_x_dps', 'imu_filtered_gx_dps'], ['imu_gyro_y_dps', 'imu_filtered_gy_dps'], ['imu_gyro_z_dps', 'imu_filtered_gz_dps']
@@ -164,9 +166,14 @@
   function referenceMeters() {
     const points = reference();
     if (points.length < 2) return [];
+    // The track reference is immutable during a session. Rebuilding hundreds of
+    // metric point objects for every single GPS fix made CSV import needlessly slow.
+    if (referenceMetricCache && referenceMetricSource === points) return referenceMetricCache;
     const lat0 = points[0][0] * Math.PI / 180;
     const mLat = 111320, mLon = mLat * Math.cos(lat0);
-    return points.map(point => ({ x: (point[1] - points[0][1]) * mLon, y: (point[0] - points[0][0]) * mLat, d: Number(point[2]) || 0 }));
+    referenceMetricSource = points;
+    referenceMetricCache = points.map(point => ({ x: (point[1] - points[0][1]) * mLon, y: (point[0] - points[0][0]) * mLat, d: Number(point[2]) || 0 }));
+    return referenceMetricCache;
   }
 
   function projectPoint(lat, lon, startSegment = 0, windowSize = Infinity) {
@@ -191,14 +198,15 @@
     const fixes = item.session.gpsPoints.filter(point => point.time >= item.lap.startTime - .05 && point.time <= item.lap.endTime + .05);
     const map = [{ time: item.lap.startTime, distance: 0 }];
     let segment = 0, distance = 0;
+    const trackLength = totalDistance();
     fixes.forEach((point, index) => {
       const hit = projectPoint(point.lat, point.lon, segment, index < 2 ? 35 : 35);
       if (!hit) return;
       segment = Math.max(segment, hit.segment);
-      distance = Math.max(distance, Math.min(totalDistance(), hit.distance));
+      distance = Math.max(distance, Math.min(trackLength, hit.distance));
       map.push({ time: point.time, distance });
     });
-    map.push({ time: item.lap.endTime, distance: totalDistance() });
+    map.push({ time: item.lap.endTime, distance: trackLength });
     map.sort((a, b) => a.distance - b.distance || a.time - b.time);
     state.distanceMapCache.set(item.key, map);
     return map;

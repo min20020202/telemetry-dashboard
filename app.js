@@ -51,6 +51,7 @@ let gpsImuCursorDragging = false;
 // Zoom, Slicing & Scroll configurations
 let globalData = [];
 let primaryDashboardFile = null;
+let primaryDashboardSnapshot = null;
 let currentStartSec = 0;
 let currentEndSec = 30;
 let totalDurationSec = 0;
@@ -5698,6 +5699,7 @@ function handleFile(file, options = {}) {
         laps: gpsLapResults,
         checkpoints: gpsCheckpoints
       };
+      if (!options.skipUpload) primaryDashboardSnapshot = snapshot;
       if (typeof options.onComplete === 'function') {
         options.onComplete(snapshot);
       }
@@ -5718,6 +5720,21 @@ function handleFile(file, options = {}) {
 window.restorePrimaryDashboardFile = function () {
   return new Promise(resolve => {
     if (!primaryDashboardFile) { resolve(false); return; }
+    // Comparison imports temporarily reuse the dashboard parser. Restore the
+    // already parsed primary session from memory instead of parsing the same CSV again.
+    if (primaryDashboardSnapshot?.file === primaryDashboardFile) {
+      globalData = primaryDashboardSnapshot.rows;
+      initDataAndDashboard();
+      gpsLapPoints = primaryDashboardSnapshot.gpsPoints;
+      gpsLapResults = primaryDashboardSnapshot.laps;
+      gpsCheckpoints = primaryDashboardSnapshot.checkpoints;
+      if (loadedFileBadge) {
+        loadedFileBadge.textContent = `📄 ${primaryDashboardFile.name}`;
+        loadedFileBadge.style.display = 'inline-block';
+      }
+      resolve(true);
+      return;
+    }
     handleFile(primaryDashboardFile, {
       skipUpload: true,
       onComplete: () => resolve(true),
