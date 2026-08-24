@@ -9,7 +9,9 @@
     files: $('comparison-files'), clear: $('comparison-clear'), status: $('comparison-status'),
     count: $('comparison-count'), sessions: $('comparison-sessions'), summary: $('comparison-summary'),
     sector: $('comparison-sector-table'), map: $('comparison-track-map'),
-    play: $('comparison-play-toggle'), rate: $('comparison-play-rate'), slider: $('comparison-play-slider'), playTime: $('comparison-play-time'), playDistance: $('comparison-play-distance')
+    play: $('comparison-play-toggle'), rate: $('comparison-play-rate'), slider: $('comparison-play-slider'), playTime: $('comparison-play-time'), playDistance: $('comparison-play-distance'),
+    speedValue: $('comparison-speed-value'), pedalValue: $('comparison-pedal-value'),
+    steeringValue: $('comparison-steering-value'), deltaValue: $('comparison-delta-value')
   };
 
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
@@ -168,6 +170,19 @@
     return Math.abs((Number(left.time_sec) || 0) - time) <= Math.abs((Number(right.time_sec) || 0) - time) ? left : right;
   }
 
+  function vehicleSpeed(row) {
+    const gpsSpeed = Number(row.gps_speed_kmh);
+    const gpsQuality = Number(row.gps_qual);
+    const gpsFixAge = Number(row.gps_fix_age_us);
+    const hasQuality = Number.isFinite(gpsQuality);
+    const hasFixAge = Number.isFinite(gpsFixAge);
+    const gpsValid = Number.isFinite(gpsSpeed) && gpsSpeed >= 0 &&
+      (!hasQuality || gpsQuality > 0) && (!hasFixAge || gpsFixAge <= 1000000);
+    if (gpsValid) return gpsSpeed;
+    const flSpeed = Number(row.fl_speed_kmh);
+    return Number.isFinite(flSpeed) && flSpeed >= 0 ? flSpeed : 0;
+  }
+
   function sampleLap(item) {
     if (state.cache.has(item.key)) return state.cache.get(item.key);
     const map = buildDistanceMap(item), samples = [];
@@ -176,7 +191,7 @@
       const row = rowAt(item.session.rows, time);
       samples.push({
         x: distance, elapsed: time - item.lap.startTime,
-        speed: Number(row.gps_speed_kmh) || Number(row.fl_speed_kmh) || 0,
+        speed: vehicleSpeed(row),
         tps: Number(row.decoded_tps) || 0,
         brake: getCalibratedBrake(row.front_brake_raw),
         steering: getCalibratedSteering(row.steering_raw),
@@ -389,6 +404,36 @@
   }
 
   function playbackDuration(items = selectedLaps()) { return items.length ? Math.max(...items.map(item => item.lap.duration)) : 0; }
+  function playbackValueMarkup(values, emptyText) {
+    return values.length ? values.map(({ index, text }) =>
+      `<span class="comparison-live-item" style="color:${COLORS[index]}">${text}</span>`
+    ).join('<i class="comparison-live-separator">·</i>') : emptyText;
+  }
+  function updatePlaybackValues(items) {
+    if (!items.length) {
+      if (ui.speedValue) ui.speedValue.textContent = '-- km/h';
+      if (ui.pedalValue) ui.pedalValue.textContent = '-- %';
+      if (ui.steeringValue) ui.steeringValue.textContent = '--';
+      if (ui.deltaValue) ui.deltaValue.textContent = '-- s';
+      return;
+    }
+    const samples = items.map(item => sampleAtElapsed(item, state.playElapsed));
+    const baseline = sampleLap(items[0]);
+    if (ui.speedValue) ui.speedValue.innerHTML = playbackValueMarkup(samples.map((sample, index) => ({
+      index, text: `L${items[index].lap.number} ${sample ? sample.speed.toFixed(1) : '--'} km/h`
+    })), '-- km/h');
+    if (ui.pedalValue) ui.pedalValue.innerHTML = playbackValueMarkup(samples.map((sample, index) => ({
+      index, text: `L${items[index].lap.number} T ${sample ? sample.tps.toFixed(1) : '--'} / B ${sample ? sample.brake.toFixed(1) : '--'} %`
+    })), '-- %');
+    if (ui.steeringValue) ui.steeringValue.innerHTML = playbackValueMarkup(samples.map((sample, index) => ({
+      index, text: `L${items[index].lap.number} ${sample ? sample.steering.toFixed(1) : '--'}° / ${sample ? sample.yaw.toFixed(1) : '--'}°/s`
+    })), '--');
+    if (ui.deltaValue) ui.deltaValue.innerHTML = playbackValueMarkup(samples.map((sample, index) => {
+      const baselineElapsed = sample ? interpolate(baseline, sample.x, 'x', 'elapsed') : 0;
+      const delta = sample ? sample.elapsed - baselineElapsed : NaN;
+      return { index, text: `L${items[index].lap.number} ${Number.isFinite(delta) ? `${delta >= 0 ? '+' : ''}${delta.toFixed(3)}` : '--'} s` };
+    }), '-- s');
+  }
   function syncPlaybackUi(items = selectedLaps()) {
     const duration = playbackDuration(items);
     state.playElapsed = Math.max(0, Math.min(duration, state.playElapsed));
@@ -398,6 +443,7 @@
       const sample = sampleAtElapsed(item, state.playElapsed);
       return `<span style="color:${COLORS[index]}">L${item.lap.number} ${(sample?.x || 0).toFixed(1)} m</span>`;
     }).join('') : '-- m';
+    updatePlaybackValues(items);
     if (ui.play) { ui.play.textContent = state.playing ? 'Ⅱ 일시정지' : '▶ 재생'; ui.play.disabled = !duration; }
     Object.values(state.charts).forEach(chart => chart.draw());
   }

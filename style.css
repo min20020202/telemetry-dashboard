@@ -55,7 +55,9 @@
 .comparison-chart-stack { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
 .comparison-chart-stack article { display: grid; grid-template-rows: auto 160px; min-width: 0; padding: 8px; }
 .comparison-chart-stack header, .comparison-bottom-grid header { display: flex; justify-content: space-between; gap: 8px; padding: 0 3px 5px; font-size: 12px; }
-.comparison-chart-stack output { color: var(--accent-orange); font-family: monospace; }
+.comparison-chart-stack output { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:2px 5px; color:var(--accent-orange); font-family:monospace; font-size:10px; text-align:right; }
+.comparison-live-item { white-space:nowrap; font-weight:800; }
+.comparison-live-separator { color:var(--text-secondary); font-style:normal; opacity:.65; }
 .comparison-chart-stack canvas, .comparison-track-card canvas { width: 100% !important; height: 100% !important; min-width: 0; }
 .comparison-bottom-grid { display: grid; grid-template-columns: minmax(300px,.8fr) minmax(420px,1.2fr); gap: 10px; min-height: 300px; }
 .comparison-bottom-grid article { min-width: 0; padding: 8px; }
