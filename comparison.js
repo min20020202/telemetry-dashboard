@@ -935,7 +935,11 @@
       ui.slider.max = String(Math.max(.01, duration));
       ui.slider.value = String(state.playElapsed);
       ui.slider.disabled = !duration;
-      ui.slider.style.setProperty('--comparison-play-progress', `${duration ? Math.max(0, Math.min(100, state.playElapsed / duration * 100)) : 0}%`);
+      const progress = duration ? Math.max(0, Math.min(100, state.playElapsed / duration * 100)) : 0;
+      ui.slider.style.setProperty('--comparison-play-progress', `${progress}%`);
+      // Native range thumbs keep their centre half a thumb-width inside both ends.
+      // Offset that inset so the visible cursor centre reaches the exact track end points.
+      ui.slider.style.setProperty('--comparison-thumb-shift', `${(progress - 50) * 0.24}px`);
     }
     if (ui.playTime) ui.playTime.textContent = state.activeSector === null
       ? `${state.playElapsed.toFixed(2)} s`
