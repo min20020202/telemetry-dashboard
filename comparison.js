@@ -2,7 +2,7 @@
   'use strict';
 
   const COLORS = ['#06b6d4', '#ff3d9a', '#76ff03', '#ffca28'];
-  const state = { sessions: [], selected: new Set(), cache: new Map(), charts: {}, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, viewMin: 0, viewMax: null };
+  const state = { sessions: [], selected: new Set(), cache: new Map(), charts: {}, serial: 0, playing: false, playElapsed: 0, playRate: 1, playFrame: 0, playStamp: 0, viewMin: 0, viewMax: null, hoverDistance: null, activeSector: null, mapGeometry: null };
   const boundChartCanvases = new WeakSet();
   const $ = id => document.getElementById(id);
   const ui = {
@@ -227,6 +227,25 @@
     });
   }
 
+  function jumpToDistance(distance) {
+    const items = selectedLaps();
+    if (!items.length) return;
+    const target = Math.max(0, Math.min(totalDistance(), Number(distance) || 0));
+    const baseline = sampleLap(items[0]);
+    const elapsed = interpolate(baseline, target, 'x', 'elapsed');
+    setPlaying(false);
+    state.playElapsed = Math.max(0, Math.min(items[0].lap.duration, elapsed));
+    state.hoverDistance = null;
+    syncPlaybackUi(items);
+    renderMap(items);
+  }
+
+  function previewDistance(distance) {
+    const target = distance === null ? NaN : Number(distance);
+    state.hoverDistance = Number.isFinite(target) ? Math.max(0, Math.min(totalDistance(), target)) : null;
+    updatePlaybackValues(selectedLaps(), state.hoverDistance);
+  }
+
   function bindChartZoom(canvas) {
     if (!canvas || boundChartCanvases.has(canvas)) return;
     boundChartCanvases.add(canvas);
@@ -242,7 +261,24 @@
       const ratio = Math.max(0, Math.min(1, (anchor - currentMin) / Math.max(.001, currentMax - currentMin)));
       setChartViewRange(anchor - nextWidth * ratio, anchor + nextWidth * (1 - ratio));
     }, { passive: false });
-    canvas.addEventListener('dblclick', () => setChartViewRange(0, totalDistance()));
+    canvas.addEventListener('mousemove', event => {
+      const chart = Object.values(state.charts).find(candidate => candidate.canvas === canvas);
+      if (!chart?.chartArea) return;
+      const rect = canvas.getBoundingClientRect();
+      const px = event.clientX - rect.left;
+      if (px < chart.chartArea.left || px > chart.chartArea.right) return previewDistance(null);
+      previewDistance(chart.scales.x.getValueForPixel(px));
+    });
+    canvas.addEventListener('mouseleave', () => previewDistance(null));
+    canvas.addEventListener('click', event => {
+      const chart = Object.values(state.charts).find(candidate => candidate.canvas === canvas);
+      if (!chart?.chartArea) return;
+      const rect = canvas.getBoundingClientRect();
+      const px = event.clientX - rect.left, py = event.clientY - rect.top;
+      if (px < chart.chartArea.left || px > chart.chartArea.right || py < chart.chartArea.top || py > chart.chartArea.bottom) return;
+      jumpToDistance(chart.scales.x.getValueForPixel(px));
+    });
+    canvas.addEventListener('dblclick', () => { state.activeSector = null; setChartViewRange(0, totalDistance()); renderSectors(selectedLaps()); renderMap(selectedLaps()); });
   }
 
   function sampleAtElapsed(item, elapsed) {
@@ -340,14 +376,37 @@
     }).filter(Number.isFinite).filter(distance => distance > 2 && distance < totalDistance() - 2).sort((a, b) => a - b);
   }
 
+  function sectorBounds(items) {
+    return [0, ...checkpointDistances(items), totalDistance()];
+  }
+
+  function sectorDuration(item, start, end) {
+    const data = sampleLap(item);
+    return interpolate(data, end, 'x', 'elapsed') - interpolate(data, start, 'x', 'elapsed');
+  }
+
+  function selectSector(index) {
+    const items = selectedLaps(), bounds = sectorBounds(items);
+    state.activeSector = Number.isInteger(index) && index >= 0 && index < bounds.length - 1 ? index : null;
+    if (state.activeSector === null) setChartViewRange(0, totalDistance());
+    else {
+      const start = bounds[state.activeSector], end = bounds[state.activeSector + 1];
+      setChartViewRange(start, end);
+      jumpToDistance(start);
+    }
+    renderSectors(items);
+    renderMap(items);
+  }
+
   function renderSectors(items) {
     if (!ui.sector) return;
     if (items.length < 2) { ui.sector.innerHTML = '<p class="comparison-empty">두 개 이상의 랩을 선택하세요.</p>'; return; }
-    const bounds = [0, ...checkpointDistances(items), totalDistance()];
+    const bounds = sectorBounds(items);
     const cells = items.map((item, index) => ({ item, index, data: sampleLap(item) }));
-    ui.sector.innerHTML = `<table><thead><tr><th>구간</th>${cells.map(cell => `<th style="color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)} L${cell.item.lap.number}</th>`).join('')}</tr></thead><tbody>${bounds.slice(0, -1).map((start, sectorIndex) => {
+    const controls = `<div class="comparison-sector-controls"><button type="button" data-sector="all" class="${state.activeSector === null ? 'active' : ''}">전체</button>${bounds.slice(0, -1).map((_, index) => `<button type="button" data-sector="${index}" class="${state.activeSector === index ? 'active' : ''}">S${index + 1}</button>`).join('')}</div>`;
+    ui.sector.innerHTML = `${controls}<table><thead><tr><th>구간</th>${cells.map(cell => `<th style="color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)} L${cell.item.lap.number}</th>`).join('')}</tr></thead><tbody>${bounds.slice(0, -1).map((start, sectorIndex) => {
       const end = bounds[sectorIndex + 1];
-      return `<tr><td>S${sectorIndex + 1}<br><small>${start.toFixed(0)}–${end.toFixed(0)}m</small></td>${cells.map(cell => {
+      return `<tr class="${state.activeSector === sectorIndex ? 'active' : ''}" data-sector-row="${sectorIndex}"><td><button type="button" data-sector="${sectorIndex}">S${sectorIndex + 1}</button><br><small>${start.toFixed(0)}–${end.toFixed(0)}m</small></td>${cells.map(cell => {
         const points = cell.data.filter(point => point.x >= start && point.x <= end);
         const first = points[0], last = points.at(-1);
         const duration = (last?.elapsed || 0) - (first?.elapsed || 0);
@@ -373,12 +432,39 @@
     if (!all.length) return;
     const lats = all.map(p => p.lat), lons = all.map(p => p.lon), minLat = Math.min(...lats), maxLat = Math.max(...lats), minLon = Math.min(...lons), maxLon = Math.max(...lons);
     const padding = 24, sx = (width - padding * 2) / Math.max(1e-9, maxLon - minLon), sy = (height - padding * 2) / Math.max(1e-9, maxLat - minLat), scale = Math.min(sx, sy);
-    const xy = p => [(width - (maxLon - minLon) * scale) / 2 + (p.lon - minLon) * scale, (height - (maxLat - minLat) * scale) / 2 + (maxLat - p.lat) * scale];
+    const offsetX = (width - (maxLon - minLon) * scale) / 2, offsetY = (height - (maxLat - minLat) * scale) / 2;
+    const xy = p => [offsetX + (p.lon - minLon) * scale, offsetY + (maxLat - p.lat) * scale];
+    state.mapGeometry = { rect, scale, toGeo: (x, y) => ({ lon: minLon + (x - offsetX) / scale, lat: maxLat - (y - offsetY) / scale }) };
+    const bounds = sectorBounds(items);
+    bounds.slice(0, -1).forEach((start, sectorIndex) => {
+      const end = bounds[sectorIndex + 1];
+      const ranked = items.map((item, index) => ({ item, index, duration: sectorDuration(item, start, end) }))
+        .sort((a, b) => b.duration - a.duration);
+      ranked.forEach(({ item, index }) => {
+        const data = sampleLap(item);
+        const startTime = item.lap.startTime + interpolate(data, start, 'x', 'elapsed');
+        const endTime = item.lap.startTime + interpolate(data, end, 'x', 'elapsed');
+        const points = item.session.gpsPoints.filter(point => point.time >= startTime - .05 && point.time <= endTime + .05);
+        if (points.length < 2) return;
+        ctx.beginPath(); points.forEach((point, i) => { const [x, y] = xy(point); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+        ctx.strokeStyle = COLORS[index];
+        ctx.lineWidth = state.activeSector === sectorIndex ? 4 : 2.5;
+        ctx.globalAlpha = state.activeSector === null || state.activeSector === sectorIndex ? .92 : .14;
+        ctx.stroke();
+      });
+    });
+    ctx.globalAlpha = 1;
     items.forEach((item, index) => {
-      const points = item.session.gpsPoints.filter(point => point.time >= item.lap.startTime && point.time <= item.lap.endTime);
-      ctx.beginPath(); points.forEach((point, i) => { const [x, y] = xy(point); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
-      ctx.strokeStyle = COLORS[index]; ctx.lineWidth = 2.5; ctx.globalAlpha = .9; ctx.stroke();
-      ctx.globalAlpha = 1; ctx.fillStyle = COLORS[index]; ctx.font = '700 11px monospace'; ctx.fillText(`${item.session.driver} L${item.lap.number}`, 10, 17 + index * 15);
+      ctx.fillStyle = COLORS[index]; ctx.font = '700 11px monospace';
+      ctx.fillText(`${item.session.driver} L${item.lap.number}`, 10, 17 + index * 15);
+    });
+    const checkpointLines = items[0]?.session.checkpoints || [];
+    checkpointLines.forEach((line, index) => {
+      if (!line?.[0] || !line?.[1]) return;
+      const [x1, y1] = xy(line[0]), [x2, y2] = xy(line[1]);
+      ctx.save(); ctx.setLineDash([4, 3]); ctx.strokeStyle = 'rgba(255,255,255,.82)'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.restore();
+      ctx.fillStyle = '#ffffff'; ctx.font = '800 9px monospace'; ctx.fillText(`CP${index + 1}`, (x1 + x2) / 2 + 4, (y1 + y2) / 2 - 4);
     });
     items.forEach((item, index) => {
       const point = lapPositionAtElapsed(item, state.playElapsed);
@@ -409,7 +495,17 @@
       `<span class="comparison-live-item" style="color:${COLORS[index]}">${text}</span>`
     ).join('<i class="comparison-live-separator">·</i>') : emptyText;
   }
-  function updatePlaybackValues(items) {
+  function sampleAtDistance(item, distance) {
+    const samples = sampleLap(item);
+    if (!samples.length) return null;
+    const target = Math.max(0, Math.min(totalDistance(), distance));
+    const result = { x: target };
+    ['elapsed', 'speed', 'tps', 'brake', 'steering', 'yaw'].forEach(key => {
+      result[key] = interpolate(samples, target, 'x', key);
+    });
+    return result;
+  }
+  function updatePlaybackValues(items, previewAt = state.hoverDistance) {
     if (!items.length) {
       if (ui.speedValue) ui.speedValue.textContent = '-- km/h';
       if (ui.pedalValue) ui.pedalValue.textContent = '-- %';
@@ -417,7 +513,7 @@
       if (ui.deltaValue) ui.deltaValue.textContent = '-- s';
       return;
     }
-    const samples = items.map(item => sampleAtElapsed(item, state.playElapsed));
+    const samples = items.map(item => Number.isFinite(previewAt) ? sampleAtDistance(item, previewAt) : sampleAtElapsed(item, state.playElapsed));
     const baseline = sampleLap(items[0]);
     if (ui.speedValue) ui.speedValue.innerHTML = playbackValueMarkup(samples.map((sample, index) => ({
       index, text: `L${items[index].lap.number} ${sample ? sample.speed.toFixed(1) : '--'} km/h`
@@ -443,7 +539,7 @@
       const sample = sampleAtElapsed(item, state.playElapsed);
       return `<span style="color:${COLORS[index]}">L${item.lap.number} ${(sample?.x || 0).toFixed(1)} m</span>`;
     }).join('') : '-- m';
-    updatePlaybackValues(items);
+    updatePlaybackValues(items, state.hoverDistance);
     if (ui.play) { ui.play.textContent = state.playing ? 'Ⅱ 일시정지' : '▶ 재생'; ui.play.disabled = !duration; }
     Object.values(state.charts).forEach(chart => chart.draw());
   }
@@ -490,7 +586,7 @@
   ui.files?.addEventListener('change', event => { const files = [...event.target.files]; event.target.value = ''; importFiles(files); });
   ui.clear?.addEventListener('click', () => {
     setPlaying(false);
-    state.sessions = []; state.selected.clear(); state.cache.clear(); state.viewMin = 0; state.viewMax = null;
+    state.sessions = []; state.selected.clear(); state.cache.clear(); state.viewMin = 0; state.viewMax = null; state.hoverDistance = null; state.activeSector = null; state.mapGeometry = null;
     Object.values(state.charts).forEach(chart => chart.destroy()); state.charts = {};
     renderSessions(); render(); setStatus('CSV를 추가한 뒤 비교할 랩을 2~4개 선택하세요.');
   });
@@ -502,7 +598,7 @@
     const key = event.target.dataset.lapKey;
     if (!key) return;
     if (event.target.checked && state.selected.size >= 4) { event.target.checked = false; setStatus('동시에 비교할 수 있는 랩은 최대 4개입니다.', true); return; }
-    setPlaying(false); state.playElapsed = 0;
+    setPlaying(false); state.playElapsed = 0; state.activeSector = null;
     event.target.checked ? state.selected.add(key) : state.selected.delete(key); render();
   });
   ui.sessions?.addEventListener('click', event => {
@@ -510,7 +606,7 @@
     if (!button) return;
     const session = state.sessions.find(item => item.id === Number(button.dataset.sessionId));
     if (!session) return;
-    setPlaying(false); state.playElapsed = 0;
+    setPlaying(false); state.playElapsed = 0; state.activeSector = null;
     session.laps.forEach((_, lapIndex) => state.selected.delete(selectionKey(session.id, lapIndex)));
     const ordered = session.laps.map((lap, lapIndex) => ({ lap, lapIndex })).sort((a, b) => a.lap.duration - b.lap.duration);
     let picks = [];
@@ -522,7 +618,28 @@
   });
   ui.play?.addEventListener('click', () => setPlaying(!state.playing));
   ui.rate?.addEventListener('change', () => { state.playRate = Number(ui.rate.value) || 1; });
-  ui.slider?.addEventListener('input', () => { setPlaying(false); state.playElapsed = Number(ui.slider.value) || 0; syncPlaybackUi(); renderMap(selectedLaps()); });
+  ui.slider?.addEventListener('input', () => {
+    const requested = Number(ui.slider.value) || 0;
+    setPlaying(false);
+    state.playElapsed = requested;
+    state.hoverDistance = null;
+    syncPlaybackUi();
+    renderMap(selectedLaps());
+  });
+  ui.sector?.addEventListener('click', event => {
+    const button = event.target.closest('[data-sector]');
+    if (!button) return;
+    selectSector(button.dataset.sector === 'all' ? null : Number(button.dataset.sector));
+  });
+  ui.map?.addEventListener('click', event => {
+    const geometry = state.mapGeometry;
+    if (!geometry) return;
+    const rect = ui.map.getBoundingClientRect();
+    const point = geometry.toGeo(event.clientX - rect.left, event.clientY - rect.top);
+    const hit = projectPoint(point.lat, point.lon);
+    if (!hit || Math.sqrt(hit.error2) > 40) return;
+    jumpToDistance(hit.distance);
+  });
   document.addEventListener('keydown', event => {
     if (event.code !== 'Space' || !$('page-comparison')?.classList.contains('active')) return;
     if (event.target.matches('input, textarea, select, button') || event.target.isContentEditable) return;
