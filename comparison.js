@@ -217,7 +217,7 @@
 
   function setChartViewRange(min, max) {
     const distance = totalDistance();
-    const width = Math.max(10, Math.min(distance, max - min));
+    const width = Math.max(2, Math.min(distance, max - min));
     state.viewMin = Math.max(0, Math.min(Math.max(0, distance - width), min));
     state.viewMax = state.viewMin + width;
     Object.values(state.charts).forEach(chart => {
@@ -249,18 +249,56 @@
   function bindChartZoom(canvas) {
     if (!canvas || boundChartCanvases.has(canvas)) return;
     boundChartCanvases.add(canvas);
-    canvas.addEventListener('wheel', event => {
+    let dragStartPx = null;
+    let suppressClick = false;
+    const chartAndPoint = event => {
       const chart = Object.values(state.charts).find(candidate => candidate.canvas === canvas);
-      if (!chart?.chartArea) return;
-      event.preventDefault();
+      if (!chart?.chartArea) return null;
       const rect = canvas.getBoundingClientRect();
-      const anchor = chart.scales.x.getValueForPixel(event.clientX - rect.left);
+      const x = event.clientX - rect.left, y = event.clientY - rect.top;
+      const inside = x >= chart.chartArea.left && x <= chart.chartArea.right && y >= chart.chartArea.top && y <= chart.chartArea.bottom;
+      return { chart, x, y, inside };
+    };
+    canvas.addEventListener('wheel', event => {
+      const hit = chartAndPoint(event);
+      if (!hit?.inside) return;
+      event.preventDefault();
+      const { chart, x } = hit;
+      const anchor = chart.scales.x.getValueForPixel(x);
       const currentMin = chart.scales.x.min, currentMax = chart.scales.x.max;
       const factor = event.deltaY > 0 ? 1.22 : .82;
-      const nextWidth = Math.max(10, Math.min(totalDistance(), (currentMax - currentMin) * factor));
+      const nextWidth = Math.max(2, Math.min(totalDistance(), (currentMax - currentMin) * factor));
       const ratio = Math.max(0, Math.min(1, (anchor - currentMin) / Math.max(.001, currentMax - currentMin)));
       setChartViewRange(anchor - nextWidth * ratio, anchor + nextWidth * (1 - ratio));
     }, { passive: false });
+    canvas.addEventListener('pointerdown', event => {
+      const hit = chartAndPoint(event);
+      if (event.button !== 0 || !hit?.inside) return;
+      dragStartPx = hit.x;
+      suppressClick = false;
+      canvas.setPointerCapture?.(event.pointerId);
+    });
+    canvas.addEventListener('pointermove', event => {
+      if (dragStartPx === null) return;
+      const hit = chartAndPoint(event);
+      if (!hit) return;
+      suppressClick = Math.abs(hit.x - dragStartPx) >= 7;
+      canvas.style.cursor = suppressClick ? 'col-resize' : 'crosshair';
+    });
+    const finishDrag = event => {
+      if (dragStartPx === null) return;
+      const hit = chartAndPoint(event);
+      const startPx = dragStartPx;
+      dragStartPx = null;
+      canvas.style.cursor = 'crosshair';
+      if (!hit || Math.abs(hit.x - startPx) < 7) return;
+      const leftPx = Math.max(hit.chart.chartArea.left, Math.min(startPx, hit.x));
+      const rightPx = Math.min(hit.chart.chartArea.right, Math.max(startPx, hit.x));
+      if (rightPx - leftPx < 7) return;
+      setChartViewRange(hit.chart.scales.x.getValueForPixel(leftPx), hit.chart.scales.x.getValueForPixel(rightPx));
+    };
+    canvas.addEventListener('pointerup', finishDrag);
+    canvas.addEventListener('pointercancel', () => { dragStartPx = null; suppressClick = false; canvas.style.cursor = 'crosshair'; });
     canvas.addEventListener('mousemove', event => {
       const chart = Object.values(state.charts).find(candidate => candidate.canvas === canvas);
       if (!chart?.chartArea) return;
@@ -271,6 +309,7 @@
     });
     canvas.addEventListener('mouseleave', () => previewDistance(null));
     canvas.addEventListener('click', event => {
+      if (suppressClick) { suppressClick = false; return; }
       const chart = Object.values(state.charts).find(candidate => candidate.canvas === canvas);
       if (!chart?.chartArea) return;
       const rect = canvas.getBoundingClientRect();
