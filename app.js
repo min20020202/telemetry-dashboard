@@ -27,6 +27,8 @@ let page4ViewStart = 0;
 let page4ViewEnd = 0;
 let page4CursorTime = 0;
 let page4SelectedLapIndex = -1;
+let page4AxisMode = 'time';
+const page4LapDistanceCache = new Map();
 
 // Global state variables for Page 3 IMU charts
 let chartImuAccel = null;
@@ -135,6 +137,7 @@ const p4PlayRate = document.getElementById('p4-play-rate');
 const p4PlayTimeline = document.getElementById('p4-play-timeline');
 const p4PlayTime = document.getElementById('p4-play-time');
 const p4SteeringWheel = document.getElementById('p4-steering-wheel');
+const p4AxisModeControl = document.getElementById('p4-axis-mode');
 
 // GPS DOMs
 const cursorGpsCoords = document.getElementById('cursor-gps-coords');
@@ -1554,6 +1557,75 @@ function drawGpsHandlingEvents() {
   });
 }
 
+function page4ReferencePoints() {
+  const source = window.NSSUR_TRACK_REFERENCE;
+  if (!source || !Array.isArray(source.points) || source.points.length < 2) return [];
+  return source.points;
+}
+
+function buildPage4LapDistanceMap(lapIndex = page4SelectedLapIndex) {
+  if (page4LapDistanceCache.has(lapIndex)) return page4LapDistanceCache.get(lapIndex);
+  const lap = gpsLapResults[lapIndex];
+  const reference = page4ReferencePoints();
+  if (!lap || reference.length < 2) return [];
+  const originLat = reference[0][0] * Math.PI / 180;
+  const metersPerLat = 111320;
+  const metersPerLon = 111320 * Math.cos(originLat);
+  const ref = reference.map(point => ({
+    x: (point[1] - reference[0][1]) * metersPerLon,
+    y: (point[0] - reference[0][0]) * metersPerLat,
+    d: Number(point[2]) || 0
+  }));
+  const fixes = gpsLapPoints.filter(point => point.time >= lap.startTime - 0.05 && point.time <= lap.endTime + 0.05);
+  const map = [{ time: lap.startTime, distance: 0 }];
+  let previousSegment = 0;
+  let previousDistance = 0;
+  fixes.forEach((point, pointIndex) => {
+    const px = (point.lon - reference[0][1]) * metersPerLon;
+    const py = (point.lat - reference[0][0]) * metersPerLat;
+    const start = pointIndex < 2 ? 0 : Math.max(0, previousSegment - 5);
+    const end = pointIndex < 2 ? Math.min(ref.length - 2, 35) : Math.min(ref.length - 2, previousSegment + 35);
+    let best = null;
+    for (let index = start; index <= end; index += 1) {
+      const a = ref[index], b = ref[index + 1];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const length2 = dx * dx + dy * dy;
+      const ratio = length2 ? Math.max(0, Math.min(1, ((px - a.x) * dx + (py - a.y) * dy) / length2)) : 0;
+      const qx = a.x + dx * ratio, qy = a.y + dy * ratio;
+      const error2 = (px - qx) ** 2 + (py - qy) ** 2;
+      if (!best || error2 < best.error2) best = { segment: index, ratio, error2, distance: a.d + (b.d - a.d) * ratio };
+    }
+    if (!best) return;
+    previousSegment = Math.max(previousSegment, best.segment);
+    previousDistance = Math.max(previousDistance, Math.min(Number(window.NSSUR_TRACK_REFERENCE.totalDistanceMeters) || ref.at(-1).d, best.distance));
+    map.push({ time: point.time, distance: previousDistance });
+  });
+  const total = Number(window.NSSUR_TRACK_REFERENCE.totalDistanceMeters) || ref.at(-1).d;
+  map.push({ time: lap.endTime, distance: total });
+  map.sort((a, b) => a.time - b.time);
+  page4LapDistanceCache.set(lapIndex, map);
+  return map;
+}
+
+function interpolatePage4Map(value, inputKey, outputKey) {
+  const map = buildPage4LapDistanceMap();
+  if (!map.length) return Number(value) || 0;
+  const target = Number(value) || 0;
+  let low = 0, high = map.length - 1;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (map[middle][inputKey] < target) low = middle + 1; else high = middle;
+  }
+  const right = map[low];
+  const left = map[Math.max(0, low - 1)];
+  if (!left || left === right || right[inputKey] === left[inputKey]) return right[outputKey];
+  const ratio = Math.max(0, Math.min(1, (target - left[inputKey]) / (right[inputKey] - left[inputKey])));
+  return left[outputKey] + (right[outputKey] - left[outputKey]) * ratio;
+}
+
+function page4AxisValue(time) { return page4AxisMode === 'distance' ? interpolatePage4Map(time, 'time', 'distance') : Number(time); }
+function page4TimeFromAxis(axis) { return page4AxisMode === 'distance' ? interpolatePage4Map(axis, 'distance', 'time') : Number(axis); }
+
 const PAGE4_CHART_SPECS = [
   { id: 'p4-chart-speed', min: 0, series: [
     ['GPS', '#06b6d4', r => Number(r.gps_speed_kmh) || 0],
@@ -1616,7 +1688,7 @@ function buildPage4WorkspaceCharts(S, makeCommonOptions) {
     const chart = new Chart(canvas.getContext('2d'), {
       type: 'line',
       data: { datasets: spec.series.map((series) => ({
-        label: series[0], data: activeSampledData.map((row, index) => ({ x: row.time_sec, y: page4SeriesValue(series, row, sampleIndices[index]) })),
+        label: series[0], data: activeSampledData.map((row, index) => ({ x: page4AxisValue(row.time_sec), y: page4SeriesValue(series, row, sampleIndices[index]) })),
         borderColor: series[1], borderWidth: 1.35, borderDash: series[4] || [], pointRadius: 0,
         stepped: spec.stepped ? 'before' : false, fill: false, yAxisID: series[3] || 'y'
       })) },
@@ -1630,7 +1702,7 @@ function buildPage4WorkspaceCharts(S, makeCommonOptions) {
       const rawX = event.clientX - rect.left;
       const x = Math.max(area.left, Math.min(area.right, rawX));
       const previousTime = page4CursorTime;
-      const targetTime = xScale.getValueForPixel(x);
+      const targetTime = page4TimeFromAxis(xScale.getValueForPixel(x));
       setPage4Playback(false);
       keepPage4CursorInView(targetTime, rawX >= area.right ? 1 : (rawX <= area.left ? -1 : Math.sign(targetTime - previousTime)));
       updatePage4PlaybackCursor(targetTime);
@@ -1650,9 +1722,10 @@ function buildPage4WorkspaceCharts(S, makeCommonOptions) {
       if (page4PointerDragging !== canvas || !edgePanDirection) { stopEdgePan(); return; }
       if (edgePanLastStamp) {
         const elapsed = Math.min(0.05, (stamp - edgePanLastStamp) / 1000);
-        const span = page4ViewEnd - page4ViewStart;
-        const speed = span * (0.18 + edgePanStrength * 0.82);
-        const targetTime = Math.max(page4RangeStart, Math.min(page4RangeEnd, page4CursorTime + edgePanDirection * speed * elapsed));
+        const axisStart = page4AxisValue(page4ViewStart), axisEnd = page4AxisValue(page4ViewEnd);
+        const speed = (axisEnd - axisStart) * (0.18 + edgePanStrength * 0.82);
+        const targetAxis = page4AxisValue(page4CursorTime) + edgePanDirection * speed * elapsed;
+        const targetTime = Math.max(page4RangeStart, Math.min(page4RangeEnd, page4TimeFromAxis(targetAxis)));
         keepPage4CursorInView(targetTime, edgePanDirection);
         updatePage4PlaybackCursor(targetTime);
         if (targetTime === page4RangeStart || targetTime === page4RangeEnd) { stopEdgePan(); return; }
@@ -1755,6 +1828,7 @@ function page4LapBoundaries(lapIndex) {
 
 function refreshPage4Selectors() {
   invalidatePage4BoundariesCache();
+  page4LapDistanceCache.clear();
   if (!p4LapSelect) return;
   const previous = Number(p4LapSelect.value);
   p4LapSelect.innerHTML = gpsLapResults.length
@@ -1806,7 +1880,10 @@ function applyPage4Selection() {
   refreshPage4VisibleRange(startTime, page4RangeEnd);
   const startLabel = boundaries[startIndex]?.label || 'START';
   const endLabel = boundaries[endIndex]?.label || 'FINISH';
-  if (p4SectorStatus) p4SectorStatus.textContent = `${startLabel} → ${endLabel} · ${(page4RangeEnd - page4RangeStart).toFixed(3)}초`;
+  const axisSpan = page4AxisValue(page4RangeEnd) - page4AxisValue(page4RangeStart);
+  if (p4SectorStatus) p4SectorStatus.textContent = page4AxisMode === 'distance'
+    ? `${startLabel} → ${endLabel} · ${axisSpan.toFixed(1)}m`
+    : `${startLabel} → ${endLabel} · ${(page4RangeEnd - page4RangeStart).toFixed(3)}초`;
   if (p4PlayTimeline) { p4PlayTimeline.min = String(page4RangeStart); p4PlayTimeline.max = String(page4RangeEnd); p4PlayTimeline.step = '0.01'; }
   updatePage4PlaybackCursor(page4RangeStart);
   drawPage4GTrace();
@@ -1860,10 +1937,11 @@ function refreshPage4VisibleRange(startTime, endTime) {
     const chart = page4Charts[chartIndex];
     if (!chart) return;
     spec.series.forEach((series, datasetIndex) => {
-      chart.data.datasets[datasetIndex].data = relativeIndices.map(index => ({ x: globalData[index].time_sec, y: page4SeriesValue(series, globalData[index], index) }));
+      chart.data.datasets[datasetIndex].data = relativeIndices.map(index => ({ x: page4AxisValue(globalData[index].time_sec), y: page4SeriesValue(series, globalData[index], index) }));
     });
-    chart.options.scales.x.min = page4ViewStart;
-    chart.options.scales.x.max = page4ViewEnd;
+    chart.options.scales.x.min = page4AxisValue(page4ViewStart);
+    chart.options.scales.x.max = page4AxisValue(page4ViewEnd);
+    chart.options.scales.x.ticks.callback = value => page4AxisMode === 'distance' ? `${Math.round(Number(value))}m` : Number(value).toFixed(1);
     chart.update('none');
   });
   drawPage4Cursor(page4CursorTime);
@@ -1876,47 +1954,54 @@ function refreshPage4VisibleRange(startTime, endTime) {
 
 function syncPage4Navigator() {
   if (!(page4RangeEnd > page4RangeStart)) return;
-  const duration = page4RangeEnd - page4RangeStart;
-  if (inputStart) { inputStart.min = '0'; inputStart.max = duration.toFixed(3); inputStart.step = '0.01'; inputStart.value = Math.max(0, page4ViewStart - page4RangeStart).toFixed(3); }
-  if (inputEnd) { inputEnd.min = '0'; inputEnd.max = duration.toFixed(3); inputEnd.step = '0.01'; inputEnd.value = Math.min(duration, page4ViewEnd - page4RangeStart).toFixed(3); }
-  if (scrollBar) { scrollBar.min = '0'; scrollBar.max = duration.toFixed(3); scrollBar.step = '0.01'; scrollBar.value = Math.max(0, page4CursorTime - page4RangeStart).toFixed(3); scrollBar.disabled = false; }
-  if (currentTimeVal) currentTimeVal.textContent = `${Math.max(0, page4CursorTime - page4RangeStart).toFixed(3)}s`;
-  if (lblScrollType) lblScrollType.textContent = '🏁 선택 구간 커서:';
+  const origin = page4AxisValue(page4RangeStart), end = page4AxisValue(page4RangeEnd);
+  const duration = end - origin, step = page4AxisMode === 'distance' ? 0.1 : 0.01;
+  const digits = page4AxisMode === 'distance' ? 1 : 3;
+  if (inputStart) { inputStart.min = '0'; inputStart.max = duration.toFixed(digits); inputStart.step = String(step); inputStart.value = Math.max(0, page4AxisValue(page4ViewStart) - origin).toFixed(digits); }
+  if (inputEnd) { inputEnd.min = '0'; inputEnd.max = duration.toFixed(digits); inputEnd.step = String(step); inputEnd.value = Math.min(duration, page4AxisValue(page4ViewEnd) - origin).toFixed(digits); }
+  if (scrollBar) { scrollBar.min = '0'; scrollBar.max = duration.toFixed(digits); scrollBar.step = String(step); scrollBar.value = Math.max(0, page4AxisValue(page4CursorTime) - origin).toFixed(digits); scrollBar.disabled = false; }
+  if (currentTimeVal) currentTimeVal.textContent = `${Math.max(0, page4AxisValue(page4CursorTime) - origin).toFixed(digits)}${page4AxisMode === 'distance' ? 'm' : 's'}`;
+  if (lblScrollType) lblScrollType.textContent = `🏁 선택 구간 ${page4AxisMode === 'distance' ? '거리' : '시간'} 커서:`;
 }
 
 function zoomPage4At(targetTime, factor) {
-  const span = page4ViewEnd - page4ViewStart;
-  const fullSpan = page4RangeEnd - page4RangeStart;
+  const viewStart = page4AxisValue(page4ViewStart), viewEnd = page4AxisValue(page4ViewEnd);
+  const rangeStart = page4AxisValue(page4RangeStart), rangeEnd = page4AxisValue(page4RangeEnd);
+  const span = viewEnd - viewStart;
+  const fullSpan = rangeEnd - rangeStart;
   if (!(span > 0) || !(fullSpan > 0)) return;
-  const newSpan = Math.max(0.5, Math.min(fullSpan, span * factor));
-  const anchor = Math.max(page4ViewStart, Math.min(page4ViewEnd, targetTime));
-  const ratio = span > 0 ? (anchor - page4ViewStart) / span : 0.5;
+  const newSpan = Math.max(page4AxisMode === 'distance' ? 5 : 0.5, Math.min(fullSpan, span * factor));
+  const anchor = Math.max(viewStart, Math.min(viewEnd, page4AxisValue(targetTime)));
+  const ratio = span > 0 ? (anchor - viewStart) / span : 0.5;
   let start = anchor - newSpan * ratio;
   let end = start + newSpan;
-  if (start < page4RangeStart) { start = page4RangeStart; end = start + newSpan; }
-  if (end > page4RangeEnd) { end = page4RangeEnd; start = end - newSpan; }
-  refreshPage4VisibleRange(start, end);
+  if (start < rangeStart) { start = rangeStart; end = start + newSpan; }
+  if (end > rangeEnd) { end = rangeEnd; start = end - newSpan; }
+  refreshPage4VisibleRange(page4TimeFromAxis(start), page4TimeFromAxis(end));
 }
 
 function keepPage4CursorInView(targetTime, direction = 0) {
-  const span = page4ViewEnd - page4ViewStart;
-  const fullSpan = page4RangeEnd - page4RangeStart;
+  const viewStart = page4AxisValue(page4ViewStart), viewEnd = page4AxisValue(page4ViewEnd);
+  const rangeStart = page4AxisValue(page4RangeStart), rangeEnd = page4AxisValue(page4RangeEnd);
+  const target = page4AxisValue(targetTime);
+  const span = viewEnd - viewStart;
+  const fullSpan = rangeEnd - rangeStart;
   if (!(span > 0) || !(fullSpan > span + 0.001)) return;
   const margin = Math.min(span * 0.08, 0.5);
-  let start = page4ViewStart;
-  let end = page4ViewEnd;
-  if (direction > 0 && targetTime >= end - margin) {
-    end = Math.min(page4RangeEnd, targetTime + margin);
+  let start = viewStart;
+  let end = viewEnd;
+  if (direction > 0 && target >= end - margin) {
+    end = Math.min(rangeEnd, target + margin);
     start = end - span;
-  } else if (direction < 0 && targetTime <= start + margin) {
-    start = Math.max(page4RangeStart, targetTime - margin);
+  } else if (direction < 0 && target <= start + margin) {
+    start = Math.max(rangeStart, target - margin);
     end = start + span;
   } else {
     return;
   }
-  if (start < page4RangeStart) { start = page4RangeStart; end = start + span; }
-  if (end > page4RangeEnd) { end = page4RangeEnd; start = end - span; }
-  refreshPage4VisibleRange(start, end);
+  if (start < rangeStart) { start = rangeStart; end = start + span; }
+  if (end > rangeEnd) { end = rangeEnd; start = end - span; }
+  refreshPage4VisibleRange(page4TimeFromAxis(start), page4TimeFromAxis(end));
 }
 
 function drawPage4Cursor(targetTime) {
@@ -1925,7 +2010,7 @@ function drawPage4Cursor(targetTime) {
     const holder = chart.canvas.parentElement;
     let line = holder.querySelector('.p4-cursor-line');
     if (!line) { line = document.createElement('div'); line.className = 'p4-cursor-line'; holder.appendChild(line); }
-    const x = chart.scales.x.getPixelForValue(targetTime);
+    const x = chart.scales.x.getPixelForValue(page4AxisValue(targetTime));
     line.style.display = x >= chart.chartArea.left && x <= chart.chartArea.right ? 'block' : 'none';
     line.style.left = `${x}px`;
   });
@@ -1940,7 +2025,9 @@ function updatePage4PlaybackCursor(targetTime) {
   preciseCursorTimeSec = page4CursorTime;
   currentCursorIndex = findSampleIndexAtTime(page4CursorTime);
   if (p4PlayTimeline) p4PlayTimeline.value = String(page4CursorTime);
-  if (p4PlayTime) p4PlayTime.textContent = `${(page4CursorTime - rangeStart).toFixed(3)} s`;
+  if (p4PlayTime) p4PlayTime.textContent = page4AxisMode === 'distance'
+    ? `${(page4AxisValue(page4CursorTime) - page4AxisValue(rangeStart)).toFixed(1)} m`
+    : `${(page4CursorTime - rangeStart).toFixed(3)} s`;
   if (tabTemperature?.classList.contains('active')) syncPage4Navigator();
   const row = globalData[findGlobalIndexAtTime(page4CursorTime)];
   if (row) updateNumericDisplays(row, null, page4CursorTime);
@@ -2137,6 +2224,13 @@ p4SectorStart?.addEventListener('change', applyPage4Selection);
 p4SectorEnd?.addEventListener('change', applyPage4Selection);
 p4PlayToggle?.addEventListener('click', () => setPage4Playback(!page4PlaybackActive));
 p4PlayTimeline?.addEventListener('input', () => { setPage4Playback(false); updatePage4PlaybackCursor(Number(p4PlayTimeline.value)); });
+p4AxisModeControl?.addEventListener('click', event => {
+  const button = event.target.closest('button[data-mode]');
+  if (!button || button.dataset.mode === page4AxisMode) return;
+  page4AxisMode = button.dataset.mode;
+  p4AxisModeControl.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
+  applyPage4Selection();
+});
 
 function syncGpsTimelineRange(minTime, maxTime, value) {
   const safeValue = Math.max(minTime, Math.min(maxTime, Number(value) || minTime));
@@ -3626,10 +3720,11 @@ btnApply.addEventListener('click', () => {
   const start = parseFloat(inputStart.value) || 0;
   const end = parseFloat(inputEnd.value) || 10;
   if (tabTemperature?.classList.contains('active') && page4RangeEnd > page4RangeStart) {
-    const duration = page4RangeEnd - page4RangeStart;
+    const origin = page4AxisValue(page4RangeStart);
+    const duration = page4AxisValue(page4RangeEnd) - origin;
     const relativeStart = Math.max(0, Math.min(duration, start));
     const relativeEnd = Math.max(relativeStart + 0.01, Math.min(duration, end));
-    refreshPage4VisibleRange(page4RangeStart + relativeStart, page4RangeStart + relativeEnd);
+    refreshPage4VisibleRange(page4TimeFromAxis(origin + relativeStart), page4TimeFromAxis(origin + relativeEnd));
     return;
   }
   
@@ -3732,13 +3827,13 @@ function drawCssIntersectionDots(index, chartSubset = null, targetTimeOverride =
     const page4ChartIndex = page4Charts.indexOf(chart);
     const exactGlobalIndex = page4ChartIndex >= 0 ? findGlobalIndexAtTime(targetTime) : -1;
     const exactRow = exactGlobalIndex >= 0 ? globalData[exactGlobalIndex] : null;
-    const exactX = chart.scales?.x?.getPixelForValue(targetTime);
+    const exactX = chart.scales?.x?.getPixelForValue(page4ChartIndex >= 0 ? page4AxisValue(targetTime) : targetTime);
     chart.data.datasets.forEach((dataset, datasetIndex) => {
       const meta = chart.getDatasetMeta(datasetIndex);
       if (!meta.hidden) {
         // Datasets may use different visible-range resolutions. Match each dot
         // by timestamp instead of assuming every dataset shares one index.
-        const pointIndex = nearestDatasetPointIndex(dataset.data, targetTime);
+        const pointIndex = nearestDatasetPointIndex(dataset.data, page4ChartIndex >= 0 ? page4AxisValue(targetTime) : targetTime);
         const point = meta.data[pointIndex];
         const page4Series = page4ChartIndex >= 0 ? PAGE4_CHART_SPECS[page4ChartIndex]?.series?.[datasetIndex] : null;
         const exactValue = page4Series && exactRow ? page4SeriesValue(page4Series, exactRow, exactGlobalIndex) : NaN;
@@ -4393,10 +4488,10 @@ const handleTimelineScrollDrag = (e) => {
     
     // GPS 페이지 활성화 시: 시간 스크러버(Scrubber)로 동작
     if (tabTemperature?.classList.contains('active') && page4RangeEnd > page4RangeStart) {
-      const relativeTime = parseFloat(lastDragEvent.target.value);
-      if (!isNaN(relativeTime)) {
+      const relativeAxis = parseFloat(lastDragEvent.target.value);
+      if (!isNaN(relativeAxis)) {
         setPage4Playback(false);
-        updatePage4PlaybackCursor(page4RangeStart + relativeTime);
+        updatePage4PlaybackCursor(page4TimeFromAxis(page4AxisValue(page4RangeStart) + relativeAxis));
       }
     } else if (tabGps && tabGps.classList.contains('active')) {
       const targetTime = parseFloat(lastDragEvent.target.value);
@@ -5784,7 +5879,8 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (tabTemperature?.classList.contains('active')) {
       setPage4Playback(false);
-      const targetTime = Math.max(page4RangeStart, page4CursorTime - (e.shiftKey ? 0.01 : 0.1));
+      const step = page4AxisMode === 'distance' ? (e.shiftKey ? 0.1 : 1) : (e.shiftKey ? 0.01 : 0.1);
+      const targetTime = Math.max(page4RangeStart, page4TimeFromAxis(page4AxisValue(page4CursorTime) - step));
       keepPage4CursorInView(targetTime, -1);
       updatePage4PlaybackCursor(targetTime);
     } else moveChartCursorByKeyboard(-1, e);
@@ -5792,7 +5888,8 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (tabTemperature?.classList.contains('active')) {
       setPage4Playback(false);
-      const targetTime = Math.min(page4RangeEnd, page4CursorTime + (e.shiftKey ? 0.01 : 0.1));
+      const step = page4AxisMode === 'distance' ? (e.shiftKey ? 0.1 : 1) : (e.shiftKey ? 0.01 : 0.1);
+      const targetTime = Math.min(page4RangeEnd, page4TimeFromAxis(page4AxisValue(page4CursorTime) + step));
       keepPage4CursorInView(targetTime, 1);
       updatePage4PlaybackCursor(targetTime);
     } else moveChartCursorByKeyboard(1, e);
