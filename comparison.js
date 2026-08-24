@@ -340,7 +340,8 @@
         const brake = points.find(point => point.brake >= 5);
         const minIndex = points.findIndex(point => point.speed === minSpeed);
         const throttle = points.slice(Math.max(0, minIndex)).find(point => point.tps >= 20);
-        return `<td><b>${duration.toFixed(3)}s</b><br><small>min ${minSpeed.toFixed(1)} · B ${brake ? `${brake.x.toFixed(0)}m` : '—'} · T ${throttle ? `${throttle.x.toFixed(0)}m` : '—'} · out ${(last?.speed || 0).toFixed(1)}</small></td>`;
+        const detail = `최저속도 ${minSpeed.toFixed(1)} km/h · 브레이크 ${brake ? `${brake.x.toFixed(0)}m` : '없음'} · 재가속 ${throttle ? `${throttle.x.toFixed(0)}m` : '없음'} · 탈출속도 ${(last?.speed || 0).toFixed(1)} km/h`;
+        return `<td title="${detail}"><b>${duration.toFixed(3)}s</b></td>`;
       }).join('')}</tr>`;
     }).join('')}</tbody></table>`;
   }

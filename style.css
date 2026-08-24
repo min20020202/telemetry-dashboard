@@ -71,7 +71,9 @@
 .comparison-play-distance span { font:800 10px var(--font-mono); }
 .comparison-sector-table { overflow: auto; max-height: 360px; }
 .comparison-sector-table table { width: 100%; border-collapse: collapse; font-size: 10px; white-space: nowrap; }
-.comparison-sector-table th, .comparison-sector-table td { padding: 6px; border-bottom: 1px solid var(--border-color); text-align: right; }
+.comparison-sector-table th, .comparison-sector-table td { height:24px; padding:2px 6px; border-bottom:1px solid var(--border-color); text-align:right; line-height:1.05; }
+.comparison-sector-table td b { font-size:10px; }
+.comparison-sector-table td:first-child small { font-size:7px; opacity:.7; }
 .comparison-sector-table th:first-child, .comparison-sector-table td:first-child { text-align: left; position: sticky; left: 0; background: var(--panel-bg); }
 
 @media (max-width: 1450px) {
