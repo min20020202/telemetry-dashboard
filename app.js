@@ -542,6 +542,33 @@ function parseYouTubeKstStartDate(title) {
   return new Date(Date.UTC(year, month - 1, day, hour - 9, minute, second, millis));
 }
 
+function parseYouTubeDescriptionKstStartDate(description) {
+  const match = String(description || '').match(/(?:^|\n)\s*NSSUR_START_KST\s*=\s*(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:[.,](\d{1,3}))?\s*(?:\n|$)/i);
+  if (!match) return null;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, millisText = '0'] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  const millis = Number(millisText.padEnd(3, '0'));
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) return null;
+  return new Date(Date.UTC(year, month - 1, day, hour - 9, minute, second, millis));
+}
+
+async function fetchYouTubeMetadata(videoId) {
+  const response = await fetch(`/api/youtube-metadata?id=${encodeURIComponent(videoId)}`, {
+    headers: { Accept: 'application/json' }
+  });
+  let payload = {};
+  try { payload = await response.json(); } catch (_) { /* 서버의 텍스트 오류 응답 */ }
+  if (!response.ok) {
+    throw new Error(payload.error || `YouTube 설명을 조회하지 못했습니다. (${response.status})`);
+  }
+  return payload;
+}
+
 function getKstDateParts(date) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Seoul',
@@ -556,10 +583,10 @@ function makeYouTubeUploadMetadata(file, creationDate) {
   const { year, month, day, hour, minute, second } = getKstDateParts(creationDate);
   const sourceName = String(file?.name || 'GOPRO').replace(/\.mp4$/i, '');
   const safeName = sourceName.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'GOPRO';
-  const startText = `${year}-${month}-${day} ${hour}:${minute}:${second} KST`;
+  const startText = `${year}-${month}-${day} ${hour}:${minute}:${second}.000`;
   return {
     title: `NS26F_${year}-${month}-${day}_${hour}-${minute}-${second}_KST_${safeName}`.slice(0, 100),
-    description: `NSSUR Telemetry 동기화 정보\n영상 시작: ${startText}\n원본 파일: ${file.name}\n\n※ 설명은 기록용이며, 사이트 동기화는 YouTube 제목의 시작 시각을 사용합니다.`,
+    description: `NSSUR_START_KST=${startText}\n원본 파일: ${file.name}`,
     startText
   };
 }
@@ -4408,7 +4435,7 @@ async function connectYouTubeVideo(rawUrl) {
   gpsYouTubeVideoId = videoId;
   gpsGoProPanel.hidden = false;
   gpsGoProPanel.classList.add('youtube-source');
-  gpsGoProStatus.textContent = 'YouTube 제목과 영상 길이를 확인하는 중…';
+  gpsGoProStatus.textContent = 'YouTube 설명의 시작 시각과 영상 길이를 확인하는 중…';
   gpsGoProStatus.className = '';
 
   await loadYouTubeIframeApi();
@@ -4418,18 +4445,22 @@ async function connectYouTubeVideo(rawUrl) {
     createYouTubePlayer(primaryMount, videoId),
     createYouTubePlayer(compareMount, videoId)
   ]);
-  const metadata = await waitForYouTubeMetadata(gpsYouTubePrimaryPlayer);
-  if (!(metadata.duration > 0)) throw new Error('YouTube 영상 길이를 확인하지 못했습니다. 처리가 끝난 뒤 다시 시도하세요.');
-  if (!metadata.title) throw new Error('YouTube 영상 제목을 읽지 못했습니다. 영상 공개 상태를 일부 공개로 설정하세요.');
+  const [playerMetadata, apiMetadata] = await Promise.all([
+    waitForYouTubeMetadata(gpsYouTubePrimaryPlayer),
+    fetchYouTubeMetadata(videoId)
+  ]);
+  if (!(playerMetadata.duration > 0)) throw new Error('YouTube 영상 길이를 확인하지 못했습니다. 처리가 끝난 뒤 다시 시도하세요.');
 
-  const creationDate = parseYouTubeKstStartDate(metadata.title);
+  // 새 영상은 설명의 전용 태그를 사용합니다. 기존 제목 규칙은 과거 영상 호환용입니다.
+  const creationDate = parseYouTubeDescriptionKstStartDate(apiMetadata.description) ||
+    parseYouTubeKstStartDate(apiMetadata.title || playerMetadata.title);
   if (!creationDate) {
-    throw new Error('제목에서 시작 시각을 찾지 못했습니다. 예: NS26F_2026-08-11_15-13-24.000_KST_GX014229');
+    throw new Error('영상 설명에서 시작 시각을 찾지 못했습니다. 설명에 NSSUR_START_KST=2026-08-11 15:13:24.000 형식의 한 줄을 추가하세요.');
   }
-  const match = matchGoProToCsv(creationDate, metadata.duration);
+  const match = matchGoProToCsv(creationDate, playerMetadata.duration);
   if (!match?.matched) {
     const videoRange = match
-      ? `${formatGpsClock(match.videoStart)}~${formatGpsClock(match.videoStart + metadata.duration)} KST`
+      ? `${formatGpsClock(match.videoStart)}~${formatGpsClock(match.videoStart + playerMetadata.duration)} KST`
       : '시간 확인 불가';
     const csvRange = match?.range
       ? `${formatGpsClock(match.range.first.clock)}~${formatGpsClock(match.range.last.clock)} KST`
@@ -4501,7 +4532,7 @@ helpVideoTitleFile?.addEventListener('change', async event => {
     helpVideoDescriptionOutput.value = metadata.description;
     helpVideoTitleCopy.disabled = false;
     helpVideoDescriptionCopy.disabled = false;
-    helpVideoTitleStatus.textContent = `${file.name} · 영상 시작 ${metadata.startText} · 제목 생성 완료`;
+    helpVideoTitleStatus.textContent = `${file.name} · 영상 시작 ${metadata.startText} KST · 동기화 설명 생성 완료`;
     helpVideoTitleStatus.classList.add('success');
   } catch (error) {
     helpVideoTitleStatus.textContent = error.message || '영상 정보를 읽지 못했습니다.';
