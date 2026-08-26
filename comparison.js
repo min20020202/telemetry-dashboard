@@ -22,6 +22,8 @@
   const selectionKey = (sessionId, lapIndex) => `${sessionId}:${lapIndex}`;
   const reference = () => window.NSSUR_TRACK_REFERENCE?.points || [];
   const totalDistance = () => Number(window.NSSUR_TRACK_REFERENCE?.totalDistanceMeters) || Number(reference().at(-1)?.[2]) || 0;
+  const isReverseCourse = () => window.getNssurCourseDirection?.() === 'reverse';
+  const directedDistance = distance => isReverseCourse() ? totalDistance() - Number(distance || 0) : Number(distance || 0);
   let referenceMetricCache = null;
   let referenceMetricSource = null;
   const COMPARISON_IMU_FIELDS = [
@@ -203,13 +205,14 @@
     if (state.distanceMapCache.has(item.key)) return state.distanceMapCache.get(item.key);
     const fixes = item.session.gpsPoints.filter(point => point.time >= item.lap.startTime - .05 && point.time <= item.lap.endTime + .05);
     const map = [{ time: item.lap.startTime, distance: 0 }];
-    let segment = 0, distance = 0;
+    const reverse = isReverseCourse();
+    let segment = reverse ? referenceMeters().length - 2 : 0, distance = 0;
     const trackLength = totalDistance();
     fixes.forEach((point, index) => {
       const hit = projectPoint(point.lat, point.lon, segment, index < 2 ? 35 : 35);
       if (!hit) return;
-      segment = Math.max(segment, hit.segment);
-      distance = Math.max(distance, Math.min(trackLength, hit.distance));
+      segment = reverse ? Math.min(segment, hit.segment) : Math.max(segment, hit.segment);
+      distance = Math.max(distance, Math.min(trackLength, directedDistance(hit.distance)));
       map.push({ time: point.time, distance });
     });
     map.push({ time: item.lap.endTime, distance: trackLength });
@@ -634,10 +637,11 @@
       if (referenceRatio < 0 || referenceRatio > 1 || lineRatio < 0 || lineRatio > 1) continue;
       const startDistance = Number(points[index - 1][2]) || 0;
       const endDistance = Number(points[index][2]) || startDistance;
-      return startDistance + (endDistance - startDistance) * referenceRatio;
+      return directedDistance(startDistance + (endDistance - startDistance) * referenceRatio);
     }
     const mid = { lat: (line[0].lat + line[1].lat) / 2, lon: (line[0].lon + line[1].lon) / 2 };
-    return projectPoint(mid.lat, mid.lon)?.distance ?? NaN;
+    const projected = projectPoint(mid.lat, mid.lon)?.distance;
+    return Number.isFinite(projected) ? directedDistance(projected) : NaN;
   }
 
   function checkpointDistances(items) {
@@ -645,6 +649,17 @@
     return source.map(checkpointReferenceDistance)
       .filter(Number.isFinite).filter(distance => distance > 2 && distance < totalDistance() - 2).sort((a, b) => a - b);
   }
+
+  window.addEventListener('nssur-course-direction-change', () => {
+    state.distanceMapCache.clear();
+    state.sourceSeriesCache.clear();
+    state.sectorCache.clear();
+    state.sectorMetricsCache.clear();
+    state.cache.clear();
+    state.viewMin = 0;
+    state.viewMax = null;
+    if (state.sessions.length) render();
+  });
 
   function sectorBounds(items) {
     return [0, ...checkpointDistances(items), totalDistance()];

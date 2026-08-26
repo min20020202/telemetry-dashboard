@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260825-34">
+  <link rel="stylesheet" href="style.css?v=20260826-1">
 </head>
 <body>
 
@@ -313,6 +313,7 @@
               <button id="gps-shared-settings-copy" type="button" disabled>공통 설정 복사</button>
               <button id="gps-sector-toggle" type="button" disabled>구간 비교</button>
               <button id="gps-handling-toggle" type="button" aria-pressed="false" disabled>핸들링 분석</button>
+              <div id="gps-course-direction" class="gps-axis-mode" data-course-direction aria-label="코스 주행 방향"><button type="button" class="active" data-direction="forward">정방향</button><button type="button" data-direction="reverse">역방향</button></div>
               <div id="gps-axis-mode" class="gps-axis-mode" aria-label="GPS 그래프 가로축"><button type="button" class="active" data-mode="time">시간 s</button><button type="button" data-mode="distance">거리 m</button></div>
               <label>최소 랩
                 <input id="gps-lap-min-time" type="number" min="5" max="600" step="1" value="20">
@@ -580,7 +581,7 @@
           <div class="lap-strip"><header>COOLANT / OIL TEMPERATURE <output id="p4-temp">-- · -- °C</output></header><canvas id="p4-chart-temp"></canvas></div>
         </main>
         <aside class="lap-workspace-side">
-          <section class="lap-side-card p4-play-card"><div class="p4-lap-card-head"><label for="p4-lap-select">랩 선택</label><div id="p4-axis-mode" class="p4-axis-mode" aria-label="그래프 가로축"><button type="button" data-mode="time">시간 s</button><button type="button" class="active" data-mode="distance">거리 m</button></div></div><select id="p4-lap-select"><option value="">피니시라인 설정 필요</option></select><div class="p4-play-controls"><button id="p4-play-toggle" type="button">▶ 재생</button><select id="p4-play-rate" aria-label="재생 속도"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></div><output id="p4-play-time">0.0 m</output></section>
+          <section class="lap-side-card p4-play-card"><div class="p4-lap-card-head"><label for="p4-lap-select">랩 선택</label><div class="p4-card-modes"><div class="p4-axis-mode" data-course-direction aria-label="코스 주행 방향"><button type="button" class="active" data-direction="forward">정방향</button><button type="button" data-direction="reverse">역방향</button></div><div id="p4-axis-mode" class="p4-axis-mode" aria-label="그래프 가로축"><button type="button" data-mode="time">시간 s</button><button type="button" class="active" data-mode="distance">거리 m</button></div></div></div><select id="p4-lap-select"><option value="">피니시라인 설정 필요</option></select><div class="p4-play-controls"><button id="p4-play-toggle" type="button">▶ 재생</button><select id="p4-play-rate" aria-label="재생 속도"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></div><output id="p4-play-time">0.0 m</output></section>
           <section class="lap-side-card lap-sector-select"><strong>분석 구간</strong><div><label>시작<select id="p4-sector-start"></select></label><span>→</span><label>종료<select id="p4-sector-end"></select></label></div><small id="p4-sector-status">랩 전체 구간</small></section>
           <section class="lap-side-card p4-g-card"><strong>IMU G / STEERING</strong><div class="p4-g-meter"><canvas id="p4-g-trace"></canvas><i></i><i></i><b>↑</b><span class="p4-g-scale top outer">+2g</span><span class="p4-g-scale top inner">+1g</span><span id="p4-g-dot"></span></div><div class="p4-g-values"><span>종G <b id="p4-gx">--.--</b></span><span>횡G <b id="p4-gy">--.--</b></span></div><div class="p4-steering-widget"><svg id="p4-steering-wheel" viewBox="0 0 100 100" aria-label="조향 핸들"><circle cx="50" cy="50" r="40" stroke="var(--text-primary)" stroke-width="8" fill="none" opacity="0.8"></circle><line x1="50" y1="50" x2="50" y2="90" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round"></line><line x1="50" y1="50" x2="10" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round"></line><line x1="50" y1="50" x2="90" y2="50" stroke="var(--text-primary)" stroke-width="8" stroke-linecap="round"></line><circle cx="50" cy="50" r="10" fill="var(--accent-magenta)"></circle><rect x="47" y="6" width="6" height="8" fill="var(--accent-orange)" rx="1"></rect></svg><span>핸들 <b id="p4-steering-value">--.-°</b></span></div></section>
           <section class="lap-side-card p4-track-card"><canvas id="p4-track-map" aria-label="현재 랩 위치"></canvas><small id="p4-track-time">--:--.---</small></section>
@@ -602,6 +603,7 @@
             <h2>드라이버·랩 비교</h2>
             <p>한 CSV의 랩별 비교와 여러 드라이버 CSV 비교를 공통 중심선 거리축에서 수행합니다.</p>
           </div>
+          <div class="gps-axis-mode comparison-direction-control" data-course-direction aria-label="비교 코스 주행 방향"><button type="button" class="active" data-direction="forward">정방향</button><button type="button" data-direction="reverse">역방향</button></div>
           <section class="comparison-playback-panel">
             <div class="comparison-playback-heading"><strong>재생 시점</strong></div>
             <div class="comparison-playback">
@@ -866,7 +868,7 @@
                 <article class="help-card"><h3>7개 동기화 그래프</h3><ul><li>GPS·FL·RL·RR 속도</li><li>RPM·TPS, 기어, TPS·브레이크</li><li>조향·Yaw rate, 종·횡G, 냉각수·유온</li><li>제목의 채널 버튼으로 원하는 선만 켜거나 끕니다.</li></ul></article>
                 <article class="help-card"><h3>랩과 구간 선택</h3><ul><li>오른쪽에서 랩과 START·CP·FINISH 구간을 선택합니다.</li><li>재생 중 모든 그래프, G 원, 트랙 위치가 같은 시점으로 움직입니다.</li><li>하단에서 선택 랩 범위 안의 구간을 직접 입력하거나 커서 막대로 이동합니다.</li></ul></article>
                 <article class="help-card"><h3>확대·이동</h3><ul><li>휠은 주황색 커서선을 기준으로 확대·축소합니다.</li><li>그래프를 클릭한 채 좌우로 드래그하면 커서와 표시 구간이 이동합니다.</li><li><kbd>←</kbd><kbd>→</kbd>는 0.1초, <kbd>Shift</kbd>와 함께 누르면 0.01초 이동합니다.</li></ul></article>
-                <article class="help-card"><h3>거리축 비교</h3><ul><li>거리 모드에서는 센서값을 공통 대표 경로상의 위치로 변환합니다.</li><li>현재 중심선은 12개 정상 랩, 1m 간격 864점, 총 862.556m입니다.</li><li>0.1m 표시는 보간 단위이며 GPS 절대 정확도가 10cm라는 뜻은 아닙니다.</li></ul><button class="help-inline-action" type="button" data-distance-method-open>거리 측정 방식 자세히</button></article>
+                <article class="help-card"><h3>거리축 비교</h3><ul><li>거리 모드에서는 센서값을 공통 대표 경로상의 위치로 변환합니다.</li><li>현재 중심선은 12개 정상 랩, 1m 간격 864점, 총 862.556m입니다.</li><li>오토크로스 역주행 CSV는 GPS 또는 드라이버·랩 비교 화면에서 <b>역방향</b>을 먼저 선택합니다.</li><li>0.1m 표시는 보간 단위이며 GPS 절대 정확도가 10cm라는 뜻은 아닙니다.</li></ul><button class="help-inline-action" type="button" data-distance-method-open>거리 측정 방식 자세히</button></article>
               </div>
             </section>
 
@@ -990,7 +992,7 @@
   <script src="steering.js?v=20260820-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
-  <script src="app.js?v=20260825-26"></script>
-  <script src="comparison.js?v=20260825-46"></script>
+  <script src="app.js?v=20260826-1"></script>
+  <script src="comparison.js?v=20260826-1"></script>
 </body>
 </html>

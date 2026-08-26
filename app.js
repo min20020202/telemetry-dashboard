@@ -42,6 +42,7 @@ let page4SelectedSessionLaps = [];
 const PAGE4_LAP_COLORS = ['#06b6d4', '#ec4899'];
 const page4HiddenSeries = new Set();
 let gpsAxisMode = 'time';
+let gpsCourseDirection = localStorage.getItem('nssur-course-direction') === 'reverse' ? 'reverse' : 'forward';
 
 // Global state variables for Page 3 IMU charts
 let chartImuAccel = null;
@@ -279,6 +280,7 @@ const gpsDetailGearValue = document.getElementById('gps-detail-gear-value');
 const gpsDetailSteeringValue = document.getElementById('gps-detail-steering-value');
 const gpsDetailPedalValue = document.getElementById('gps-detail-pedal-value');
 const gpsAxisModeControl = document.getElementById('gps-axis-mode');
+const gpsCourseDirectionControl = document.getElementById('gps-course-direction');
 const gpsDistancePosition = document.getElementById('gps-distance-position');
 
 // Theme Switcher DOM
@@ -1653,6 +1655,14 @@ function page4ReferencePoints() {
   return source.points;
 }
 
+function directedTrackDistance(distance) {
+  const total = Number(window.NSSUR_TRACK_REFERENCE?.totalDistanceMeters) || 0;
+  const raw = Math.max(0, Math.min(total, Number(distance) || 0));
+  return gpsCourseDirection === 'reverse' ? total - raw : raw;
+}
+window.getNssurCourseDirection = () => gpsCourseDirection;
+window.getNssurDirectedTrackDistance = directedTrackDistance;
+
 function buildPage4DistanceMap(lap, gpsPoints, cacheKey) {
   if (page4LapDistanceCache.has(cacheKey)) return page4LapDistanceCache.get(cacheKey);
   const reference = page4ReferencePoints();
@@ -1667,13 +1677,14 @@ function buildPage4DistanceMap(lap, gpsPoints, cacheKey) {
   }));
   const fixes = (gpsPoints || []).filter(point => point.time >= lap.startTime - 0.5 && point.time <= lap.endTime + 0.5);
   const map = [{ time: lap.startTime, distance: 0 }];
-  let previousSegment = 0;
+  const reverse = gpsCourseDirection === 'reverse';
+  let previousSegment = reverse ? ref.length - 2 : 0;
   let previousDistance = 0;
   fixes.forEach((point, pointIndex) => {
     const px = (point.lon - reference[0][1]) * metersPerLon;
     const py = (point.lat - reference[0][0]) * metersPerLat;
-    const start = pointIndex < 2 ? 0 : Math.max(0, previousSegment - 5);
-    const end = pointIndex < 2 ? Math.min(ref.length - 2, 35) : Math.min(ref.length - 2, previousSegment + 35);
+    const start = pointIndex < 2 ? (reverse ? Math.max(0, ref.length - 37) : 0) : Math.max(0, previousSegment - 35);
+    const end = pointIndex < 2 ? (reverse ? ref.length - 2 : Math.min(ref.length - 2, 35)) : Math.min(ref.length - 2, previousSegment + 35);
     let best = null;
     for (let index = start; index <= end; index += 1) {
       const a = ref[index], b = ref[index + 1];
@@ -1685,8 +1696,8 @@ function buildPage4DistanceMap(lap, gpsPoints, cacheKey) {
       if (!best || error2 < best.error2) best = { segment: index, ratio, error2, distance: a.d + (b.d - a.d) * ratio };
     }
     if (!best) return;
-    previousSegment = Math.max(previousSegment, best.segment);
-    previousDistance = Math.max(previousDistance, Math.min(Number(window.NSSUR_TRACK_REFERENCE.totalDistanceMeters) || ref.at(-1).d, best.distance));
+    previousSegment = reverse ? Math.min(previousSegment, best.segment) : Math.max(previousSegment, best.segment);
+    previousDistance = Math.max(previousDistance, directedTrackDistance(best.distance));
     map.push({ time: point.time, distance: previousDistance });
   });
   const total = Number(window.NSSUR_TRACK_REFERENCE.totalDistanceMeters) || ref.at(-1).d;
@@ -1751,9 +1762,10 @@ function drawGpsDistanceReference() {
   for (let distance = 0; distance <= 800; distance += 100) markers.push(distance);
   markers.push(total);
   markers.forEach(distance => {
+    const referenceDistance = gpsCourseDirection === 'reverse' ? total - distance : distance;
     let pointIndex = 0;
     points.forEach((item, index) => {
-      if (Math.abs(item[2] - distance) < Math.abs(points[pointIndex][2] - distance)) pointIndex = index;
+      if (Math.abs(item[2] - referenceDistance) < Math.abs(points[pointIndex][2] - referenceDistance)) pointIndex = index;
     });
     const point = points[pointIndex];
     if (!point) return;
@@ -4026,6 +4038,32 @@ gpsAxisModeControl?.addEventListener('click', event => {
   rebuildGpsDetailChartsForSelection();
   updateGpsDetailChartRange(Number(scrollBar.min), Number(scrollBar.max));
   updateGpsCursorAtTime(Number(scrollBar.value));
+});
+
+function applyCourseDirection(direction) {
+  const next = direction === 'reverse' ? 'reverse' : 'forward';
+  if (next === gpsCourseDirection) return;
+  setGpsPlayback(false);
+  setPage4Playback(false);
+  gpsCourseDirection = next;
+  localStorage.setItem('nssur-course-direction', next);
+  document.querySelectorAll('[data-course-direction] button').forEach(button => button.classList.toggle('active', button.dataset.direction === next));
+  page4LapDistanceCache.clear();
+  page4SeriesCache.clear();
+  invalidatePage4BoundariesCache();
+  drawGpsDistanceReference();
+  if (gpsFinishPoints.length === 2) calculateGpsLaps();
+  if (page4SelectedSessionLaps.length) applyPage4Selection();
+  window.dispatchEvent(new CustomEvent('nssur-course-direction-change', { detail: { direction: next } }));
+  setGpsLapStatus(`${next === 'reverse' ? '역방향' : '정방향'} 거리축으로 변경했습니다.`, 'ok');
+}
+
+document.querySelectorAll('[data-course-direction]').forEach(control => {
+  control.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.direction === gpsCourseDirection));
+  control.addEventListener('click', event => {
+    const button = event.target.closest('button[data-direction]');
+    if (button) applyCourseDirection(button.dataset.direction);
+  });
 });
 
 gpsLapMapLegend?.addEventListener('click', event => {
