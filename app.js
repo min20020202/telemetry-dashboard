@@ -1528,6 +1528,11 @@ function applyGpsFixedLinePreset(presetId) {
   drawGpsCheckpoints();
   if (gpsLapClear) gpsLapClear.disabled = false;
   calculateGpsLaps();
+  if (primaryDashboardSnapshot) {
+    primaryDashboardSnapshot.timingMode = preset.mode === 'sprint' ? 'sprint' : 'circuit';
+    primaryDashboardSnapshot.checkpoints = cloneGpsLines(gpsCheckpoints);
+  }
+  window.updateComparisonTimingMode?.(preset.mode, gpsCheckpoints);
   updateGpsVideoControlAvailability();
   setGpsLapStatus(`${preset.name} 적용 완료 · 체크포인트 ${gpsCheckpoints.length}개`, 'ok');
   return true;
@@ -4315,6 +4320,11 @@ gpsTimingMode?.addEventListener('change', () => {
   }
   drawGpsStartLine();
   saveGpsFixedLines();
+  if (primaryDashboardSnapshot) {
+    primaryDashboardSnapshot.timingMode = preset.mode === 'sprint' ? 'sprint' : 'circuit';
+    primaryDashboardSnapshot.checkpoints = cloneGpsLines(gpsCheckpoints);
+  }
+  window.updateComparisonTimingMode?.(preset.mode, gpsCheckpoints);
   if (gpsFinishPoints.length === 2) calculateGpsLaps();
   else setGpsLapStatus(preset.mode === 'sprint'
     ? '스타트라인과 피니시라인을 각각 설정하십시오.'

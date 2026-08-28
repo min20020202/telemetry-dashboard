@@ -1254,6 +1254,18 @@
   }
   window.renderDriverComparison = render;
   window.stopDriverComparisonPlayback = () => setPlaying(false);
+  window.updateComparisonTimingMode = (mode, checkpoints = null) => {
+    state.sessions.forEach(session => {
+      session.timingMode = mode === 'sprint' ? 'sprint' : 'circuit';
+      if (Array.isArray(checkpoints)) {
+        session.checkpoints = checkpoints.map(line => line.map(point => ({ ...point })));
+      }
+    });
+    state.sectorCache.clear();
+    state.sectorMetricsCache.clear();
+    state.cache.clear();
+    if (state.sessions.length) render();
+  };
   window.registerComparisonSession = (snapshot, autoSelect = true) => {
     try {
       const session = addSession(snapshot, autoSelect);
