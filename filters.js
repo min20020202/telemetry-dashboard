@@ -332,13 +332,13 @@ const FILTER_DEFS = {
 
 const CHANNELS = {
   fl_speed: {
-    label: 'FL Wheel Speed (EMU VSS)', unit: 'km/h', clamp: [0, 400],
+    label: 'FL Wheel Speed', unit: 'km/h', clamp: [0, 400],
     from: r => r.fl_speed_kmh || 0,
     dropoutDef: { on: false, lo: 0.01, hi: null, gap: 20 },
     recommend: { dropout: { on: false }, type: 'median', params: { win: 5 } }
   },
   fr_speed: {
-    label: 'FR Wheel Speed (Wheel 2)', unit: 'km/h', clamp: [0, 400],
+    label: 'FR Wheel Speed', unit: 'km/h', clamp: [0, 400],
     from: r => r.fr_speed_kmh || 0,
     dropoutDef: { on: false, lo: 0.01, hi: null, gap: 20 },
     recommend: { dropout: { on: true, lo: 0.01, hi: null, gap: 20 }, type: 'median', params: { win: 5 } }

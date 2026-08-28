@@ -4238,8 +4238,9 @@ function updateDatasetColors(chart, isDark) {
   
   chart.data.datasets.forEach((dataset, idx) => {
     if (id === 'chart-ground-speed' || id === 'chart-vehicle-speed') {
-      if (idx === 0) dataset.borderColor = isDark ? '#ffb07c' : '#f97316';
-      if (idx === 1) dataset.borderColor = isDark ? '#74b9ff' : '#2563eb';
+      const light = ['#f97316', '#db2777', '#2563eb', '#16a34a'];
+      const dark = ['#ffb07c', '#fd79a8', '#74b9ff', '#4ade80'];
+      dataset.borderColor = (isDark ? dark : light)[idx] || dataset.borderColor;
     } else if (id === 'chart-engine-rpm') {
       dataset.borderColor = isDark ? '#ff7675' : '#dc2626';
     } else if (id === 'chart-vehicle-gear') {
@@ -4263,8 +4264,9 @@ function updateDatasetColors(chart, isDark) {
       dataset.borderColor = isDark ? '#74b9ff' : '#2563eb';
     } else if (id === 'chart-coolant-oil') {
       if (idx === 0) dataset.borderColor = isDark ? '#74b9ff' : '#2563eb';
-      if (idx === 1) dataset.borderColor = isDark ? '#ffb07c' : '#f97316';
-      if (idx === 2) dataset.borderColor = isDark ? '#81ecec' : '#06b6d4';
+      if (idx === 1) dataset.borderColor = isDark ? '#ffe066' : '#ca8a04';
+      if (idx === 2) dataset.borderColor = isDark ? '#ffb07c' : '#f97316';
+      if (idx === 3) dataset.borderColor = isDark ? '#fd79a8' : '#db2777';
     } else if (id === 'chart-intake-ecu') {
       dataset.borderColor = idx === 0
         ? (isDark ? '#55efc4' : '#16a34a')
@@ -6832,8 +6834,8 @@ function renderMotecCharts(data) {
       type: 'line',
       data: { datasets: [
         { label: 'Coolant', data: S('water', r => r.water_c || 0), borderColor: '#2563eb', borderWidth: 1.5, pointRadius: 0, fill: false },
-        { label: 'Oil', data: S('oil', r => r.oil_c || 0), borderColor: '#f97316', borderWidth: 1.5, pointRadius: 0, fill: false },
-        { label: 'FL Speed', data: S('fl_speed', r => r.fl_speed_kmh || 0), borderColor: '#06b6d4', borderWidth: 1.1, borderDash: [6, 4], pointRadius: 0, fill: false, yAxisID: 'ySpeed' },
+        { label: 'Oil', data: S('oil', r => r.oil_c || 0), borderColor: '#ca8a04', borderWidth: 1.5, pointRadius: 0, fill: false },
+        { label: 'FL Speed', data: S('fl_speed', r => r.fl_speed_kmh || 0), borderColor: '#f97316', borderWidth: 1.1, borderDash: [6, 4], pointRadius: 0, fill: false, yAxisID: 'ySpeed' },
         { label: 'FR Speed', data: S('fr_speed', r => r.fr_speed_kmh || 0), borderColor: '#db2777', borderWidth: 1.1, borderDash: [3, 3], pointRadius: 0, fill: false, yAxisID: 'ySpeed' }
       ] },
       options: coolantOptions
