@@ -84,9 +84,16 @@
       }
     }
     if (!laps.length) throw new Error(`${file.name}: 피니시라인을 통과한 랩 또는 유효한 주행 데이터가 없습니다.`);
-    const primarySession = state.sessions[0];
-    const targetTimingMode = primarySession?.timingMode || snapshot.timingMode || (gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit');
-    const targetCheckpoints = primarySession?.checkpoints || snapshot.checkpoints || [];
+    const activeUiMode = typeof gpsTimingMode !== 'undefined' && gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit';
+    const targetTimingMode = state.sessions[0]?.timingMode || activeUiMode;
+    const targetCheckpoints = (state.sessions[0]?.checkpoints?.length ? state.sessions[0].checkpoints : (typeof gpsCheckpoints !== 'undefined' ? gpsCheckpoints : [])) || snapshot.checkpoints || [];
+
+    // Ensure all existing comparison sessions share the exact same timingMode and checkpoints
+    state.sessions.forEach(item => {
+      item.timingMode = targetTimingMode;
+      item.checkpoints = (targetCheckpoints || []).map(line => line.map(point => ({ ...point })));
+    });
+
     const sourceKey = `${file.name}:${file.size || 0}:${file.lastModified || 0}`;
     let session = state.sessions.find(item => item.sourceKey === sourceKey);
     const isNew = !session;
@@ -100,7 +107,7 @@
         gpsPoints: (snapshot.gpsPoints || []).map(point => ({ ...point })),
         laps,
         checkpoints: (targetCheckpoints || []).map(line => line.map(point => ({ ...point }))),
-        timingMode: targetTimingMode === 'sprint' ? 'sprint' : 'circuit'
+        timingMode: targetTimingMode
       };
       applyComparisonImuFilter(session);
       state.sessions.push(session);
