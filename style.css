@@ -1076,6 +1076,54 @@ body.dark-mode .p4-session-card-head input,body.dark-mode .p4-session-lap,body.d
   min-height: 0;
 }
 
+.diag-top-section > .motec-chart-card {
+  flex: 1 1 0;
+  width: 50%;
+  min-width: 0;
+}
+
+.diag-roll-gradient-card { height: 100%; }
+.diag-roll-gradient-header { gap: 12px; }
+.diag-roll-gradient-header > div:first-child { min-width: 0; }
+.diag-roll-gradient-subtitle {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font: 700 9px var(--font-mono);
+  white-space: nowrap;
+}
+.diag-roll-gradient-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 3px 12px;
+  color: var(--text-secondary);
+  font: 700 9px var(--font-mono);
+  text-align: right;
+}
+.diag-roll-gradient-metrics strong { color: var(--text-primary); }
+.diag-roll-gradient-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.diag-roll-gradient-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
+.diag-roll-gradient-empty[hidden] { display: none; }
+
+@media (max-width: 900px) {
+  .diag-top-section { height: auto; min-height: 520px; flex-direction: column; }
+  .diag-top-section > .motec-chart-card { width: 100%; min-height: 250px; }
+}
+
 .diag-top-card {
   flex: 1;
   min-width: 0;

@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260828-6">
+  <link rel="stylesheet" href="style.css?v=20260829-1">
 </head>
 <body>
 
@@ -232,6 +232,23 @@
                 <div class="canvas-holder-stacked bottom-pane">
                   <canvas id="diag-chart-steering"></canvas>
                 </div>
+              </div>
+            </div>
+            <div class="motec-chart-card diag-roll-gradient-card">
+              <div class="chart-label-bar diag-roll-gradient-header">
+                <div>
+                  <span class="signal-title color-blue">Mechanical Roll vs Lateral G</span>
+                  <span class="diag-roll-gradient-subtitle">MR 보정 · 전후 기계식 롤 평균 · 5 Hz Zero-phase</span>
+                </div>
+                <div class="diag-roll-gradient-metrics">
+                  <span>Roll Gradient <strong id="diag-roll-gradient-value">--</strong> deg/g</span>
+                  <span>R² <strong id="diag-roll-gradient-r2">--</strong></span>
+                  <span>N <strong id="diag-roll-gradient-count">0</strong></span>
+                </div>
+              </div>
+              <div class="diag-roll-gradient-canvas">
+                <canvas id="diag-chart-roll-gradient"></canvas>
+                <div id="diag-roll-gradient-empty" class="diag-roll-gradient-empty" hidden>유효한 IMU·서스펜션 코너링 데이터가 부족합니다.</div>
               </div>
             </div>
           </div>
@@ -1005,7 +1022,7 @@
   <script src="steering.js?v=20260820-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
-  <script src="app.js?v=20260828-18"></script>
+  <script src="app.js?v=20260829-1"></script>
   <script src="comparison.js?v=20260828-11"></script>
 </body>
 </html>

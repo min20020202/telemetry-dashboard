@@ -8,6 +8,7 @@ let chartThrottleBrake = null;
 // Global state variables for Page 2 charts
 let diagChartThrottleBrake = null; // Stacked Top Sub-pane (Throttle & Brake)
 let diagChartSteering = null;      // Stacked Bottom Sub-pane (Steering Angle)
+let diagChartRollGradient = null;   // Mechanical roll vs lateral G scatter / regression
 let chartFL = null;
 let chartFR = null;
 let chartRL = null;
@@ -4598,7 +4599,7 @@ function updateChartsTheme() {
 
   const targetCharts = [
     chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
-    diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
+    diagChartThrottleBrake, diagChartSteering, diagChartRollGradient, chartFL, chartFR, chartRL, chartRR,
     chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro, ...page4Charts
   ];
   targetCharts.forEach(chart => {
@@ -4884,7 +4885,7 @@ function switchTab(mode) {
       lblScrollType.textContent = '📊 그래프 좌우 스크롤:';
     }
     setTimeout(() => {
-      [diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR].forEach(c => {
+      [diagChartThrottleBrake, diagChartSteering, diagChartRollGradient, chartFL, chartFR, chartRL, chartRR].forEach(c => {
         if (c) {
           c.resize();
           c.update(); // 풀 업데이트로 데이터셋 좌표 갱신 강제
@@ -6565,6 +6566,145 @@ function filterDataByRange(start, end) {
   return globalData.filter(row => row.time_sec >= start && row.time_sec <= end);
 }
 
+const ROLL_GRADIENT_CALIBRATION = Object.freeze({
+  cutoffHz: 5,
+  minSpeedKmh: 5,
+  minLateralG: 0.15,
+  cgHeightM: 0.30,
+  trackFrontMm: 1200,
+  trackRearMm: 1180,
+  mmPerRaw: { fl: 0.012940169, fr: 0.013051742, rl: 0.05229515, rr: 0.052189024 },
+  frontWheel: [-25, -22.5, -20, -17.5, -15, -12.5, -10, -7.5, -5, -2.5, 0, 2.5, 5, 7.5, 10, 12.5, 15, 17.5, 20, 22.5, 25],
+  frontDamper: [209.8498, 207.6497, 205.4350, 203.2052, 200.9595, 198.6972, 196.4174, 194.1190, 191.8009, 189.4619, 187.1004, 184.7147, 182.3028, 179.8623, 177.3902, 174.8832, 172.3370, 169.7461, 167.1039, 164.4014, 161.6267],
+  rearWheel: [-23.00844, -22.5, -20, -17.5, -15, -12.5, -10, -7.5, -5, -2.5, 0, 2.5, 5, 7.5, 10, 12.5, 15, 17.5, 20, 22.5, 25],
+  rearDamper: [205.6134, 205.2112, 203.2285, 201.2380, 199.2399, 197.2344, 195.2217, 193.2020, 191.1758, 189.1434, 187.1053, 185.0619, 183.0139, 180.9619, 178.9066, 176.8489, 174.7897, 172.7300, 170.6710, 168.6140, 166.5605]
+});
+
+function medianFinite(values) {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return NaN;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function interpolateExtrapolated(xs, ys, value) {
+  if (!Number.isFinite(value) || xs.length < 2) return NaN;
+  let upper = xs.findIndex(x => value <= x);
+  if (upper <= 0) upper = 1;
+  if (upper < 0) upper = xs.length - 1;
+  const lower = upper - 1;
+  const span = xs[upper] - xs[lower];
+  return span ? ys[lower] + (value - xs[lower]) * (ys[upper] - ys[lower]) / span : ys[lower];
+}
+
+function gradientByTime(values, times) {
+  const output = new Float64Array(values.length);
+  for (let i = 0; i < values.length; i += 1) {
+    const lo = Math.max(0, i - 1);
+    const hi = Math.min(values.length - 1, i + 1);
+    const dt = times[hi] - times[lo];
+    output[i] = dt > 0 ? (values[hi] - values[lo]) / dt : 0;
+  }
+  return output;
+}
+
+function linearRegression(points) {
+  const n = points.length;
+  if (n < 3) return null;
+  let sx = 0; let sy = 0; let sxx = 0; let sxy = 0; let syy = 0;
+  points.forEach(({ x, y }) => { sx += x; sy += y; sxx += x * x; sxy += x * y; syy += y * y; });
+  const denominator = n * sxx - sx * sx;
+  if (Math.abs(denominator) < 1e-12) return null;
+  const slope = (n * sxy - sx * sy) / denominator;
+  const intercept = (sy - slope * sx) / n;
+  const corrDenominator = Math.sqrt(Math.max(0, (n * sxx - sx * sx) * (n * syy - sy * sy)));
+  const correlation = corrDenominator ? (n * sxy - sx * sy) / corrDenominator : 0;
+  return { slope, intercept, r2: correlation * correlation };
+}
+
+function buildMechanicalRollGradient(rows) {
+  const usable = rows.filter(row => {
+    const required = [row.time_sec, row.suspension_fl_raw, row.suspension_fr_raw, row.suspension_rl_raw, row.suspension_rr_raw, row.imu_accel_y_g];
+    if (!required.every(value => Number.isFinite(Number(value)))) return false;
+    if ('imu_row_valid' in row && Number(row.imu_row_valid) !== 1) return false;
+    if ('imu_link_valid' in row && Number(row.imu_link_valid) !== 1) return false;
+    return true;
+  });
+  if (usable.length < 30) return null;
+
+  const times = usable.map(row => Number(row.time_sec));
+  const duration = times.at(-1) - times[0];
+  const sampleRate = duration > 0 ? Math.max(11, (usable.length - 1) / duration) : 100;
+  const speedOf = row => {
+    const gps = Number(row.gps_speed_kmh);
+    if (Number.isFinite(gps) && gps > 0) return gps;
+    return Math.max(0, Number(row.fl_speed_kmh) || 0, Number(row.fr_speed_kmh) || 0, Number(row.rl_speed_kmh) || 0, Number(row.rr_speed_kmh) || 0);
+  };
+  let staticRows = usable.filter(row => speedOf(row) < 2);
+  if (staticRows.length < 50) staticRows = usable.filter(row => speedOf(row) < 5);
+  if (staticRows.length < 20) staticRows = usable;
+  const raw0 = {
+    fl: medianFinite(staticRows.map(row => Number(row.suspension_fl_raw))),
+    fr: medianFinite(staticRows.map(row => Number(row.suspension_fr_raw))),
+    rl: medianFinite(staticRows.map(row => Number(row.suspension_rl_raw))),
+    rr: medianFinite(staticRows.map(row => Number(row.suspension_rr_raw)))
+  };
+  if (!Object.values(raw0).every(Number.isFinite)) return null;
+
+  const c = ROLL_GRADIENT_CALIBRATION;
+  const frontCurve = c.frontDamper.map((damper, index) => [damper, c.frontWheel[index]]).sort((a, b) => a[0] - b[0]);
+  const rearCurve = c.rearDamper.map((damper, index) => [damper, c.rearWheel[index]]).sort((a, b) => a[0] - b[0]);
+  const frontDamperSorted = frontCurve.map(item => item[0]);
+  const frontWheelSorted = frontCurve.map(item => item[1]);
+  const rearDamperSorted = rearCurve.map(item => item[0]);
+  const rearWheelSorted = rearCurve.map(item => item[1]);
+  const d0Front = interpolateExtrapolated(c.frontWheel, c.frontDamper, 0);
+  const d0Rear = interpolateExtrapolated(c.rearWheel, c.rearDamper, 0);
+  const wheelTravel = (row, wheel, d0, damperCurve, wheelCurve) => {
+    const relativeStroke = (Number(row[`suspension_${wheel}_raw`]) - raw0[wheel]) * c.mmPerRaw[wheel];
+    return interpolateExtrapolated(damperCurve, wheelCurve, d0 - relativeStroke);
+  };
+  const frontRoll = Float64Array.from(usable, row => {
+    const fl = wheelTravel(row, 'fl', d0Front, frontDamperSorted, frontWheelSorted);
+    const fr = wheelTravel(row, 'fr', d0Front, frontDamperSorted, frontWheelSorted);
+    return Math.atan2(fl - fr, c.trackFrontMm) * 180 / Math.PI;
+  });
+  const rearRoll = Float64Array.from(usable, row => {
+    const rl = wheelTravel(row, 'rl', d0Rear, rearDamperSorted, rearWheelSorted);
+    const rr = wheelTravel(row, 'rr', d0Rear, rearDamperSorted, rearWheelSorted);
+    return Math.atan2(rl - rr, c.trackRearMm) * 180 / Math.PI;
+  });
+  const filter = values => typeof fltButterworth === 'function' ? fltButterworth(values, c.cutoffHz, sampleRate, 2) : values;
+  const frontFiltered = filter(frontRoll);
+  const rearFiltered = filter(rearRoll);
+  const roll = Float64Array.from(frontFiltered, (value, index) => (value + rearFiltered[index]) / 2);
+  const ayRaw = filter(Float64Array.from(usable, row => Number(row.imu_accel_y_g)));
+  const rollRate = filter(gradientByTime(roll, times));
+  const rollAccel = filter(gradientByTime(rollRate, times));
+  const correctedAy = Float64Array.from(ayRaw, (value, index) => {
+    const phi = roll[index] * Math.PI / 180;
+    const phiAccel = rollAccel[index] * Math.PI / 180;
+    return ((value * 9.81) - 9.81 * Math.sin(phi) - c.cgHeightM * phiAccel) / Math.cos(phi) / 9.81;
+  });
+  const regressionPoints = [];
+  for (let i = 0; i < usable.length; i += 1) {
+    const x = correctedAy[i]; const y = roll[i];
+    if (speedOf(usable[i]) > c.minSpeedKmh && Math.abs(x) > c.minLateralG && Number.isFinite(x) && Number.isFinite(y)) regressionPoints.push({ x, y });
+  }
+  const regression = linearRegression(regressionPoints);
+  if (!regression) return null;
+  const stride = Math.max(1, Math.ceil(regressionPoints.length / 3500));
+  const scatter = regressionPoints.filter((_, index) => index % stride === 0);
+  const xMin = -2;
+  const xMax = 2;
+  return {
+    scatter,
+    trend: [{ x: xMin, y: regression.intercept + regression.slope * xMin }, { x: xMax, y: regression.intercept + regression.slope * xMax }],
+    regression,
+    count: regressionPoints.length
+  };
+}
+
 function downsampleData(data, limit) {
   if (data.length <= limit) return data;
   const step = Math.floor(data.length / limit);
@@ -6693,7 +6833,7 @@ function refreshVisibleSensorSeries(startTime, endTime, updateNow = true) {
   if (!globalData.length || typeof channelSeries !== 'function') return;
   const charts = [
     chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
-    diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
+    diagChartThrottleBrake, diagChartSteering, diagChartRollGradient, chartFL, chartFR, chartRL, chartRR,
     chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
   ];
   charts.forEach(chart => {
@@ -6848,7 +6988,7 @@ function renderMotecCharts(data) {
   // Canvas is already in use 에러 방지를 위해 기존 차트 객체들을 파괴(destroy)하고 초기화
   const allCharts = [
     chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
-    diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
+    diagChartThrottleBrake, diagChartSteering, diagChartRollGradient, chartFL, chartFR, chartRL, chartRR,
     chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
   ];
   allCharts.forEach(c => {
@@ -6868,6 +7008,7 @@ function renderMotecCharts(data) {
   chartThrottleBrake = null;
   diagChartThrottleBrake = null;
   diagChartSteering = null;
+  diagChartRollGradient = null;
   chartFL = null;
   chartFR = null;
   chartRL = null;
@@ -6934,7 +7075,7 @@ function renderMotecCharts(data) {
       if (page4Charts.some(chart => chart?.canvas === e.chart.canvas)) return;
       const allCharts = {
         chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
-        diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
+        diagChartThrottleBrake, diagChartSteering, diagChartRollGradient, chartFL, chartFR, chartRL, chartRR,
         chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro,
         ...Object.fromEntries(page4Charts.map((chart, index) => [`page4Chart${index}`, chart]))
       };
@@ -7147,6 +7288,67 @@ function renderMotecCharts(data) {
     },
     options: optionsDiagSteering
   });
+
+  const rollGradientResult = buildMechanicalRollGradient(globalData.length ? globalData : data);
+  const rollGradientCanvas = document.getElementById('diag-chart-roll-gradient');
+  const rollGradientEmpty = document.getElementById('diag-roll-gradient-empty');
+  const rollGradientValue = document.getElementById('diag-roll-gradient-value');
+  const rollGradientR2 = document.getElementById('diag-roll-gradient-r2');
+  const rollGradientCount = document.getElementById('diag-roll-gradient-count');
+  if (rollGradientValue) rollGradientValue.textContent = rollGradientResult ? rollGradientResult.regression.slope.toFixed(3) : '--';
+  if (rollGradientR2) rollGradientR2.textContent = rollGradientResult ? rollGradientResult.regression.r2.toFixed(3) : '--';
+  if (rollGradientCount) rollGradientCount.textContent = rollGradientResult ? String(rollGradientResult.count) : '0';
+  if (rollGradientEmpty) rollGradientEmpty.hidden = Boolean(rollGradientResult);
+  if (rollGradientCanvas) {
+    diagChartRollGradient = new Chart(rollGradientCanvas.getContext('2d'), {
+      type: 'scatter',
+      data: { datasets: [
+        {
+          label: 'Mechanical Roll',
+          data: rollGradientResult?.scatter || [],
+          pointRadius: 1.6,
+          pointHoverRadius: 2.5,
+          pointBackgroundColor: 'rgba(37, 99, 235, 0.35)',
+          borderWidth: 0,
+          showLine: false
+        },
+        {
+          label: rollGradientResult ? `Trend ${rollGradientResult.regression.slope.toFixed(3)} deg/g` : 'Trend',
+          data: rollGradientResult?.trend || [],
+          pointRadius: 0,
+          borderColor: '#f97316',
+          borderWidth: 2.2,
+          showLine: true,
+          tension: 0
+        }
+      ] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        parsing: false,
+        normalized: true,
+        interaction: { mode: 'nearest', intersect: false },
+        plugins: {
+          legend: { display: true, labels: { color: tickColor, boxWidth: 12, font: { family: 'JetBrains Mono', size: 9 } } },
+          tooltip: { callbacks: { label: context => ` ${context.parsed.x.toFixed(3)} g, ${context.parsed.y.toFixed(3)}°` } }
+        },
+        scales: {
+          x: {
+            type: 'linear', min: -2, max: 2,
+            title: { display: true, text: 'Lateral G (corrected)', color: tickColor, font: { size: 9, weight: 'bold' } },
+            grid: { color: gridColor },
+            ticks: { color: tickColor, font: { family: 'JetBrains Mono', size: 9 } }
+          },
+          y: {
+            title: { display: true, text: 'Mechanical Roll [deg]', color: tickColor, font: { size: 9, weight: 'bold' } },
+            grid: { color: gridColor },
+            ticks: { color: tickColor, font: { family: 'JetBrains Mono', size: 9 } }
+          }
+        }
+      }
+    });
+  }
 
   const ctxSusFl = document.getElementById('chart-sus-fl').getContext('2d');
   chartFL = new Chart(ctxSusFl, {
@@ -7408,7 +7610,7 @@ window.addEventListener('keydown', (e) => {
     // 모든 차트에서 기존 마우스 위치에 남아있는 네이티브 active/hover 서클 제거
     const targetCharts = [
       chartSpeed, chartRpm, chartGear, chartSteering, chartThrottleBrake,
-      diagChartThrottleBrake, diagChartSteering, chartFL, chartFR, chartRL, chartRR,
+      diagChartThrottleBrake, diagChartSteering, diagChartRollGradient, chartFL, chartFR, chartRL, chartRR,
       chartCoolantOil, chartIntakeEcu, chartImuAccel, chartImuGyro
     ];
     targetCharts.forEach(c => {
