@@ -616,6 +616,7 @@
             <p>한 CSV의 랩별 비교와 여러 드라이버 CSV 비교를 공통 중심선 거리축에서 수행합니다.</p>
           </div>
           <div class="gps-axis-mode comparison-direction-control" data-course-direction aria-label="비교 코스 주행 방향"><button type="button" class="active" data-direction="forward">정방향</button><button type="button" data-direction="reverse">역방향</button></div>
+          <div id="comparison-axis-mode" class="gps-axis-mode comparison-axis-control" aria-label="비교 그래프 가로축"><button type="button" data-mode="time">시간 s</button><button type="button" class="active" data-mode="distance">거리 m</button></div>
           <section class="comparison-playback-panel">
             <div class="comparison-playback-heading"><strong>재생 시점</strong></div>
             <div class="comparison-playback">
@@ -642,10 +643,10 @@
           </aside>
           <main class="comparison-main">
             <section class="comparison-chart-stack">
-              <article><header><strong>GPS 속도</strong><span class="comparison-axis-meta">Y km/h · X 중심선 거리 m</span><output id="comparison-speed-value">-- km/h</output></header><div id="comparison-speed-toggles" class="comparison-series-toggles"></div><div class="comparison-chart-canvas"><canvas id="comparison-speed-chart"></canvas></div></article>
-              <article><header><strong>조향각 / Yaw rate</strong><span class="comparison-axis-meta">Y ° / °/s · X 중심선 거리 m</span><output id="comparison-steering-value">--</output></header><div id="comparison-steering-toggles" class="comparison-series-toggles"></div><div class="comparison-chart-canvas"><canvas id="comparison-steering-chart"></canvas></div></article>
-              <article><header><strong>TPS / 브레이크</strong><span class="comparison-axis-meta">Y % · X 중심선 거리 m</span><output id="comparison-pedal-value">-- %</output></header><div id="comparison-pedal-toggles" class="comparison-series-toggles"></div><div class="comparison-chart-canvas"><canvas id="comparison-pedal-chart"></canvas></div></article>
-              <article><header><strong>기준 랩 대비 누적 시간</strong><span class="comparison-axis-meta">Y 초 · X 중심선 거리 m</span><output id="comparison-delta-value">-- s</output></header><div id="comparison-delta-toggles" class="comparison-series-toggles"></div><div class="comparison-chart-canvas"><canvas id="comparison-delta-chart"></canvas></div></article>
+              <article><header><strong>GPS 속도</strong><span class="comparison-axis-meta" data-comparison-axis-meta data-y-label="Y km/h">Y km/h · X 중심선 거리 m</span><output id="comparison-speed-value">-- km/h</output></header><div id="comparison-speed-toggles" class="comparison-series-toggles"></div><div class="comparison-chart-canvas"><canvas id="comparison-speed-chart"></canvas></div></article>
+              <article><header><strong>조향각 / Yaw rate</strong><span class="comparison-axis-meta" data-comparison-axis-meta data-y-label="Y ° / °/s">Y ° / °/s · X 중심선 거리 m</span><output id="comparison-steering-value">--</output></header><div id="comparison-steering-toggles" class="comparison-series-toggles"></div><div class="comparison-chart-canvas"><canvas id="comparison-steering-chart"></canvas></div></article>
+              <article><header><strong>TPS / 브레이크</strong><span class="comparison-axis-meta" data-comparison-axis-meta data-y-label="Y %">Y % · X 중심선 거리 m</span><output id="comparison-pedal-value">-- %</output></header><div id="comparison-pedal-toggles" class="comparison-series-toggles"></div><div class="comparison-chart-canvas"><canvas id="comparison-pedal-chart"></canvas></div></article>
+              <article><header><strong>기준 랩 대비 누적 시간</strong><span class="comparison-axis-meta" data-comparison-axis-meta data-y-label="Y 초">Y 초 · X 중심선 거리 m</span><output id="comparison-delta-value">-- s</output></header><div id="comparison-delta-toggles" class="comparison-series-toggles"></div><div class="comparison-chart-canvas"><canvas id="comparison-delta-chart"></canvas></div></article>
             </section>
             <section class="comparison-bottom-grid">
               <article class="comparison-track-card">
@@ -1005,6 +1006,6 @@
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
   <script src="app.js?v=20260828-18"></script>
-  <script src="comparison.js?v=20260828-10"></script>
+  <script src="comparison.js?v=20260828-11"></script>
 </body>
 </html>
