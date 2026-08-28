@@ -60,9 +60,113 @@
     ui.status.classList.toggle('error', error);
   }
 
+  function latLonToLocalMetersComp(point, origin) {
+    const lat0 = origin.lat * Math.PI / 180;
+    const mLat = 111320, mLon = mLat * Math.cos(lat0);
+    return { x: (point.lon - origin.lon) * mLon, y: (point.lat - origin.lat) * mLat };
+  }
+
+  function cross2Comp(u, v) { return u.x * v.y - u.y * v.x; }
+
+  function findLineCrossingsOnGpsPoints(gpsPoints, linePoints) {
+    if (!Array.isArray(linePoints) || linePoints.length !== 2 || !Array.isArray(gpsPoints) || gpsPoints.length < 2) return [];
+    const origin = { lat: (linePoints[0].lat + linePoints[1].lat) * 0.5, lon: (linePoints[0].lon + linePoints[1].lon) * 0.5 };
+    const a = latLonToLocalMetersComp(linePoints[0], origin);
+    const b = latLonToLocalMetersComp(linePoints[1], origin);
+    const line = { x: b.x - a.x, y: b.y - a.y };
+    const lineLengthSq = line.x * line.x + line.y * line.y;
+    if (lineLengthSq < 1) return [];
+    const crossings = [];
+    for (let index = 1; index < gpsPoints.length; index += 1) {
+      const previous = gpsPoints[index - 1];
+      const current = gpsPoints[index];
+      const elapsed = current.time - previous.time;
+      if (!(elapsed > 0 && elapsed <= 3)) continue;
+      const p = latLonToLocalMetersComp(previous, origin);
+      const q = latLonToLocalMetersComp(current, origin);
+      const sidePrevious = cross2Comp(line, { x: p.x - a.x, y: p.y - a.y });
+      const sideCurrent = cross2Comp(line, { x: q.x - a.x, y: q.y - a.y });
+      if (sidePrevious === 0 || sideCurrent === 0 || sidePrevious * sideCurrent >= 0) continue;
+      const fraction = sidePrevious / (sidePrevious - sideCurrent);
+      const intersection = { x: p.x + (q.x - p.x) * fraction, y: p.y + (q.y - p.y) * fraction };
+      const lineRatio = ((intersection.x - a.x) * line.x + (intersection.y - a.y) * line.y) / lineLengthSq;
+      if (fraction < 0 || fraction > 1 || lineRatio < 0 || lineRatio > 1) continue;
+      const crossingTime = previous.time + elapsed * fraction;
+      crossings.push({
+        time: crossingTime,
+        gpsTime: (previous.gpsTime ?? previous.time) + ((current.gpsTime ?? current.time) - (previous.gpsTime ?? previous.time)) * fraction,
+        lat: previous.lat + (current.lat - previous.lat) * fraction,
+        lon: previous.lon + (current.lon - previous.lon) * fraction,
+        direction: sideCurrent > sidePrevious ? 1 : -1
+      });
+    }
+    return crossings;
+  }
+
+  function calculateSprintLapsFromPoints(gpsPoints, startLine, finishLine, minSeconds = 3) {
+    const startsRaw = findLineCrossingsOnGpsPoints(gpsPoints, startLine);
+    const finishesRaw = findLineCrossingsOnGpsPoints(gpsPoints, finishLine);
+    if (!startsRaw.length || !finishesRaw.length) return [];
+    const getDominantDirection = (crossings) => {
+      if (!crossings.length) return 1;
+      const count1 = crossings.filter(c => c.direction === 1).length;
+      const countNeg1 = crossings.filter(c => c.direction === -1).length;
+      return count1 >= countNeg1 ? 1 : -1;
+    };
+    const startDir = getDominantDirection(startsRaw);
+    const finishDir = getDominantDirection(finishesRaw);
+    const starts = startsRaw.filter(item => item.direction === startDir);
+    const finishes = finishesRaw.filter(item => item.direction === finishDir);
+    const events = [
+      ...starts.map(item => ({ ...item, type: 'start' })),
+      ...finishes.map(item => ({ ...item, type: 'finish' }))
+    ].sort((a, b) => a.time - b.time);
+    const laps = [];
+    let pendingStart = null;
+    events.forEach(event => {
+      if (event.type === 'start') {
+        pendingStart = event;
+        return;
+      }
+      if (!pendingStart || event.time <= pendingStart.time) return;
+      const duration = event.time - pendingStart.time;
+      if (duration < minSeconds || duration > 3600) return;
+      laps.push({
+        number: laps.length + 1,
+        duration,
+        timeBasis: 'logger',
+        startTime: pendingStart.time,
+        endTime: event.time,
+        startGpsTime: pendingStart.gpsTime,
+        endGpsTime: event.gpsTime,
+        startLat: pendingStart.lat,
+        startLon: pendingStart.lon,
+        endLat: event.lat,
+        endLon: event.lon
+      });
+      pendingStart = null;
+    });
+    return laps;
+  }
+
   function addSession(snapshot, autoSelect = false) {
     const file = snapshot.file;
+    const activeUiMode = typeof gpsTimingMode !== 'undefined' && gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit';
+    const targetTimingMode = state.sessions[0]?.timingMode || activeUiMode;
+    const targetCheckpoints = (state.sessions[0]?.checkpoints?.length ? state.sessions[0].checkpoints : (typeof gpsCheckpoints !== 'undefined' ? gpsCheckpoints : [])) || snapshot.checkpoints || [];
+    const activeStartLine = (typeof gpsStartPoints !== 'undefined' && gpsStartPoints.length === 2) ? gpsStartPoints : (state.sessions[0]?.startLine || null);
+    const activeFinishLine = (typeof gpsFinishPoints !== 'undefined' && gpsFinishPoints.length === 2) ? gpsFinishPoints : (state.sessions[0]?.finishLine || null);
+
     let laps = (snapshot.laps || []).map(lap => ({ ...lap }));
+
+    // If in sprint mode and active start/finish lines exist, calculate sprint laps using the shared start/finish lines
+    if (targetTimingMode === 'sprint' && activeStartLine && activeFinishLine && Array.isArray(snapshot.gpsPoints)) {
+      const calculatedSprintLaps = calculateSprintLapsFromPoints(snapshot.gpsPoints, activeStartLine, activeFinishLine);
+      if (calculatedSprintLaps.length > 0) {
+        laps = calculatedSprintLaps;
+      }
+    }
+
     if (!laps.length && Array.isArray(snapshot.gpsPoints) && snapshot.gpsPoints.length >= 2) {
       const first = snapshot.gpsPoints[0];
       const last = snapshot.gpsPoints[snapshot.gpsPoints.length - 1];
@@ -84,14 +188,17 @@
       }
     }
     if (!laps.length) throw new Error(`${file.name}: 피니시라인을 통과한 랩 또는 유효한 주행 데이터가 없습니다.`);
-    const activeUiMode = typeof gpsTimingMode !== 'undefined' && gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit';
-    const targetTimingMode = state.sessions[0]?.timingMode || activeUiMode;
-    const targetCheckpoints = (state.sessions[0]?.checkpoints?.length ? state.sessions[0].checkpoints : (typeof gpsCheckpoints !== 'undefined' ? gpsCheckpoints : [])) || snapshot.checkpoints || [];
 
     // Ensure all existing comparison sessions share the exact same timingMode and checkpoints
     state.sessions.forEach(item => {
       item.timingMode = targetTimingMode;
       item.checkpoints = (targetCheckpoints || []).map(line => line.map(point => ({ ...point })));
+      if (targetTimingMode === 'sprint' && activeStartLine && activeFinishLine && Array.isArray(item.gpsPoints)) {
+        const itemSprintLaps = calculateSprintLapsFromPoints(item.gpsPoints, activeStartLine, activeFinishLine);
+        if (itemSprintLaps.length > 0) {
+          item.laps = itemSprintLaps;
+        }
+      }
     });
 
     const sourceKey = `${file.name}:${file.size || 0}:${file.lastModified || 0}`;
@@ -107,7 +214,9 @@
         gpsPoints: (snapshot.gpsPoints || []).map(point => ({ ...point })),
         laps,
         checkpoints: (targetCheckpoints || []).map(line => line.map(point => ({ ...point }))),
-        timingMode: targetTimingMode
+        timingMode: targetTimingMode,
+        startLine: activeStartLine ? activeStartLine.map(p => ({ ...p })) : null,
+        finishLine: activeFinishLine ? activeFinishLine.map(p => ({ ...p })) : null
       };
       applyComparisonImuFilter(session);
       state.sessions.push(session);
