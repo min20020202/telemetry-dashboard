@@ -6170,7 +6170,7 @@ window.restorePrimaryDashboardFile = function () {
     // already parsed primary session from memory instead of parsing the same CSV again.
     if (primaryDashboardSnapshot?.file === primaryDashboardFile) {
       globalData = primaryDashboardSnapshot.rows;
-      initDataAndDashboard();
+      initDataAndDashboard({ preserveActivePreset: true });
       gpsLapPoints = primaryDashboardSnapshot.gpsPoints;
       gpsLapResults = primaryDashboardSnapshot.laps;
       gpsCheckpoints = primaryDashboardSnapshot.checkpoints;
@@ -6183,6 +6183,7 @@ window.restorePrimaryDashboardFile = function () {
     }
     handleFile(primaryDashboardFile, {
       skipUpload: true,
+      preserveActivePreset: true,
       onComplete: () => resolve(true),
       onError: () => resolve(false)
     });
