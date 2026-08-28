@@ -216,6 +216,10 @@ const gpsLapClear = document.getElementById('gps-lap-clear');
 const gpsCheckpointAdd = document.getElementById('gps-checkpoint-add');
 const gpsCheckpointClear = document.getElementById('gps-checkpoint-clear');
 const gpsSharedSettingsCopy = document.getElementById('gps-shared-settings-copy');
+const gpsFixedLinePreset = document.getElementById('gps-fixed-line-preset');
+const gpsPresetAdd = document.getElementById('gps-preset-add');
+const gpsPresetRename = document.getElementById('gps-preset-rename');
+const gpsPresetDelete = document.getElementById('gps-preset-delete');
 const gpsCheckpointCount = document.getElementById('gps-checkpoint-count');
 const gpsSectorCard = document.getElementById('gps-sector-card');
 const gpsSectorTable = document.getElementById('gps-sector-table');
@@ -421,6 +425,7 @@ let gpsDetailCharts = [];
 let gpsDetailSourceData = null;
 const GPS_LAP_COLORS = ['#00e5ff', '#ff3d9a', '#76ff03', '#ffca28', '#7c4dff', '#ff6d00', '#00e676', '#40c4ff'];
 const GPS_FIXED_LINES_STORAGE_KEY = 'nssur_gps_fixed_lines_v2';
+const GPS_FIXED_LINE_PRESETS_STORAGE_KEY = 'nssur_gps_fixed_line_presets_v1';
 const GPS_FIXED_LINES_INITIAL_PASSWORD = '0000';
 const GPS_SHARED_FIXED_LINES = Object.freeze({
   finish: [
@@ -448,6 +453,8 @@ const GPS_SHARED_FIXED_LINES = Object.freeze({
     [{ lat: 35.291994991833526, lon: 126.5742762386799 }, { lat: 35.291979657534064, lon: 126.57436341047288 }]
   ]
 });
+let gpsFixedLinePresets = [];
+let gpsActivePresetId = '';
 const CSV_GPS_UTC_OFFSET_SEC = 9 * 3600; // Logger gps_time is stored as Korea Standard Time (UTC+9).
 
 // GPS + IMU synchronized playback state.
@@ -1232,19 +1239,96 @@ function findGpsLineCrossings(linePoints, minimumSpeed = 1) {
   return crossings;
 }
 
-function saveGpsFixedLines() {
-  if (gpsFinishPoints.length !== 2) return;
+function cloneGpsLines(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function nextGpsPresetName() {
+  let number = 1;
+  const used = new Set(gpsFixedLinePresets.map(item => item.name));
+  while (used.has(`옵션 ${number}`)) number += 1;
+  return `옵션 ${number}`;
+}
+
+function createGpsPreset(name, lines = null) {
+  return {
+    id: `track-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name,
+    finish: cloneGpsLines(lines?.finish || []),
+    checkpoints: cloneGpsLines(lines?.checkpoints || []),
+    savedAt: new Date().toISOString()
+  };
+}
+
+function persistGpsFixedLinePresets() {
   try {
-    localStorage.setItem(GPS_FIXED_LINES_STORAGE_KEY, JSON.stringify({
-      finish: gpsFinishPoints,
-      checkpoints: gpsCheckpoints,
-      savedAt: new Date().toISOString()
+    localStorage.setItem(GPS_FIXED_LINE_PRESETS_STORAGE_KEY, JSON.stringify({
+      activeId: gpsActivePresetId,
+      presets: gpsFixedLinePresets
     }));
   } catch (error) { /* local storage may be unavailable */ }
 }
 
+function initializeGpsFixedLinePresets() {
+  if (gpsFixedLinePresets.length) return;
+  let stored = null;
+  try {
+    const raw = localStorage.getItem(GPS_FIXED_LINE_PRESETS_STORAGE_KEY);
+    if (raw) stored = JSON.parse(raw);
+  } catch (error) {}
+  if (Array.isArray(stored?.presets) && stored.presets.length) {
+    gpsFixedLinePresets = stored.presets.filter(item => item && item.id && item.name).map(item => ({
+      ...item,
+      finish: Array.isArray(item.finish) ? item.finish : [],
+      checkpoints: Array.isArray(item.checkpoints) ? item.checkpoints : []
+    }));
+    gpsActivePresetId = gpsFixedLinePresets.some(item => item.id === stored.activeId)
+      ? stored.activeId : gpsFixedLinePresets[0].id;
+  } else {
+    let legacy = null;
+    try {
+      const raw = localStorage.getItem(GPS_FIXED_LINES_STORAGE_KEY);
+      if (raw) legacy = JSON.parse(raw);
+    } catch (error) {}
+    const initial = legacy?.finish?.length === 2 ? legacy : GPS_SHARED_FIXED_LINES;
+    const preset = createGpsPreset('옵션 1', initial);
+    gpsFixedLinePresets = [preset];
+    gpsActivePresetId = preset.id;
+    persistGpsFixedLinePresets();
+  }
+  renderGpsFixedLinePresetControl();
+}
+
+function renderGpsFixedLinePresetControl() {
+  if (!gpsFixedLinePreset) return;
+  gpsFixedLinePreset.innerHTML = gpsFixedLinePresets.map(item =>
+    `<option value="${item.id}">${escapeHtml(item.name)}</option>`
+  ).join('');
+  gpsFixedLinePreset.value = gpsActivePresetId;
+  if (gpsPresetDelete) gpsPresetDelete.disabled = gpsFixedLinePresets.length <= 1;
+}
+
+function activeGpsFixedLinePreset() {
+  initializeGpsFixedLinePresets();
+  return gpsFixedLinePresets.find(item => item.id === gpsActivePresetId) || gpsFixedLinePresets[0];
+}
+
+function saveGpsFixedLines() {
+  const preset = activeGpsFixedLinePreset();
+  if (!preset) return;
+  preset.finish = cloneGpsLines(gpsFinishPoints.length === 2 ? gpsFinishPoints : []);
+  preset.checkpoints = cloneGpsLines(gpsCheckpoints);
+  preset.savedAt = new Date().toISOString();
+  persistGpsFixedLinePresets();
+}
+
 function removeSavedGpsFixedLines() {
-  try { localStorage.removeItem(GPS_FIXED_LINES_STORAGE_KEY); } catch (error) { /* ignore */ }
+  const preset = activeGpsFixedLinePreset();
+  if (!preset) return;
+  preset.finish = [];
+  preset.checkpoints = [];
+  preset.savedAt = new Date().toISOString();
+  persistGpsFixedLinePresets();
 }
 
 function verifyGpsFixedLinesPassword(actionLabel = '고정선을 변경') {
@@ -1263,14 +1347,19 @@ function verifyGpsFixedLinesPassword(actionLabel = '고정선을 변경') {
 
 function restoreGpsFixedLines() {
   if (gpsLapPoints.length < 2) return false;
-  let saved = null;
-  try {
-    const raw = localStorage.getItem(GPS_FIXED_LINES_STORAGE_KEY);
-    if (raw) saved = JSON.parse(raw);
-  } catch (e) {}
-  if (!saved || !Array.isArray(saved.finish) || saved.finish.length !== 2) {
-    saved = GPS_SHARED_FIXED_LINES;
-  }
+  initializeGpsFixedLinePresets();
+  const candidates = gpsFixedLinePresets.filter(item => Array.isArray(item.finish) && item.finish.length === 2)
+    .map(item => {
+      const middle = {
+        lat: (Number(item.finish[0].lat) + Number(item.finish[1].lat)) * 0.5,
+        lon: (Number(item.finish[0].lon) + Number(item.finish[1].lon)) * 0.5
+      };
+      const nearest = gpsLapPoints.reduce((best, point) => Math.min(best, distanceMeters(middle, point)), Infinity);
+      return { item, nearest };
+    }).sort((a, b) => a.nearest - b.nearest);
+  const match = candidates[0];
+  if (match?.nearest <= 500) gpsActivePresetId = match.item.id;
+  const saved = activeGpsFixedLinePreset();
   if (!saved || !Array.isArray(saved.finish) || saved.finish.length !== 2) return false;
   const middle = {
     lat: (saved.finish[0].lat + saved.finish[1].lat) * 0.5,
@@ -1278,9 +1367,12 @@ function restoreGpsFixedLines() {
   };
   const nearest = gpsLapPoints.reduce((best, point) => Math.min(best, distanceMeters(middle, point)), Infinity);
   if (nearest > 500) {
-    setGpsLapStatus('저장된 고정선은 다른 트랙 좌표라 적용하지 않았습니다.', 'warn');
+    renderGpsFixedLinePresetControl();
+    setGpsLapStatus('현재 GPS 경로와 일치하는 트랙 옵션이 없습니다. 새 옵션을 추가하십시오.', 'warn');
     return false;
   }
+  persistGpsFixedLinePresets();
+  renderGpsFixedLinePresetControl();
   gpsFinishPoints = saved.finish.map(point => ({ lat: Number(point.lat), lon: Number(point.lon) }));
   if (Array.isArray(saved.checkpoints)) {
     gpsCheckpoints = saved.checkpoints.filter(line => Array.isArray(line) && line.length === 2);
@@ -1290,7 +1382,39 @@ function restoreGpsFixedLines() {
   if (gpsLapClear) gpsLapClear.disabled = false;
   calculateGpsLaps();
   updateGpsVideoControlAvailability();
-  setGpsLapStatus(`고정 피니시라인과 체크포인트 ${gpsCheckpoints.length}개를 불러왔습니다.`, 'ok');
+  setGpsLapStatus(`${saved.name} · 피니시라인과 체크포인트 ${gpsCheckpoints.length}개를 불러왔습니다.`, 'ok');
+  return true;
+}
+
+function applyGpsFixedLinePreset(presetId) {
+  initializeGpsFixedLinePresets();
+  const preset = gpsFixedLinePresets.find(item => item.id === presetId);
+  if (!preset) return false;
+  gpsActivePresetId = preset.id;
+  persistGpsFixedLinePresets();
+  renderGpsFixedLinePresetControl();
+  clearGpsLapAnalysis(false, true);
+  if (!Array.isArray(preset.finish) || preset.finish.length !== 2) {
+    setGpsLapStatus(`${preset.name}은 비어 있습니다. 피니시 라인을 설정하십시오.`, 'warn');
+    return true;
+  }
+  const middle = {
+    lat: (Number(preset.finish[0].lat) + Number(preset.finish[1].lat)) * 0.5,
+    lon: (Number(preset.finish[0].lon) + Number(preset.finish[1].lon)) * 0.5
+  };
+  const nearest = gpsLapPoints.reduce((best, point) => Math.min(best, distanceMeters(middle, point)), Infinity);
+  if (nearest > 500) {
+    setGpsLapStatus(`${preset.name}은 현재 CSV와 다른 트랙의 설정입니다.`, 'warn');
+    return false;
+  }
+  gpsFinishPoints = cloneGpsLines(preset.finish);
+  gpsCheckpoints = cloneGpsLines(preset.checkpoints || []);
+  drawGpsFinishLine();
+  drawGpsCheckpoints();
+  if (gpsLapClear) gpsLapClear.disabled = false;
+  calculateGpsLaps();
+  updateGpsVideoControlAvailability();
+  setGpsLapStatus(`${preset.name} 적용 완료 · 체크포인트 ${gpsCheckpoints.length}개`, 'ok');
   return true;
 }
 
@@ -3972,6 +4096,43 @@ function initGpsMap() {
 gpsLapSetLine?.addEventListener('click', beginGpsFinishLineSelection);
 gpsLapClear?.addEventListener('click', () => clearGpsLapAnalysis(true));
 gpsCheckpointAdd?.addEventListener('click', beginGpsCheckpointSelection);
+gpsFixedLinePreset?.addEventListener('change', () => applyGpsFixedLinePreset(gpsFixedLinePreset.value));
+gpsPresetAdd?.addEventListener('click', () => {
+  initializeGpsFixedLinePresets();
+  const suggested = nextGpsPresetName();
+  const name = window.prompt('새 트랙 옵션 이름을 입력하십시오.', suggested)?.trim();
+  if (!name) return;
+  const preset = createGpsPreset(name);
+  gpsFixedLinePresets.push(preset);
+  gpsActivePresetId = preset.id;
+  persistGpsFixedLinePresets();
+  renderGpsFixedLinePresetControl();
+  clearGpsLapAnalysis(false, true);
+  setGpsLapStatus(`${name}을 추가했습니다. 피니시 라인을 설정하십시오.`, 'ok');
+});
+gpsPresetRename?.addEventListener('click', () => {
+  const preset = activeGpsFixedLinePreset();
+  if (!preset) return;
+  const name = window.prompt('현재 트랙 옵션의 새 이름을 입력하십시오.', preset.name)?.trim();
+  if (!name || name === preset.name) return;
+  preset.name = name;
+  persistGpsFixedLinePresets();
+  renderGpsFixedLinePresetControl();
+  setGpsLapStatus(`옵션 이름을 ${name}(으)로 변경했습니다.`, 'ok');
+});
+gpsPresetDelete?.addEventListener('click', () => {
+  const preset = activeGpsFixedLinePreset();
+  if (!preset || gpsFixedLinePresets.length <= 1) return;
+  if (!verifyGpsFixedLinesPassword('트랙 옵션을 삭제')) return;
+  if (!window.confirm(`${preset.name}과 그 안의 피니시라인·체크포인트를 삭제하시겠습니까?`)) return;
+  const index = gpsFixedLinePresets.indexOf(preset);
+  gpsFixedLinePresets.splice(index, 1);
+  const next = gpsFixedLinePresets[Math.min(index, gpsFixedLinePresets.length - 1)];
+  gpsActivePresetId = next.id;
+  persistGpsFixedLinePresets();
+  renderGpsFixedLinePresetControl();
+  applyGpsFixedLinePreset(next.id);
+});
 gpsSectorToggle?.addEventListener('click', toggleGpsSectorOverlay);
 gpsSectorOverlayClose?.addEventListener('click', closeGpsSectorOverlay);
 gpsHandlingToggle?.addEventListener('click', () => {
@@ -3996,16 +4157,18 @@ gpsHandlingEvents?.addEventListener('click', event => {
   if (handlingEvent?.position) gpsMap?.panTo([handlingEvent.position.lat, handlingEvent.position.lon]);
 });
 gpsCheckpointClear?.addEventListener('click', () => {
-  if (!verifyGpsFixedLinesPassword('피니시라인과 체크포인트를 초기화')) return;
-  if (!window.confirm(`피니시라인과 체크포인트 ${gpsCheckpoints.length}개를 모두 삭제하시겠습니까?`)) return;
-  clearGpsLapAnalysis(true);
-  setGpsLapStatus('피니시라인과 체크포인트를 모두 초기화했습니다.');
+  const preset = activeGpsFixedLinePreset();
+  if (!verifyGpsFixedLinesPassword('현재 트랙 옵션을 초기화')) return;
+  if (!window.confirm(`${preset?.name || '현재 옵션'}의 피니시라인과 체크포인트 ${gpsCheckpoints.length}개를 삭제하시겠습니까?`)) return;
+  clearGpsLapAnalysis(true, true);
+  setGpsLapStatus(`${preset?.name || '현재 옵션'}을 초기화했습니다.`);
 });
 gpsSharedSettingsCopy?.addEventListener('click', async () => {
   if (gpsFinishPoints.length !== 2) return;
+  saveGpsFixedLines();
   const settings = JSON.stringify({
-    finish: gpsFinishPoints,
-    checkpoints: gpsCheckpoints,
+    activeId: gpsActivePresetId,
+    presets: gpsFixedLinePresets,
     steering: (typeof steeringCal !== 'undefined') ? {
       zeroRaw: steeringCal.zeroRaw,
       axisLimit: steeringCal.axisLimit,
@@ -4014,7 +4177,7 @@ gpsSharedSettingsCopy?.addEventListener('click', async () => {
   });
   try {
     await navigator.clipboard.writeText(settings);
-    setGpsLapStatus('공통 설정이 복사되었습니다. 채팅창에 붙여넣어 보내주십시오.', 'ok');
+    setGpsLapStatus(`트랙 옵션 ${gpsFixedLinePresets.length}개가 복사되었습니다. 채팅창에 붙여넣어 보내주십시오.`, 'ok');
   } catch (error) {
     window.prompt('아래 공통 설정을 복사해 채팅창에 보내주십시오.', settings);
   }

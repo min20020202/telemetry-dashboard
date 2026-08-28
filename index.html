@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260828-2">
+  <link rel="stylesheet" href="style.css?v=20260828-3">
 </head>
 <body>
 
@@ -309,10 +309,16 @@
               <span class="signal-val" id="cursor-gps-coords">--.------, ---.------</span>
             </div>
             <div class="gps-lap-toolbar">
+              <div class="gps-preset-control" aria-label="트랙 설정 옵션">
+                <select id="gps-fixed-line-preset" aria-label="피니시라인 및 체크포인트 옵션"></select>
+                <button id="gps-preset-add" type="button" title="새 트랙 옵션 추가">＋</button>
+                <button id="gps-preset-rename" type="button" title="현재 옵션 이름 변경">이름</button>
+                <button id="gps-preset-delete" type="button" title="현재 옵션 삭제">삭제</button>
+              </div>
               <button id="gps-lap-set-line" type="button">🏁 피니시 라인 설정</button>
               <button id="gps-checkpoint-add" type="button" disabled>＋ 체크포인트</button>
-              <button id="gps-checkpoint-clear" type="button" disabled>🔒 고정선 초기화</button>
-              <button id="gps-shared-settings-copy" type="button" disabled>공통 설정 복사</button>
+              <button id="gps-checkpoint-clear" type="button" disabled>🔒 현재 옵션 초기화</button>
+              <button id="gps-shared-settings-copy" type="button" disabled>모든 옵션 복사</button>
               <button id="gps-sector-toggle" type="button" disabled>구간 비교</button>
               <button id="gps-handling-toggle" type="button" aria-pressed="false" disabled>핸들링 분석</button>
               <div id="gps-course-direction" class="gps-axis-mode" data-course-direction aria-label="코스 주행 방향"><button type="button" class="active" data-direction="forward">정방향</button><button type="button" data-direction="reverse">역방향</button></div>
@@ -818,7 +824,7 @@
               <article class="help-card help-wide-card">
                 <h3>피니시 라인과 랩 계산</h3>
                 <div class="help-steps"><span><b>1</b>피니시 라인 설정</span><span><b>2</b>지도에서 라인 양 끝 클릭</span><span><b>3</b>자동 계산된 LAP 확인</span><span><b>4</b>원하는 LAP 선택·비교</span></div>
-                <ul><li>라인은 차량 경로가 실제로 통과하도록 트랙 폭을 가로질러 그립니다.</li><li>랩을 한 번 누르면 해당 랩만 표시되고, 여러 랩을 누르면 경로와 데이터를 겹쳐 비교합니다.</li><li>랩 상세의 <b>시작 지점</b>·<b>종료 지점</b> 버튼은 재생을 멈추고 해당 시점으로 이동합니다.</li><li>별표가 붙은 LAP이 베스트 랩입니다.</li></ul>
+                <ul><li>트랙 옵션에서 코스별 피니시라인과 체크포인트를 따로 보관할 수 있으며, CSV 경로와 가장 가까운 옵션이 자동 선택됩니다.</li><li>라인은 차량 경로가 실제로 통과하도록 트랙 폭을 가로질러 그립니다.</li><li>랩을 한 번 누르면 해당 랩만 표시되고, 여러 랩을 누르면 경로와 데이터를 겹쳐 비교합니다.</li><li>랩 상세의 <b>시작 지점</b>·<b>종료 지점</b> 버튼은 재생을 멈추고 해당 시점으로 이동합니다.</li><li>별표가 붙은 LAP이 베스트 랩입니다.</li></ul>
               </article>
               <div class="help-grid two help-wide-card">
                 <article class="help-card"><h3>시간축·거리축 전환</h3><ul><li><b>시간 s</b>는 센서가 기록된 원래 시각으로 표시합니다.</li><li><b>거리 m</b>는 각 랩을 0~862.556m 공통 대표 경로에 맞춰 표시합니다.</li><li>드라이버별 브레이크·조향·액셀 위치 비교에는 거리축을 사용합니다.</li></ul><button id="help-distance-method-inline" class="help-inline-action" type="button" data-distance-method-open>측정 원리와 신뢰도 보기</button></article>
@@ -994,7 +1000,7 @@
   <script src="steering.js?v=20260820-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
-  <script src="app.js?v=20260828-2"></script>
+  <script src="app.js?v=20260828-3"></script>
   <script src="comparison.js?v=20260826-1"></script>
 </body>
 </html>
