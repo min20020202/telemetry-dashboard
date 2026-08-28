@@ -3946,7 +3946,9 @@ function calculateGpsLaps() {
       ...starts.map(item => ({ ...item, type: 'start' })),
       ...finishes.map(item => ({ ...item, type: 'finish' }))
     ].sort((a, b) => a.time - b.time);
-    const minSeconds = Math.max(5, Number(gpsLapMinTime?.value) || 20);
+    const minSeconds = gpsTimingMode?.value === 'sprint'
+      ? Math.max(3, Number(gpsLapMinTime?.value) || 3)
+      : Math.max(5, Number(gpsLapMinTime?.value) || 20);
     const laps = [];
     const acceptedCrossings = [];
     let pendingStart = null;

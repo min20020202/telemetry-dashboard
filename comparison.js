@@ -62,8 +62,28 @@
 
   function addSession(snapshot, autoSelect = false) {
     const file = snapshot.file;
-    const laps = (snapshot.laps || []).map(lap => ({ ...lap }));
-    if (!laps.length) throw new Error(`${file.name}: 고정 피니시라인을 통과한 완성 랩이 없습니다.`);
+    let laps = (snapshot.laps || []).map(lap => ({ ...lap }));
+    if (!laps.length && Array.isArray(snapshot.gpsPoints) && snapshot.gpsPoints.length >= 2) {
+      const first = snapshot.gpsPoints[0];
+      const last = snapshot.gpsPoints[snapshot.gpsPoints.length - 1];
+      const duration = (last.time ?? 0) - (first.time ?? 0);
+      if (duration >= 2) {
+        laps = [{
+          number: 1,
+          duration,
+          timeBasis: 'logger',
+          startTime: first.time,
+          endTime: last.time,
+          startGpsTime: first.gpsTime,
+          endGpsTime: last.gpsTime,
+          startLat: first.lat,
+          startLon: first.lon,
+          endLat: last.lat,
+          endLon: last.lon
+        }];
+      }
+    }
+    if (!laps.length) throw new Error(`${file.name}: 피니시라인을 통과한 랩 또는 유효한 주행 데이터가 없습니다.`);
     const sourceKey = `${file.name}:${file.size || 0}:${file.lastModified || 0}`;
     let session = state.sessions.find(item => item.sourceKey === sourceKey);
     const isNew = !session;
