@@ -3307,6 +3307,7 @@ body.dark-theme .help-video-output button { border-color: #475569; background: #
   font: 700 10px var(--font-mono);
 }
 .gps-preset-control { display:inline-flex; align-items:center; gap:4px; padding:3px; border:1px solid var(--border-color); border-radius:8px; background:var(--panel-bg); }
+.gps-preset-control > span { padding-left:4px; color:var(--text-secondary); font:800 9px var(--font-mono); white-space:nowrap; }
 .gps-preset-control select { min-width:100px; max-width:180px; height:28px; padding:0 24px 0 8px; border:0; border-radius:5px; background:var(--bg-secondary); color:var(--text-primary); font:800 10px var(--font-mono); }
 .gps-preset-control #gps-timing-mode { min-width:116px; color:var(--accent-orange); }
 .gps-lap-toolbar .gps-preset-control button { height:28px; min-width:28px; padding:0 7px; border-radius:5px; }

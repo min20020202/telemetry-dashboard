@@ -1344,9 +1344,18 @@ function renderGpsFixedLinePresetControl() {
     `<option value="${item.id}">${escapeHtml(item.name)}</option>`
   ).join('');
   gpsFixedLinePreset.value = gpsActivePresetId;
+  if (!gpsFixedLinePreset.value && gpsFixedLinePresets.length) {
+    gpsActivePresetId = gpsFixedLinePresets[0].id;
+    gpsFixedLinePreset.value = gpsActivePresetId;
+    persistGpsFixedLinePresets();
+  }
   const active = gpsFixedLinePresets.find(item => item.id === gpsActivePresetId);
   if (gpsTimingMode) gpsTimingMode.value = active?.mode === 'sprint' ? 'sprint' : 'circuit';
-  if (gpsStartLineSet) gpsStartLineSet.hidden = active?.mode !== 'sprint';
+  if (gpsStartLineSet) {
+    gpsStartLineSet.hidden = false;
+    gpsStartLineSet.disabled = active?.mode !== 'sprint';
+    gpsStartLineSet.title = active?.mode === 'sprint' ? '스타트라인 설정' : '측정 방식을 스타트→피니시로 변경하면 사용할 수 있습니다.';
+  }
   if (gpsPresetDelete) gpsPresetDelete.disabled = gpsFixedLinePresets.length <= 1;
 }
 
@@ -4232,7 +4241,11 @@ gpsTimingMode?.addEventListener('change', () => {
   const preset = activeGpsFixedLinePreset();
   if (!preset) return;
   preset.mode = gpsTimingMode.value === 'sprint' ? 'sprint' : 'circuit';
-  if (gpsStartLineSet) gpsStartLineSet.hidden = preset.mode !== 'sprint';
+  if (gpsStartLineSet) {
+    gpsStartLineSet.hidden = false;
+    gpsStartLineSet.disabled = preset.mode !== 'sprint';
+    gpsStartLineSet.title = preset.mode === 'sprint' ? '스타트라인 설정' : '측정 방식을 스타트→피니시로 변경하면 사용할 수 있습니다.';
+  }
   drawGpsStartLine();
   saveGpsFixedLines();
   if (gpsFinishPoints.length === 2) calculateGpsLaps();

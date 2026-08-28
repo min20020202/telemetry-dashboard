@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260828-4">
+  <link rel="stylesheet" href="style.css?v=20260828-6">
 </head>
 <body>
 
@@ -310,13 +310,15 @@
             </div>
             <div class="gps-lap-toolbar">
               <div class="gps-preset-control" aria-label="트랙 설정 옵션">
+                <span>트랙</span>
                 <select id="gps-fixed-line-preset" aria-label="피니시라인 및 체크포인트 옵션"></select>
+                <span>측정</span>
                 <select id="gps-timing-mode" aria-label="랩 측정 방식"><option value="circuit">서킷</option><option value="sprint">스타트→피니시</option></select>
                 <button id="gps-preset-add" type="button" title="새 트랙 옵션 추가">＋</button>
                 <button id="gps-preset-rename" type="button" title="현재 옵션 이름 변경">이름</button>
                 <button id="gps-preset-delete" type="button" title="현재 옵션 삭제">삭제</button>
               </div>
-              <button id="gps-start-line-set" type="button" hidden>🚦 스타트라인 설정</button>
+              <button id="gps-start-line-set" type="button" disabled>🚦 스타트라인 설정</button>
               <button id="gps-lap-set-line" type="button">🏁 피니시 라인 설정</button>
               <button id="gps-checkpoint-add" type="button" disabled>＋ 체크포인트</button>
               <button id="gps-checkpoint-clear" type="button" disabled>🔒 현재 옵션 초기화</button>
@@ -1002,7 +1004,7 @@
   <script src="steering.js?v=20260820-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
-  <script src="app.js?v=20260828-5"></script>
+  <script src="app.js?v=20260828-6"></script>
   <script src="comparison.js?v=20260826-1"></script>
 </body>
 </html>
