@@ -6243,6 +6243,12 @@ function initDataAndDashboard(options = {}) {
   let latestEmuAdc4Raw = 0;
   let latestEmuAdc5Raw = 0;
   let latestEmuAdc6Raw = 0;
+  // Current logger wiring: the front-left wheel sensor is connected directly
+  // to Wheel/Speed 1. Keep CAN VSS as a compatibility fallback for older logs
+  // whose Wheel 1 channel is present in the header but contains no signal.
+  const hasWheel1FlSignal = globalData.some(row =>
+    (parseHexOrInt(row.wheel1_speed_centi_kmh) || 0) > 0
+  );
 
   globalData.forEach(row => {
     if (row.__nssurPrepared) return;
@@ -6351,8 +6357,10 @@ function initDataAndDashboard(options = {}) {
     row.suspension_rr_raw = latestEmuAdc5Raw;
     row.rear_brake_raw = latestEmuAdc6Raw;
 
-    // Front-left wheel speed comes from EMU VSS (0x602 bytes 0..1).
-    row.fl_speed_kmh = latestSpeedKmh;
+    // Front-left wheel speed comes from Wheel/Speed 1 on the datalogger.
+    row.fl_speed_kmh = hasWheel1FlSignal
+      ? (parseHexOrInt(row.wheel1_speed_centi_kmh) || 0) / 100.0
+      : latestSpeedKmh;
     // Front-right wheel speed comes from Wheel/Speed 2 on the datalogger.
     row.fr_speed_kmh = (parseHexOrInt(row.wheel2_speed_centi_kmh) || 0) / 100.0;
     // Rear-left wheel speed comes from the dedicated datalogger wheel channel.
