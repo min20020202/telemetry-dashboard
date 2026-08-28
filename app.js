@@ -1340,9 +1340,12 @@ function initializeGpsFixedLinePresets() {
 
 function renderGpsFixedLinePresetControl() {
   if (!gpsFixedLinePreset) return;
-  gpsFixedLinePreset.innerHTML = gpsFixedLinePresets.map(item =>
-    `<option value="${item.id}">${escapeHtml(item.name)}</option>`
-  ).join('');
+  gpsFixedLinePreset.replaceChildren(...gpsFixedLinePresets.map(item => {
+    const option = document.createElement('option');
+    option.value = item.id;
+    option.textContent = item.name || '이름 없는 옵션';
+    return option;
+  }));
   gpsFixedLinePreset.value = gpsActivePresetId;
   if (!gpsFixedLinePreset.value && gpsFixedLinePresets.length) {
     gpsActivePresetId = gpsFixedLinePresets[0].id;
@@ -4232,6 +4235,7 @@ function initGpsMap() {
   gpsMap.on('zoom', updateGpsCursorScale);
 }
 
+initializeGpsFixedLinePresets();
 gpsLapSetLine?.addEventListener('click', beginGpsFinishLineSelection);
 gpsStartLineSet?.addEventListener('click', beginGpsStartLineSelection);
 gpsLapClear?.addEventListener('click', () => clearGpsLapAnalysis(true));
