@@ -3938,10 +3938,18 @@ function calculateGpsLaps() {
       setGpsLapStatus('구간 측정을 위해 스타트 라인을 먼저 설정하십시오.', 'warn');
       return;
     }
-    const startsRaw = findGpsLineCrossings(gpsStartPoints, 3);
-    const finishesRaw = findGpsLineCrossings(gpsFinishPoints, 3);
-    const starts = startsRaw.filter(item => item.direction === startsRaw[0]?.direction);
-    const finishes = finishesRaw.filter(item => item.direction === finishesRaw[0]?.direction);
+    const startsRaw = findGpsLineCrossings(gpsStartPoints, 0.1);
+    const finishesRaw = findGpsLineCrossings(gpsFinishPoints, 0.1);
+    const getDominantDirection = (crossings) => {
+      if (!crossings.length) return 1;
+      const count1 = crossings.filter(c => c.direction === 1).length;
+      const countNeg1 = crossings.filter(c => c.direction === -1).length;
+      return count1 >= countNeg1 ? 1 : -1;
+    };
+    const startDir = getDominantDirection(startsRaw);
+    const finishDir = getDominantDirection(finishesRaw);
+    const starts = startsRaw.filter(item => item.direction === startDir);
+    const finishes = finishesRaw.filter(item => item.direction === finishDir);
     const events = [
       ...starts.map(item => ({ ...item, type: 'start' })),
       ...finishes.map(item => ({ ...item, type: 'finish' }))
