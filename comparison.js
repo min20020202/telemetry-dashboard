@@ -84,6 +84,9 @@
       }
     }
     if (!laps.length) throw new Error(`${file.name}: 피니시라인을 통과한 랩 또는 유효한 주행 데이터가 없습니다.`);
+    const primarySession = state.sessions[0];
+    const targetTimingMode = primarySession?.timingMode || snapshot.timingMode || (gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit');
+    const targetCheckpoints = primarySession?.checkpoints || snapshot.checkpoints || [];
     const sourceKey = `${file.name}:${file.size || 0}:${file.lastModified || 0}`;
     let session = state.sessions.find(item => item.sourceKey === sourceKey);
     const isNew = !session;
@@ -96,8 +99,8 @@
         rows: snapshot.rows,
         gpsPoints: (snapshot.gpsPoints || []).map(point => ({ ...point })),
         laps,
-        checkpoints: (snapshot.checkpoints || []).map(line => line.map(point => ({ ...point }))),
-        timingMode: snapshot.timingMode === 'sprint' ? 'sprint' : 'circuit'
+        checkpoints: (targetCheckpoints || []).map(line => line.map(point => ({ ...point }))),
+        timingMode: targetTimingMode === 'sprint' ? 'sprint' : 'circuit'
       };
       applyComparisonImuFilter(session);
       state.sessions.push(session);
@@ -113,6 +116,7 @@
     return new Promise((resolve, reject) => {
       handleFile(file, {
         skipUpload: true,
+        preserveActivePreset: true,
         onComplete: snapshot => {
           try {
             addSession(snapshot, true);

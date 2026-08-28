@@ -6135,7 +6135,7 @@ function handleFile(file, options = {}) {
     skipEmptyLines: true,
     complete: function (results) {
       globalData = results.data;
-      initDataAndDashboard();
+      initDataAndDashboard(options);
       if (!options.skipUpload) uploadFileToServer(file);
       const snapshot = {
         file,
@@ -6212,7 +6212,7 @@ function uploadFileToServer(file) {
   });
 }
 
-function initDataAndDashboard() {
+function initDataAndDashboard(options = {}) {
   if (globalData.length === 0) return;
   visibleChannelSeriesCache.clear();
   setGpsPlayback(false);
@@ -6453,7 +6453,13 @@ function initDataAndDashboard() {
       }
       gpsLapPoints = buildGpsLapPoints(globalData);
       clearGpsLapAnalysis();
-      const restoredFixedLines = restoreGpsFixedLines();
+      const restoredFixedLines = options.preserveActivePreset ? true : restoreGpsFixedLines();
+      if (options.preserveActivePreset) {
+        drawGpsFinishLine();
+        drawGpsStartLine();
+        drawGpsCheckpoints();
+        calculateGpsLaps();
+      }
       const initialGpsRow = activeSampledData[currentCursorIndex];
       if (initialGpsRow) updateNumericDisplays(initialGpsRow);
       if (gpsLapFixSummary && gpsLapPoints.length && !restoredFixedLines) {
