@@ -220,6 +220,8 @@ const gpsFixedLinePreset = document.getElementById('gps-fixed-line-preset');
 const gpsPresetAdd = document.getElementById('gps-preset-add');
 const gpsPresetRename = document.getElementById('gps-preset-rename');
 const gpsPresetDelete = document.getElementById('gps-preset-delete');
+const gpsTimingMode = document.getElementById('gps-timing-mode');
+const gpsStartLineSet = document.getElementById('gps-start-line-set');
 const gpsCheckpointCount = document.getElementById('gps-checkpoint-count');
 const gpsSectorCard = document.getElementById('gps-sector-card');
 const gpsSectorTable = document.getElementById('gps-sector-table');
@@ -402,6 +404,9 @@ let gpsLapRouteLayer = null;
 let gpsHandlingLayer = null;
 let gpsDistanceReferenceLayer = null;
 let gpsFinishPoints = [];
+let gpsStartPoints = [];
+let gpsStartLine = null;
+let gpsLineSelectionTarget = 'finish';
 let gpsFinishPreviewLine = null;
 let gpsFinishMarkers = [];
 let gpsCheckpointLayer = null;
@@ -1177,17 +1182,28 @@ function drawGpsFinishLine() {
   }).addTo(gpsMap);
 }
 
+function drawGpsStartLine() {
+  if (!gpsMap) return;
+  if (gpsStartLine) gpsMap.removeLayer(gpsStartLine);
+  gpsStartLine = null;
+  if (gpsStartPoints.length !== 2 || gpsTimingMode?.value !== 'sprint') return;
+  gpsStartLine = L.polyline(gpsStartPoints.map(point => [point.lat, point.lon]), {
+    color: '#22c55e', weight: 5, opacity: 0.95, interactive: false, dashArray: '9 5'
+  }).addTo(gpsMap);
+}
+
 function drawGpsFinishFirstPoint() {
-  if (!gpsMap || gpsFinishPoints.length !== 1) return;
+  const points = gpsLineSelectionTarget === 'start' ? gpsStartPoints : gpsFinishPoints;
+  if (!gpsMap || points.length !== 1) return;
   if (gpsFinishEndpointLayer) gpsFinishEndpointLayer.clearLayers();
-  const first = gpsFinishPoints[0];
+  const first = points[0];
   L.marker([first.lat, first.lon], {
     interactive: false,
     icon: L.divIcon({ className: 'gps-finish-marker', html: '<div class="gps-finish-line-icon"></div>', iconSize: [18, 18], iconAnchor: [9, 9] })
   }).addTo(gpsFinishEndpointLayer);
   if (gpsFinishPreviewLine) gpsMap.removeLayer(gpsFinishPreviewLine);
   gpsFinishPreviewLine = L.polyline([[first.lat, first.lon], [first.lat, first.lon]], {
-    color: '#eab308',
+    color: gpsLineSelectionTarget === 'start' ? '#22c55e' : '#eab308',
     weight: 4,
     opacity: 0.8,
     dashArray: '7 6',
@@ -1196,8 +1212,9 @@ function drawGpsFinishFirstPoint() {
 }
 
 function updateGpsFinishPreview(event) {
-  if (!gpsLapSelectionActive || gpsFinishPoints.length !== 1 || !gpsFinishPreviewLine) return;
-  const first = gpsFinishPoints[0];
+  const points = gpsLineSelectionTarget === 'start' ? gpsStartPoints : gpsFinishPoints;
+  if (!gpsLapSelectionActive || points.length !== 1 || !gpsFinishPreviewLine) return;
+  const first = points[0];
   gpsFinishPreviewLine.setLatLngs([[first.lat, first.lon], [event.latlng.lat, event.latlng.lng]]);
 }
 
@@ -1231,9 +1248,12 @@ function findGpsLineCrossings(linePoints, minimumSpeed = 1) {
     if (speed < minimumSpeed) continue;
     crossings.push({
       time: previous.time + elapsed * fraction,
+      gpsTime: Number.isFinite(previous.gpsTime) && Number.isFinite(current.gpsTime)
+        ? previous.gpsTime + (current.gpsTime - previous.gpsTime) * fraction : NaN,
       speed,
       lat: previous.lat + (current.lat - previous.lat) * fraction,
-      lon: previous.lon + (current.lon - previous.lon) * fraction
+      lon: previous.lon + (current.lon - previous.lon) * fraction,
+      direction: sideCurrent > sidePrevious ? 1 : -1
     });
   }
   return crossings;
@@ -1254,6 +1274,8 @@ function createGpsPreset(name, lines = null) {
   return {
     id: `track-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     name,
+    mode: lines?.mode === 'sprint' ? 'sprint' : 'circuit',
+    start: cloneGpsLines(lines?.start || []),
     finish: cloneGpsLines(lines?.finish || []),
     checkpoints: cloneGpsLines(lines?.checkpoints || []),
     savedAt: new Date().toISOString()
@@ -1279,6 +1301,8 @@ function initializeGpsFixedLinePresets() {
   if (Array.isArray(stored?.presets) && stored.presets.length) {
     gpsFixedLinePresets = stored.presets.filter(item => item && item.id && item.name).map(item => ({
       ...item,
+      mode: item.mode === 'sprint' ? 'sprint' : 'circuit',
+      start: Array.isArray(item.start) ? item.start : [],
       finish: Array.isArray(item.finish) ? item.finish : [],
       checkpoints: Array.isArray(item.checkpoints) ? item.checkpoints : []
     }));
@@ -1305,6 +1329,9 @@ function renderGpsFixedLinePresetControl() {
     `<option value="${item.id}">${escapeHtml(item.name)}</option>`
   ).join('');
   gpsFixedLinePreset.value = gpsActivePresetId;
+  const active = gpsFixedLinePresets.find(item => item.id === gpsActivePresetId);
+  if (gpsTimingMode) gpsTimingMode.value = active?.mode === 'sprint' ? 'sprint' : 'circuit';
+  if (gpsStartLineSet) gpsStartLineSet.hidden = active?.mode !== 'sprint';
   if (gpsPresetDelete) gpsPresetDelete.disabled = gpsFixedLinePresets.length <= 1;
 }
 
@@ -1317,6 +1344,8 @@ function saveGpsFixedLines() {
   const preset = activeGpsFixedLinePreset();
   if (!preset) return;
   preset.finish = cloneGpsLines(gpsFinishPoints.length === 2 ? gpsFinishPoints : []);
+  preset.start = cloneGpsLines(gpsStartPoints.length === 2 ? gpsStartPoints : []);
+  preset.mode = gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit';
   preset.checkpoints = cloneGpsLines(gpsCheckpoints);
   preset.savedAt = new Date().toISOString();
   persistGpsFixedLinePresets();
@@ -1326,6 +1355,7 @@ function removeSavedGpsFixedLines() {
   const preset = activeGpsFixedLinePreset();
   if (!preset) return;
   preset.finish = [];
+  preset.start = [];
   preset.checkpoints = [];
   preset.savedAt = new Date().toISOString();
   persistGpsFixedLinePresets();
@@ -1374,10 +1404,12 @@ function restoreGpsFixedLines() {
   persistGpsFixedLinePresets();
   renderGpsFixedLinePresetControl();
   gpsFinishPoints = saved.finish.map(point => ({ lat: Number(point.lat), lon: Number(point.lon) }));
+  gpsStartPoints = Array.isArray(saved.start) ? cloneGpsLines(saved.start) : [];
   if (Array.isArray(saved.checkpoints)) {
     gpsCheckpoints = saved.checkpoints.filter(line => Array.isArray(line) && line.length === 2);
   }
   drawGpsFinishLine();
+  drawGpsStartLine();
   drawGpsCheckpoints();
   if (gpsLapClear) gpsLapClear.disabled = false;
   calculateGpsLaps();
@@ -1408,8 +1440,10 @@ function applyGpsFixedLinePreset(presetId) {
     return false;
   }
   gpsFinishPoints = cloneGpsLines(preset.finish);
+  gpsStartPoints = cloneGpsLines(preset.start || []);
   gpsCheckpoints = cloneGpsLines(preset.checkpoints || []);
   drawGpsFinishLine();
+  drawGpsStartLine();
   drawGpsCheckpoints();
   if (gpsLapClear) gpsLapClear.disabled = false;
   calculateGpsLaps();
@@ -2856,6 +2890,9 @@ function drawPage4TrackMap(targetTime) {
   if (Array.isArray(gpsFinishPoints) && gpsFinishPoints.length === 2) {
     allMapPoints.push(...gpsFinishPoints);
   }
+  if (Array.isArray(gpsStartPoints) && gpsStartPoints.length === 2) {
+    allMapPoints.push(...gpsStartPoints);
+  }
   gpsCheckpoints.forEach(cp => {
     if (Array.isArray(cp) && cp.length === 2) {
       allMapPoints.push(...cp);
@@ -2902,6 +2939,12 @@ function drawPage4TrackMap(targetTime) {
   }
 
   // 3. Draw Finish Line
+  if (gpsTimingMode?.value === 'sprint' && Array.isArray(gpsStartPoints) && gpsStartPoints.length === 2) {
+    const from = project(gpsStartPoints[0]);
+    const to = project(gpsStartPoints[1]);
+    ctx.save(); ctx.setLineDash([7, 4]); ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
+    ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke(); ctx.restore();
+  }
   if (Array.isArray(gpsFinishPoints) && gpsFinishPoints.length === 2) {
     let from = project(gpsFinishPoints[0]);
     let to = project(gpsFinishPoints[1]);
@@ -3794,6 +3837,50 @@ function calculateGpsLaps() {
     return;
   }
 
+  if (gpsTimingMode?.value === 'sprint') {
+    if (gpsStartPoints.length !== 2) {
+      renderGpsLapResults([], []);
+      setGpsLapStatus('구간 측정을 위해 스타트 라인을 먼저 설정하십시오.', 'warn');
+      return;
+    }
+    const startsRaw = findGpsLineCrossings(gpsStartPoints, 3);
+    const finishesRaw = findGpsLineCrossings(gpsFinishPoints, 3);
+    const starts = startsRaw.filter(item => item.direction === startsRaw[0]?.direction);
+    const finishes = finishesRaw.filter(item => item.direction === finishesRaw[0]?.direction);
+    const events = [
+      ...starts.map(item => ({ ...item, type: 'start' })),
+      ...finishes.map(item => ({ ...item, type: 'finish' }))
+    ].sort((a, b) => a.time - b.time);
+    const minSeconds = Math.max(5, Number(gpsLapMinTime?.value) || 20);
+    const laps = [];
+    const acceptedCrossings = [];
+    let pendingStart = null;
+    events.forEach(event => {
+      if (event.type === 'start') {
+        pendingStart = event;
+        return;
+      }
+      if (!pendingStart || event.time <= pendingStart.time) return;
+      const elapsed = crossingElapsedSeconds(pendingStart, event);
+      if (elapsed.duration < minSeconds || elapsed.duration > 3600) return;
+      laps.push({
+        number: laps.length + 1, duration: elapsed.duration, timeBasis: elapsed.basis,
+        startTime: pendingStart.time, endTime: event.time,
+        startGpsTime: pendingStart.gpsTime, endGpsTime: event.gpsTime,
+        startLat: pendingStart.lat, startLon: pendingStart.lon,
+        endLat: event.lat, endLon: event.lon
+      });
+      acceptedCrossings.push(pendingStart, event);
+      pendingStart = null;
+    });
+    laps.forEach(lap => { lap.distanceMeters = calculateGpsLapDistance(lap); });
+    renderGpsLapResults(acceptedCrossings, laps);
+    setGpsLapStatus(laps.length
+      ? `${laps.length}개 스타트→피니시 구간 기록 계산 완료`
+      : '스타트 통과 후 피니시를 통과한 완성 기록이 없습니다.', laps.length ? 'ok' : 'warn');
+    return;
+  }
+
   const origin = {
     lat: (gpsFinishPoints[0].lat + gpsFinishPoints[1].lat) * 0.5,
     lon: (gpsFinishPoints[0].lon + gpsFinishPoints[1].lon) * 0.5
@@ -3894,6 +3981,9 @@ function calculateGpsLaps() {
 function clearGpsLapAnalysis(removeSaved = false, clearCPs = false) {
   gpsLapSelectionActive = false;
   gpsFinishPoints = [];
+  gpsStartPoints = [];
+  if (gpsStartLine && gpsMap) gpsMap.removeLayer(gpsStartLine);
+  gpsStartLine = null;
   if (clearCPs) {
     clearGpsCheckpoints(removeSaved);
   }
@@ -3955,44 +4045,69 @@ function beginGpsFinishLineSelection() {
     return;
   }
   if (gpsFinishPoints.length === 2 && !verifyGpsFixedLinesPassword('피니시 라인을 다시 설정')) return;
+  const retainedStart = cloneGpsLines(gpsStartPoints);
   clearGpsLapAnalysis(false, false);
+  gpsStartPoints = retainedStart;
+  drawGpsStartLine();
+  gpsLineSelectionTarget = 'finish';
   gpsLapSelectionActive = true;
   gpsLapSetLine?.classList.add('active');
   gpsMap.getContainer().classList.add('gps-lap-selecting');
   setGpsLapStatus('피니시 라인의 첫 번째 끝점을 클릭하십시오.', 'warn');
 }
 
+function beginGpsStartLineSelection() {
+  if (!gpsMap || gpsLapPoints.length < 2) {
+    setGpsLapStatus('먼저 GPS 데이터가 포함된 CSV를 불러오십시오.', 'warn');
+    return;
+  }
+  if (gpsStartPoints.length === 2 && !verifyGpsFixedLinesPassword('스타트 라인을 다시 설정')) return;
+  gpsStartPoints = [];
+  if (gpsStartLine) gpsMap.removeLayer(gpsStartLine);
+  gpsStartLine = null;
+  gpsLineSelectionTarget = 'start';
+  gpsLapSelectionActive = true;
+  gpsStartLineSet?.classList.add('active');
+  gpsMap.getContainer().classList.add('gps-lap-selecting');
+  setGpsLapStatus('스타트 라인의 첫 번째 끝점을 클릭하십시오.', 'warn');
+}
+
 function cancelGpsFinishLineSelection() {
   if (!gpsLapSelectionActive) return false;
   gpsLapSelectionActive = false;
-  gpsFinishPoints = [];
+  if (gpsLineSelectionTarget === 'start') gpsStartPoints = [];
+  else gpsFinishPoints = [];
   gpsLapSetLine?.classList.remove('active');
+  gpsStartLineSet?.classList.remove('active');
   gpsMap?.getContainer().classList.remove('gps-lap-selecting');
   if (gpsFinishPreviewLine && gpsMap) gpsMap.removeLayer(gpsFinishPreviewLine);
   gpsFinishPreviewLine = null;
   gpsFinishMarkers = [];
   gpsFinishEndpointLayer?.clearLayers();
-  setGpsLapStatus('피니시 라인 설정을 취소했습니다. 다시 설정 버튼을 눌러 시작하십시오.');
+  setGpsLapStatus(`${gpsLineSelectionTarget === 'start' ? '스타트' : '피니시'} 라인 설정을 취소했습니다.`);
   updateGpsVideoControlAvailability();
   return true;
 }
 
 function handleGpsLapMapClick(event) {
   if (!gpsLapSelectionActive) return;
-  gpsFinishPoints.push({ lat: event.latlng.lat, lon: event.latlng.lng });
-  if (gpsFinishPoints.length === 1) {
+  const points = gpsLineSelectionTarget === 'start' ? gpsStartPoints : gpsFinishPoints;
+  points.push({ lat: event.latlng.lat, lon: event.latlng.lng });
+  if (points.length === 1) {
     drawGpsFinishFirstPoint();
-    setGpsLapStatus('이제 피니시 라인의 반대쪽 끝점을 클릭하십시오.', 'warn');
+    setGpsLapStatus(`이제 ${gpsLineSelectionTarget === 'start' ? '스타트' : '피니시'} 라인의 반대쪽 끝점을 클릭하십시오.`, 'warn');
     return;
   }
 
   gpsLapSelectionActive = false;
   gpsLapSetLine?.classList.remove('active');
+  gpsStartLineSet?.classList.remove('active');
   gpsMap.getContainer().classList.remove('gps-lap-selecting');
   if (gpsLapClear) gpsLapClear.disabled = false;
   if (gpsFinishPreviewLine) gpsMap.removeLayer(gpsFinishPreviewLine);
   gpsFinishPreviewLine = null;
-  drawGpsFinishLine();
+  if (gpsLineSelectionTarget === 'start') drawGpsStartLine();
+  else drawGpsFinishLine();
   if (gpsCheckpointClear) gpsCheckpointClear.disabled = false;
   saveGpsFixedLines();
   calculateGpsLaps();
@@ -4094,9 +4209,22 @@ function initGpsMap() {
 }
 
 gpsLapSetLine?.addEventListener('click', beginGpsFinishLineSelection);
+gpsStartLineSet?.addEventListener('click', beginGpsStartLineSelection);
 gpsLapClear?.addEventListener('click', () => clearGpsLapAnalysis(true));
 gpsCheckpointAdd?.addEventListener('click', beginGpsCheckpointSelection);
 gpsFixedLinePreset?.addEventListener('change', () => applyGpsFixedLinePreset(gpsFixedLinePreset.value));
+gpsTimingMode?.addEventListener('change', () => {
+  const preset = activeGpsFixedLinePreset();
+  if (!preset) return;
+  preset.mode = gpsTimingMode.value === 'sprint' ? 'sprint' : 'circuit';
+  if (gpsStartLineSet) gpsStartLineSet.hidden = preset.mode !== 'sprint';
+  drawGpsStartLine();
+  saveGpsFixedLines();
+  if (gpsFinishPoints.length === 2) calculateGpsLaps();
+  else setGpsLapStatus(preset.mode === 'sprint'
+    ? '스타트라인과 피니시라인을 각각 설정하십시오.'
+    : '피니시라인을 설정하십시오.', 'warn');
+});
 gpsPresetAdd?.addEventListener('click', () => {
   initializeGpsFixedLinePresets();
   const suggested = nextGpsPresetName();
