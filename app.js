@@ -1306,8 +1306,23 @@ function initializeGpsFixedLinePresets() {
       finish: Array.isArray(item.finish) ? item.finish : [],
       checkpoints: Array.isArray(item.checkpoints) ? item.checkpoints : []
     }));
+    // Earlier deployments could leave the migrated first preset empty or renamed.
+    // Keep the original shared finish/checkpoint set available as Option 1 on every browser.
+    let originalPreset = gpsFixedLinePresets.find(item => item.name === '옵션 1');
+    if (!originalPreset) {
+      originalPreset = createGpsPreset('옵션 1', GPS_SHARED_FIXED_LINES);
+      originalPreset.id = 'shared-option-1';
+      gpsFixedLinePresets.unshift(originalPreset);
+    } else if (!Array.isArray(originalPreset.finish) || originalPreset.finish.length !== 2) {
+      originalPreset.mode = 'circuit';
+      originalPreset.start = [];
+      originalPreset.finish = cloneGpsLines(GPS_SHARED_FIXED_LINES.finish);
+      originalPreset.checkpoints = cloneGpsLines(GPS_SHARED_FIXED_LINES.checkpoints);
+      originalPreset.savedAt = new Date().toISOString();
+    }
     gpsActivePresetId = gpsFixedLinePresets.some(item => item.id === stored.activeId)
       ? stored.activeId : gpsFixedLinePresets[0].id;
+    persistGpsFixedLinePresets();
   } else {
     let legacy = null;
     try {
