@@ -24,7 +24,7 @@
           crossorigin=""></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20260826-1">
+  <link rel="stylesheet" href="style.css?v=20260828-1">
 </head>
 <body>
 
@@ -92,6 +92,8 @@
             <div class="chart-label-bar">
               <span class="signal-title color-orange">FL Wheel Speed [EMU VSS]</span>
               <span class="signal-val val-sep" id="cursor-speed">--.-</span>
+              <span class="signal-title color-magenta">FR Wheel Speed [Wheel 2]</span>
+              <span class="signal-val val-sep" id="cursor-speed-fr">--.-</span>
               <span class="signal-title color-blue">RL Wheel Speed [km/h]</span>
               <span class="signal-val val-sep" id="cursor-speed-rl">--.-</span>
               <span class="signal-title color-green">RR Wheel Speed [Wheel 3]</span>
@@ -675,7 +677,7 @@
         </div>
         <div class="temperature-chart-grid">
           <article class="motec-chart-card temperature-chart-card">
-            <div class="chart-label-bar temperature-chart-label"><span class="signal-title">Coolant / Oil Temperature &amp; Vehicle Speed</span><div class="temperature-series-toggles" aria-label="표시할 데이터 선택"><button type="button" class="active coolant" data-temperature-chart="coolant" data-dataset="0" aria-pressed="true"><i></i>수온</button><button type="button" class="active oil" data-temperature-chart="coolant" data-dataset="1" aria-pressed="true"><i></i>유온</button><button type="button" class="active speed" data-temperature-chart="coolant" data-dataset="2" aria-pressed="true"><i></i>FL 속도</button></div><span class="signal-val">°C · km/h</span></div>
+            <div class="chart-label-bar temperature-chart-label"><span class="signal-title">Coolant / Oil Temperature &amp; Vehicle Speed</span><div class="temperature-series-toggles" aria-label="표시할 데이터 선택"><button type="button" class="active coolant" data-temperature-chart="coolant" data-dataset="0" aria-pressed="true"><i></i>수온</button><button type="button" class="active oil" data-temperature-chart="coolant" data-dataset="1" aria-pressed="true"><i></i>유온</button><button type="button" class="active speed" data-temperature-chart="coolant" data-dataset="2" aria-pressed="true"><i></i>FL 속도</button><button type="button" class="active speed-fr" data-temperature-chart="coolant" data-dataset="3" aria-pressed="true"><i></i>FR 속도</button></div><span class="signal-val">°C · km/h</span></div>
             <div class="canvas-holder chart-wrapper"><canvas id="chart-coolant-oil"></canvas></div>
           </article>
           <article class="motec-chart-card temperature-chart-card">
@@ -794,7 +796,7 @@
             <section class="help-section" id="help-page1">
               <div class="help-section-title"><span>1</span><div><h2>종합 주행 분석</h2><p>속도, 엔진, 기어, 조향과 페달 입력을 한 화면에서 비교합니다.</p></div><button type="button" data-help-tab="general">1페이지 열기</button></div>
               <div class="help-grid two">
-                <article class="help-card"><h3>차량 상태</h3><ul><li>FL·RL·RR 휠 속도 비교</li><li>엔진 RPM과 기어 변화 확인</li><li>스로틀과 브레이크가 겹치는 구간 확인</li></ul></article>
+                <article class="help-card"><h3>차량 상태</h3><ul><li>FL·FR·RL·RR 휠 속도 비교</li><li>엔진 RPM과 기어 변화 확인</li><li>스로틀과 브레이크가 겹치는 구간 확인</li></ul></article>
                 <article class="help-card"><h3>조향 그래프</h3><ul><li><b>Yaw</b>와 <b>횡G</b> 버튼을 눌러 선을 켜거나 끕니다.</li><li>핸들 옆 톱니를 눌러 영점·반전·조향 Y축 범위를 설정합니다.</li><li>조향 Y축 설정은 표시 범위만 바꾸며 실제 조향각 값은 바꾸지 않습니다.</li></ul></article>
               </div>
             </section>
@@ -865,7 +867,7 @@
             <section class="help-section" id="help-page4">
               <div class="help-section-title"><span>4</span><div><h2>랩 구간 분석</h2><p>선택한 한 랩의 모든 주요 채널을 같은 시간 또는 거리축에서 정밀하게 확인합니다.</p></div><button type="button" data-help-tab="temperature">4페이지 열기</button></div>
               <div class="help-grid two">
-                <article class="help-card"><h3>7개 동기화 그래프</h3><ul><li>GPS·FL·RL·RR 속도</li><li>RPM·TPS, 기어, TPS·브레이크</li><li>조향·Yaw rate, 종·횡G, 냉각수·유온</li><li>제목의 채널 버튼으로 원하는 선만 켜거나 끕니다.</li></ul></article>
+                <article class="help-card"><h3>7개 동기화 그래프</h3><ul><li>GPS·FL·FR·RL·RR 속도</li><li>RPM·TPS, 기어, TPS·브레이크</li><li>조향·Yaw rate, 종·횡G, 냉각수·유온</li><li>제목의 채널 버튼으로 원하는 선만 켜거나 끕니다.</li></ul></article>
                 <article class="help-card"><h3>랩과 구간 선택</h3><ul><li>오른쪽에서 랩과 START·CP·FINISH 구간을 선택합니다.</li><li>재생 중 모든 그래프, G 원, 트랙 위치가 같은 시점으로 움직입니다.</li><li>하단에서 선택 랩 범위 안의 구간을 직접 입력하거나 커서 막대로 이동합니다.</li></ul></article>
                 <article class="help-card"><h3>확대·이동</h3><ul><li>휠은 주황색 커서선을 기준으로 확대·축소합니다.</li><li>그래프를 클릭한 채 좌우로 드래그하면 커서와 표시 구간이 이동합니다.</li><li><kbd>←</kbd><kbd>→</kbd>는 0.1초, <kbd>Shift</kbd>와 함께 누르면 0.01초 이동합니다.</li></ul></article>
                 <article class="help-card"><h3>거리축 비교</h3><ul><li>거리 모드에서는 센서값을 공통 대표 경로상의 위치로 변환합니다.</li><li>현재 중심선은 12개 정상 랩, 1m 간격 864점, 총 862.556m입니다.</li><li>오토크로스 역주행 CSV는 GPS 또는 드라이버·랩 비교 화면에서 <b>역방향</b>을 먼저 선택합니다.</li><li>0.1m 표시는 보간 단위이며 GPS 절대 정확도가 10cm라는 뜻은 아닙니다.</li></ul><button class="help-inline-action" type="button" data-distance-method-open>거리 측정 방식 자세히</button></article>
@@ -988,11 +990,11 @@
 
   <!-- Custom JS -->
   <script src="suspension.js?v=20260810-1"></script>
-  <script src="filters.js?v=20260825-2"></script>
+  <script src="filters.js?v=20260828-1"></script>
   <script src="steering.js?v=20260820-1"></script>
   <script src="realtime.js?v=20260802-4"></script>
   <script src="track-reference.js?v=20260824-2"></script>
-  <script src="app.js?v=20260826-1"></script>
+  <script src="app.js?v=20260828-1"></script>
   <script src="comparison.js?v=20260826-1"></script>
 </body>
 </html>

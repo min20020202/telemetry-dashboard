@@ -78,6 +78,7 @@ const statusText = document.getElementById('status-text');
 
 // Cursor Realtime Value DOMs (Page 1)
 const cursorSpeed = document.getElementById('cursor-speed');
+const cursorSpeedFr = document.getElementById('cursor-speed-fr');
 const cursorSpeedRl = document.getElementById('cursor-speed-rl');
 const cursorSpeedRr = document.getElementById('cursor-speed-rr');
 const cursorRpm = document.getElementById('cursor-rpm');
@@ -1802,6 +1803,7 @@ const PAGE4_CHART_SPECS = [
   { id: 'p4-chart-speed', min: 0, series: [
     ['GPS', '#06b6d4', r => Number(r.gps_speed_kmh) || 0],
     ['FL', '#f97316', r => Number(r.fl_speed_kmh) || 0],
+    ['FR', '#db2777', r => Number(r.fr_speed_kmh) || 0],
     ['RL', '#2563eb', r => Number(r.rl_speed_kmh) || 0],
     ['RR', '#16a34a', r => Number(r.rr_speed_kmh) || 0]
   ]},
@@ -2875,7 +2877,7 @@ function updatePage4Widgets(row) {
   const steering = channelValueAt('steering', rowIndex) ?? getCalibratedSteering(row.steering_raw);
   const yaw = page4SeriesValue(PAGE4_CHART_SPECS[4].series[1], row, rowIndex);
   const gx = page4SeriesValue(PAGE4_CHART_SPECS[5].series[0], row, rowIndex), gy = page4SeriesValue(PAGE4_CHART_SPECS[5].series[1], row, rowIndex);
-  set('p4-speed', `GPS ${speed.toFixed(1)} · FL ${(Number(row.fl_speed_kmh) || 0).toFixed(1)} · RL ${(Number(row.rl_speed_kmh) || 0).toFixed(1)} · RR ${(Number(row.rr_speed_kmh) || 0).toFixed(1)} km/h`); set('p4-rpm-tps', `${Math.round(rpm)} rpm · ${tps.toFixed(1)}%`);
+  set('p4-speed', `GPS ${speed.toFixed(1)} · FL ${(Number(row.fl_speed_kmh) || 0).toFixed(1)} · FR ${(Number(row.fr_speed_kmh) || 0).toFixed(1)} · RL ${(Number(row.rl_speed_kmh) || 0).toFixed(1)} · RR ${(Number(row.rr_speed_kmh) || 0).toFixed(1)} km/h`); set('p4-rpm-tps', `${Math.round(rpm)} rpm · ${tps.toFixed(1)}%`);
   set('p4-gear', Number(row.gear) > 0 ? String(Math.round(row.gear)) : 'N'); set('p4-pedals', `T ${tps.toFixed(1)} · B ${brake.toFixed(1)}%`);
   set('p4-steering-yaw', `${steering.toFixed(1)}° · ${yaw.toFixed(1)}°/s`); set('p4-imu', `X ${gx.toFixed(2)} · Y ${gy.toFixed(2)} g`);
   set('p4-temp', `${Math.round(Number(row.water_c) || 0)} · ${Math.round(Number(row.oil_c) || 0)} °C`); set('p4-gx', gx.toFixed(2)); set('p4-gy', gy.toFixed(2));
@@ -2907,7 +2909,7 @@ function updatePage4ComparisonHeaders(primaryTime = page4CursorTime) {
     const gy = page4SeriesValue(PAGE4_CHART_SPECS[5].series[1], row, item.session.id === page4ActiveSessionId ? index : undefined);
     return {
       item, color: PAGE4_LAP_COLORS[item.selectionIndex],
-      speed: `GPS ${(Number(row.gps_speed_kmh) || 0).toFixed(1)} · FL ${(Number(row.fl_speed_kmh) || 0).toFixed(1)} · RL ${(Number(row.rl_speed_kmh) || 0).toFixed(1)} · RR ${(Number(row.rr_speed_kmh) || 0).toFixed(1)} km/h`,
+      speed: `GPS ${(Number(row.gps_speed_kmh) || 0).toFixed(1)} · FL ${(Number(row.fl_speed_kmh) || 0).toFixed(1)} · FR ${(Number(row.fr_speed_kmh) || 0).toFixed(1)} · RL ${(Number(row.rl_speed_kmh) || 0).toFixed(1)} · RR ${(Number(row.rr_speed_kmh) || 0).toFixed(1)} km/h`,
       rpm: `${Math.round(Number(row.rpm) || 0)} rpm · ${(Number(row.decoded_tps) || 0).toFixed(1)}%`,
       gear: Number(row.gear) > 0 ? String(Math.round(row.gear)) : 'N',
       pedals: `T ${(Number(row.decoded_tps) || 0).toFixed(1)} · B ${getCalibratedBrake(row.front_brake_raw).toFixed(1)}%`,
@@ -3109,7 +3111,7 @@ function ensureGpsDetailCharts() {
   if (gpsDetailCharts.length && gpsDetailSourceData === globalData) return;
   destroyGpsDetailCharts();
   const specs = [
-    ['gps-detail-speed', chartSpeed, ['#f97316', '#2563eb', '#16a34a']],
+    ['gps-detail-speed', chartSpeed, ['#f97316', '#db2777', '#2563eb', '#16a34a']],
     ['gps-detail-rpm', chartRpm, ['#dc2626']],
     ['gps-detail-gear', chartGear, ['#2563eb']],
     ['gps-detail-steering', chartSteering, ['#db2777']],
@@ -3246,6 +3248,7 @@ function updateGpsDetailReadouts(targetTime) {
   const row = index >= 0 ? globalData[index] : null;
   if (!row) return;
   const fl = detailChannelValue('fl_speed', row, index, r => Number(r.fl_speed_kmh) || 0);
+  const fr = detailChannelValue('fr_speed', row, index, r => Number(r.fr_speed_kmh) || 0);
   const rl = detailChannelValue('rl_speed', row, index, r => Number(r.rl_speed_kmh) || 0);
   const rr = detailChannelValue('rr_speed', row, index, r => Number(r.rr_speed_kmh) || 0);
   const rpm = detailChannelValue('rpm', row, index, r => Number(r.rpm) || 0);
@@ -3253,7 +3256,7 @@ function updateGpsDetailReadouts(targetTime) {
   const steering = detailChannelValue('steering', row, index, r => getCalibratedSteering(r.steering_raw));
   const throttle = detailChannelValue('throttle', row, index, r => Number(r.decoded_tps) || 0);
   const brake = detailChannelValue('brake', row, index, r => getCalibratedBrake(r.front_brake_raw));
-  if (gpsDetailSpeedValue) gpsDetailSpeedValue.textContent = `FL ${fl.toFixed(1)} · RL ${rl.toFixed(1)} · RR ${rr.toFixed(1)} km/h`;
+  if (gpsDetailSpeedValue) gpsDetailSpeedValue.textContent = `FL ${fl.toFixed(1)} · FR ${fr.toFixed(1)} · RL ${rl.toFixed(1)} · RR ${rr.toFixed(1)} km/h`;
   if (gpsDetailRpmValue) gpsDetailRpmValue.textContent = `${Math.round(rpm)} rpm`;
   if (gpsDetailGearValue) gpsDetailGearValue.textContent = gear > 0 ? String(Math.round(gear)) : 'N';
   if (gpsDetailSteeringValue) gpsDetailSteeringValue.textContent = `${steering >= 0 ? '+' : ''}${steering.toFixed(1)}°`;
@@ -5550,6 +5553,7 @@ function updateNumericDisplays(row, gpsPositionOverride = null, displayTimeOverr
 
   // Page 1 Labels (노이즈 필터 적용값 기준)
   cursorSpeed.textContent = cursorChannelValue('fl_speed', row.fl_speed_kmh || 0).toFixed(1);
+  if (cursorSpeedFr) cursorSpeedFr.textContent = cursorChannelValue('fr_speed', row.fr_speed_kmh || 0).toFixed(1);
   if (cursorSpeedRl) cursorSpeedRl.textContent = cursorChannelValue('rl_speed', row.rl_speed_kmh || 0).toFixed(1);
   if (cursorSpeedRr) cursorSpeedRr.textContent = cursorChannelValue('rr_speed', row.rr_speed_kmh || 0).toFixed(1);
   cursorRpm.textContent = Math.round(cursorChannelValue('rpm', row.rpm || 0));
@@ -5938,6 +5942,8 @@ function initDataAndDashboard() {
 
     // Front-left wheel speed comes from EMU VSS (0x602 bytes 0..1).
     row.fl_speed_kmh = latestSpeedKmh;
+    // Front-right wheel speed comes from Wheel/Speed 2 on the datalogger.
+    row.fr_speed_kmh = (parseHexOrInt(row.wheel2_speed_centi_kmh) || 0) / 100.0;
     // Rear-left wheel speed comes from the dedicated datalogger wheel channel.
     row.rl_speed_kmh = (parseHexOrInt(row.rl_wheel_speed_centi_kmh ??
       row.wheel4_speed_centi_kmh) || 0) / 100.0;
@@ -6199,7 +6205,7 @@ function downsampleEnvelopePoints(points, limit) {
 // Effective sensor rates measured from 김도현1.csv using each source's own
 // timestamp/counter (not by counting the logger's repeated 100 Hz rows).
 const CHANNEL_SOURCE_HZ = {
-  fl_speed: 100, rl_speed: 100, rr_speed: 100,
+  fl_speed: 100, fr_speed: 100, rl_speed: 100, rr_speed: 100,
   steering: 100, brake: 100,
   sus_fl: 100, sus_fr: 100, sus_rl: 100, sus_rr: 100,
   imu_ax: 50, imu_ay: 50, imu_gx: 50, imu_gy: 50, imu_gz: 50,
@@ -6541,6 +6547,14 @@ function renderMotecCharts(data) {
           fill: false
         },
         {
+          label: 'FR Wheel Speed',
+          data: S('fr_speed', r => r.fr_speed_kmh || 0),
+          borderColor: '#db2777',
+          borderWidth: 1.4,
+          pointRadius: 0,
+          fill: false
+        },
+        {
           label: 'RL Wheel Speed',
           data: S('rl_speed', r => r.rl_speed_kmh || 0),
           borderColor: '#2563eb',
@@ -6819,7 +6833,8 @@ function renderMotecCharts(data) {
       data: { datasets: [
         { label: 'Coolant', data: S('water', r => r.water_c || 0), borderColor: '#2563eb', borderWidth: 1.5, pointRadius: 0, fill: false },
         { label: 'Oil', data: S('oil', r => r.oil_c || 0), borderColor: '#f97316', borderWidth: 1.5, pointRadius: 0, fill: false },
-        { label: 'FL Speed', data: S('fl_speed', r => r.fl_speed_kmh || 0), borderColor: '#06b6d4', borderWidth: 1.1, borderDash: [6, 4], pointRadius: 0, fill: false, yAxisID: 'ySpeed' }
+        { label: 'FL Speed', data: S('fl_speed', r => r.fl_speed_kmh || 0), borderColor: '#06b6d4', borderWidth: 1.1, borderDash: [6, 4], pointRadius: 0, fill: false, yAxisID: 'ySpeed' },
+        { label: 'FR Speed', data: S('fr_speed', r => r.fr_speed_kmh || 0), borderColor: '#db2777', borderWidth: 1.1, borderDash: [3, 3], pointRadius: 0, fill: false, yAxisID: 'ySpeed' }
       ] },
       options: coolantOptions
     });
