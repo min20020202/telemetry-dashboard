@@ -1576,6 +1576,7 @@ function handleGpsCheckpointMapClick(event) {
   drawGpsCheckpoints();
   saveGpsFixedLines();
   renderGpsSectorComparison();
+  syncPrimaryDashboardLapSnapshot();
   refreshPage4Selectors();
   setGpsLapStatus(`CP${gpsCheckpoints.length} 저장 완료 · 다음 체크포인트는 주행 순서대로 추가하십시오.`, 'ok');
 }
@@ -3657,6 +3658,7 @@ function renderGpsLapResults(crossings, laps) {
     : NaN;
   renderFullscreenLapTimes(laps, best);
   refreshPage4Selectors();
+  syncPrimaryDashboardLapSnapshot();
   if (gpsLapBestTime) gpsLapBestTime.textContent = formatLapTime(best);
   if (gpsLapAverageDistance) gpsLapAverageDistance.textContent = formatGpsLapDistance(averageDistance);
   if (gpsLapFixSummary) {
@@ -3721,6 +3723,16 @@ function renderGpsLapResults(crossings, laps) {
   }).join('');
   if (gpsCheckpointAdd) gpsCheckpointAdd.disabled = !laps.length;
   if (gpsCheckpoints.length) renderGpsSectorComparison();
+}
+
+function syncPrimaryDashboardLapSnapshot() {
+  if (!primaryDashboardSnapshot || primaryDashboardSnapshot.file !== primaryDashboardFile) return;
+  primaryDashboardSnapshot.rows = globalData;
+  primaryDashboardSnapshot.gpsPoints = gpsLapPoints.map(point => ({ ...point }));
+  primaryDashboardSnapshot.laps = gpsLapResults.map(lap => ({ ...lap }));
+  primaryDashboardSnapshot.checkpoints = gpsCheckpoints.map(line => line.map(point => ({ ...point })));
+  window.setPrimaryPage4Session?.(primaryDashboardSnapshot);
+  window.setPrimaryComparisonSession?.(primaryDashboardSnapshot);
 }
 
 function getGpsSectorMetrics(startTime, endTime, exitSpeed) {
