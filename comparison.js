@@ -76,7 +76,8 @@
         rows: snapshot.rows,
         gpsPoints: (snapshot.gpsPoints || []).map(point => ({ ...point })),
         laps,
-        checkpoints: (snapshot.checkpoints || []).map(line => line.map(point => ({ ...point })))
+        checkpoints: (snapshot.checkpoints || []).map(line => line.map(point => ({ ...point }))),
+        timingMode: snapshot.timingMode === 'sprint' ? 'sprint' : 'circuit'
       };
       applyComparisonImuFilter(session);
       state.sessions.push(session);
@@ -645,6 +646,7 @@
   }
 
   function checkpointDistances(items) {
+    if (items[0]?.session.timingMode === 'sprint') return orderedCheckpointLines(items).map(item => item.distance);
     const source = items[0]?.session.checkpoints || [];
     return source.map(checkpointReferenceDistance)
       .filter(Number.isFinite).filter(distance => distance > 2 && distance < totalDistance() - 2).sort((a, b) => a - b);
@@ -667,6 +669,20 @@
 
   function orderedCheckpointLines(items) {
     const source = items[0]?.session.checkpoints || [];
+    if (items[0]?.session.timingMode === 'sprint') {
+      const referenceItem = items[0];
+      const passages = [];
+      source.forEach((line, sourceIndex) => {
+        findAllLapLineCrossings(referenceItem, line).forEach((crossing, occurrenceIndex) => passages.push({ line, sourceIndex, occurrenceIndex, crossing }));
+      });
+      passages.sort((left, right) => left.crossing.time - right.crossing.time);
+      return passages.map((passage, passageIndex) => ({
+        ...passage, passageIndex,
+        label: `CP${passage.sourceIndex + 1} · ${passage.occurrenceIndex + 1}회`,
+        distance: Math.max(.001, Math.min(totalDistance() - .001,
+          (passage.crossing.time - referenceItem.lap.startTime) / Math.max(.001, referenceItem.lap.duration) * totalDistance()))
+      }));
+    }
     return source.map((line, sourceIndex) => {
       if (!line?.[0] || !line?.[1]) return null;
       const distance = checkpointReferenceDistance(line);
@@ -684,31 +700,30 @@
     };
   }
 
-  function findLapLineCrossing(item, line, afterTime) {
-    const fixes = item.session.gpsPoints
-      .filter(point => point.time >= item.lap.startTime - .05 && point.time <= item.lap.endTime + .05)
-      .sort((a, b) => a.time - b.time);
-    if (fixes.length < 2) return null;
-    const origin = line[0];
-    const lat0 = origin.lat * Math.PI / 180, mLat = 111320, mLon = mLat * Math.cos(lat0);
+  function findAllLapLineCrossings(item, line) {
+    const fixes = item.session.gpsPoints.filter(point => point.time >= item.lap.startTime - .05 && point.time <= item.lap.endTime + .05).sort((a, b) => a.time - b.time);
+    if (fixes.length < 2 || !line?.[0] || !line?.[1]) return [];
+    const origin = line[0], lat0 = origin.lat * Math.PI / 180, mLat = 111320, mLon = mLat * Math.cos(lat0);
     const local = point => ({ x: (point.lon - origin.lon) * mLon, y: (point.lat - origin.lat) * mLat });
-    const a = local(line[0]), b = local(line[1]);
-    const rx = b.x - a.x, ry = b.y - a.y;
+    const a = local(line[0]), b = local(line[1]), rx = b.x - a.x, ry = b.y - a.y;
+    const crossings = [];
     for (let index = 1; index < fixes.length; index += 1) {
-      const previous = fixes[index - 1], current = fixes[index];
-      if (current.time <= afterTime + .001) continue;
-      const p = local(previous), q = local(current), sx = q.x - p.x, sy = q.y - p.y;
-      const denominator = sx * ry - sy * rx;
+      const previous = fixes[index - 1], current = fixes[index], p = local(previous), q = local(current);
+      const sx = q.x - p.x, sy = q.y - p.y, denominator = sx * ry - sy * rx;
       if (Math.abs(denominator) < 1e-9) continue;
       const dx = a.x - p.x, dy = a.y - p.y;
-      const travelRatio = (dx * ry - dy * rx) / denominator;
-      const lineRatio = (dx * sy - dy * sx) / denominator;
+      const travelRatio = (dx * ry - dy * rx) / denominator, lineRatio = (dx * sy - dy * sx) / denominator;
       if (travelRatio < 0 || travelRatio > 1 || lineRatio < 0 || lineRatio > 1) continue;
       const time = previous.time + (current.time - previous.time) * travelRatio;
-      if (time <= afterTime + .001 || time >= item.lap.endTime - .001) continue;
-      return interpolateGpsPoint(previous, current, travelRatio, time);
+      if (time <= item.lap.startTime + .001 || time >= item.lap.endTime - .001) continue;
+      if (crossings.length && time - crossings.at(-1).time < .5) continue;
+      crossings.push(interpolateGpsPoint(previous, current, travelRatio, time));
     }
-    return null;
+    return crossings;
+  }
+
+  function findLapLineCrossing(item, line, afterTime) {
+    return findAllLapLineCrossings(item, line).find(point => point.time > afterTime + .001) || null;
   }
 
   function lapPointAtTime(item, time) {
@@ -729,7 +744,7 @@
 
   function lapSectorBoundaries(item, items) {
     const definitions = orderedCheckpointLines(items);
-    const signature = definitions.map(({ line }) => line.map(point => `${Number(point.lat).toFixed(7)},${Number(point.lon).toFixed(7)}`).join(':')).join('|');
+    const signature = definitions.map(({ line, occurrenceIndex = 0 }) => `${occurrenceIndex}@${line.map(point => `${Number(point.lat).toFixed(7)},${Number(point.lon).toFixed(7)}`).join(':')}`).join('|');
     const cacheKey = `${item.key}|${signature}`;
     if (state.sectorCache.has(cacheKey)) return state.sectorCache.get(cacheKey);
     const start = lapPointAtTime(item, item.lap.startTime);
@@ -1028,6 +1043,12 @@
     const isActive = index => state.activeSector !== null && index >= state.activeSector && index <= state.activeSectorEnd;
     const options = bounds.slice(0, -1).map((_, index) => `<option value="${index}" ${index === state.activeSector ? 'selected' : ''}>S${index + 1}</option>`).join('');
     const endOptions = bounds.slice(0, -1).map((_, index) => `<option value="${index}" ${index === state.activeSectorEnd ? 'selected' : ''}>S${index + 1}</option>`).join('');
+    const passageDefinitions = orderedCheckpointLines(items);
+    const sectorCaption = index => items[0]?.session.timingMode === 'sprint'
+      ? (index === 0
+        ? `START → ${passageDefinitions[0]?.label || 'FINISH'}`
+        : `${passageDefinitions[index - 1]?.label || 'START'} → ${passageDefinitions[index]?.label || 'FINISH'}`)
+      : `${bounds[index].toFixed(0)}–${bounds[index + 1].toFixed(0)}m`;
     const rangeSummary = state.activeSector === null ? '' : `<div class="comparison-sector-selection-summary"><b>S${state.activeSector + 1}${state.activeSectorEnd > state.activeSector ? `–S${state.activeSectorEnd + 1}` : ''} 소요시간</b>${cells.map(cell => {
       const timing = sectorRangeTiming(cell.item, state.activeSector, state.activeSectorEnd, items);
       return `<span style="--session-color:${COLORS[cell.index]}">${escapeHtml(cell.item.session.driver)}&nbsp;L${cell.item.lap.number} <strong>${timing ? `${timing.duration.toFixed(3)}s` : '통과 기록 없음'}</strong></span>`;
@@ -1039,7 +1060,7 @@
       const validDurations = durations.filter(Number.isFinite);
       const fastest = validDurations.length ? Math.min(...validDurations) : NaN;
       const referenceDuration = durations[0];
-      return `<tr class="${isActive(sectorIndex) ? 'active' : ''}" data-sector-row="${sectorIndex}"><td><button type="button" data-sector="${sectorIndex}">S${sectorIndex + 1}</button><br><small>${start.toFixed(0)}–${end.toFixed(0)}m</small></td>${cells.map(cell => {
+      return `<tr class="${isActive(sectorIndex) ? 'active' : ''}" data-sector-row="${sectorIndex}"><td><button type="button" data-sector="${sectorIndex}">S${sectorIndex + 1}</button><br><small>${sectorCaption(sectorIndex)}</small></td>${cells.map(cell => {
         const duration = durations[cell.index];
         const isFastest = Number.isFinite(duration) && Math.abs(duration - fastest) < .0005;
         const compactComparison = cell.index > 0
@@ -1227,7 +1248,9 @@
   function updateCount() { if (ui.count) ui.count.textContent = `${state.selected.size} / 4 선택`; }
   function render() {
     const items = selectedLaps(); updateCount(); renderSummary(items); renderCharts(items); renderSectors(items); syncPlaybackUi(items); renderMap(items);
-    if (items.length) setStatus(`${items.length}개 랩을 1 m 간격 공통 중심선 거리축으로 비교 중입니다.`);
+    if (items.length) setStatus(items[0]?.session.timingMode === 'sprint'
+      ? `${items.length}개 스키드 랩 · 실제 체크포인트 통과 시각 순서로 비교 중입니다.`
+      : `${items.length}개 랩을 1 m 간격 공통 중심선 거리축으로 비교 중입니다.`);
   }
   window.renderDriverComparison = render;
   window.stopDriverComparisonPlayback = () => setPlaying(false);

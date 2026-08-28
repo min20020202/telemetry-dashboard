@@ -460,12 +460,12 @@ const GPS_SHARED_FIXED_LINES = Object.freeze({
 });
 const GPS_SHARED_EXTRA_PRESETS = Object.freeze([{
   id: 'track-1787918061692-zwyq8',
-  name: '테윅2',
+  name: '스키드',
   mode: 'sprint',
-  start: [{ lat: 35.2921619790249, lon: 126.57441705465318 }, { lat: 35.29218058776346, lon: 126.57446533441546 }],
-  finish: [{ lat: 35.292424690231904, lon: 126.57429099082948 }, { lat: 35.292443298910065, lon: 126.57434329390529 }],
-  checkpoints: GPS_SHARED_FIXED_LINES.checkpoints,
-  savedAt: '2026-08-28T13:07:14.390Z'
+  start: [{ lat: 35.29217183071056, lon: 126.57440900802614 }, { lat: 35.292187155552526, lon: 126.5744572877884 }],
+  finish: [{ lat: 35.29242140634708, lon: 126.57429635524751 }, { lat: 35.2924367311418, lon: 126.57434329390529 }],
+  checkpoints: [[{ lat: 35.29228348306411, lon: 126.57436206936838 }, { lat: 35.292300997144814, lon: 126.57441571354867 }]],
+  savedAt: '2026-08-28T13:18:43.337Z'
 }]);
 let gpsFixedLinePresets = [];
 let gpsActivePresetId = '';
@@ -1268,6 +1268,27 @@ function findGpsLineCrossings(linePoints, minimumSpeed = 1) {
   return crossings;
 }
 
+function getGpsLapCheckpointPassages(lap, minimumSpeed = 0.1) {
+  if (!lap) return [];
+  const occurrences = new Map();
+  const passages = [];
+  gpsCheckpoints.forEach((checkpoint, checkpointIndex) => {
+    let previousTime = -Infinity;
+    findGpsLineCrossings(checkpoint, minimumSpeed).forEach(crossing => {
+      if (crossing.time <= lap.startTime + 0.02 || crossing.time >= lap.endTime - 0.02) return;
+      if (crossing.time - previousTime < 0.5) return;
+      previousTime = crossing.time;
+      passages.push({ ...crossing, checkpointIndex });
+    });
+  });
+  passages.sort((left, right) => left.time - right.time);
+  return passages.map(passage => {
+    const occurrence = (occurrences.get(passage.checkpointIndex) || 0) + 1;
+    occurrences.set(passage.checkpointIndex, occurrence);
+    return { ...passage, occurrence, label: `CP${passage.checkpointIndex + 1} · ${occurrence}회` };
+  });
+}
+
 function cloneGpsLines(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -1317,18 +1338,20 @@ function initializeGpsFixedLinePresets() {
     }));
     // Earlier deployments could leave the migrated first preset empty or renamed.
     // Keep the original shared finish/checkpoint set available as Option 1 on every browser.
-    let originalPreset = gpsFixedLinePresets.find(item => item.name === '옵션 1');
+    let originalPreset = gpsFixedLinePresets.find(item => item.id === 'shared-option-1')
+      || gpsFixedLinePresets.find(item => item.name === '옵션 1' || item.name === '테윅2');
     if (!originalPreset) {
-      originalPreset = createGpsPreset('옵션 1', GPS_SHARED_FIXED_LINES);
+      originalPreset = createGpsPreset('테윅2', GPS_SHARED_FIXED_LINES);
       originalPreset.id = 'shared-option-1';
       gpsFixedLinePresets.unshift(originalPreset);
-    } else if (!Array.isArray(originalPreset.finish) || originalPreset.finish.length !== 2) {
-      originalPreset.mode = 'circuit';
-      originalPreset.start = [];
-      originalPreset.finish = cloneGpsLines(GPS_SHARED_FIXED_LINES.finish);
-      originalPreset.checkpoints = cloneGpsLines(GPS_SHARED_FIXED_LINES.checkpoints);
-      originalPreset.savedAt = new Date().toISOString();
     }
+    originalPreset.id = 'shared-option-1';
+    originalPreset.name = '테윅2';
+    originalPreset.mode = 'circuit';
+    originalPreset.start = [];
+    originalPreset.finish = cloneGpsLines(GPS_SHARED_FIXED_LINES.finish);
+    originalPreset.checkpoints = cloneGpsLines(GPS_SHARED_FIXED_LINES.checkpoints);
+    originalPreset.savedAt = '2026-08-28T13:08:31.590Z';
     gpsActivePresetId = gpsFixedLinePresets.some(item => item.id === stored.activeId)
       ? stored.activeId : gpsFixedLinePresets[0].id;
     persistGpsFixedLinePresets();
@@ -1339,9 +1362,11 @@ function initializeGpsFixedLinePresets() {
       if (raw) legacy = JSON.parse(raw);
     } catch (error) {}
     const initial = legacy?.finish?.length === 2 ? legacy : GPS_SHARED_FIXED_LINES;
-    const preset = createGpsPreset('옵션 1', initial);
+    const preset = createGpsPreset('테윅2', initial);
+    preset.id = 'shared-option-1';
+    preset.savedAt = '2026-08-28T13:08:31.590Z';
     gpsFixedLinePresets = [preset];
-    gpsActivePresetId = preset.id;
+    gpsActivePresetId = 'track-1787918061692-zwyq8';
     persistGpsFixedLinePresets();
   }
   GPS_SHARED_EXTRA_PRESETS.forEach(shared => {
@@ -1451,6 +1476,10 @@ function restoreGpsFixedLines() {
   }
   persistGpsFixedLinePresets();
   renderGpsFixedLinePresetControl();
+  if (saved.mode === 'sprint') {
+    page4AxisMode = 'time';
+    p4AxisModeControl?.querySelectorAll('button[data-mode]').forEach(button => button.classList.toggle('active', button.dataset.mode === 'time'));
+  }
   gpsFinishPoints = saved.finish.map(point => ({ lat: Number(point.lat), lon: Number(point.lon) }));
   gpsStartPoints = Array.isArray(saved.start) ? cloneGpsLines(saved.start) : [];
   if (Array.isArray(saved.checkpoints)) {
@@ -1473,6 +1502,10 @@ function applyGpsFixedLinePreset(presetId) {
   gpsActivePresetId = preset.id;
   persistGpsFixedLinePresets();
   renderGpsFixedLinePresetControl();
+  if (preset.mode === 'sprint') {
+    page4AxisMode = 'time';
+    p4AxisModeControl?.querySelectorAll('button[data-mode]').forEach(button => button.classList.toggle('active', button.dataset.mode === 'time'));
+  }
   clearGpsLapAnalysis(false, true);
   if (!Array.isArray(preset.finish) || preset.finish.length !== 2) {
     setGpsLapStatus(`${preset.name}은 비어 있습니다. 피니시 라인을 설정하십시오.`, 'warn');
@@ -2324,11 +2357,7 @@ function page4LapBoundaries(lapIndex) {
   const lap = gpsLapResults[lapIndex];
   if (!lap) return [];
   const boundaries = [{ label: 'START', time: lap.startTime }];
-  gpsCheckpoints.forEach((checkpoint, index) => {
-    const crossings = findGpsLineCrossings(checkpoint, 0.1);
-    const crossing = crossings.find(item => item.time > lap.startTime + 0.02 && item.time < lap.endTime - 0.02);
-    if (crossing) boundaries.push({ label: `CP${index + 1}`, time: crossing.time });
-  });
+  getGpsLapCheckpointPassages(lap, 0.1).forEach(passage => boundaries.push({ label: passage.label, time: passage.time }));
   boundaries.sort((a, b) => a.time - b.time);
   boundaries.push({ label: 'FINISH', time: lap.endTime });
   cachedPage4LapIndex = lapIndex;
@@ -3795,26 +3824,27 @@ function renderGpsSectorComparison() {
     gpsSectorTable.innerHTML = '';
     return;
   }
-  const checkpointCrossings = gpsCheckpoints.map(checkpoint => findGpsLineCrossings(checkpoint, 3));
   const lapIndexes = gpsSelectedLapIndices.length
     ? gpsSelectedLapIndices
     : gpsLapResults.map((_, index) => index);
-  const sectors = gpsCheckpoints.map((_, checkpointIndex) => ({ name: `S${checkpointIndex + 1} → CP${checkpointIndex + 1}`, rows: [] }));
-  sectors.push({ name: `S${gpsCheckpoints.length + 1} → FINISH`, rows: [] });
+  const referencePassages = getGpsLapCheckpointPassages(gpsLapResults[lapIndexes[0]], 3);
+  const sectors = referencePassages.map((passage, index) => ({ name: `S${index + 1} → ${passage.label}`, rows: [] }));
+  sectors.push({ name: `S${referencePassages.length + 1} → FINISH`, rows: [] });
 
   lapIndexes.forEach(lapIndex => {
     const lap = gpsLapResults[lapIndex];
     let sectorStart = lap.startTime;
     let valid = true;
-    checkpointCrossings.forEach((crossings, checkpointIndex) => {
+    const passages = getGpsLapCheckpointPassages(lap, 3);
+    referencePassages.forEach((referencePassage, passageIndex) => {
       if (!valid) return;
-      const crossing = crossings.find(item => item.time > sectorStart + 0.05 && item.time < lap.endTime - 0.05);
-      if (!crossing) {
-        sectors[checkpointIndex].rows.push({ lapIndex, missing: true });
+      const crossing = passages[passageIndex];
+      if (!crossing || crossing.checkpointIndex !== referencePassage.checkpointIndex) {
+        sectors[passageIndex].rows.push({ lapIndex, missing: true });
         valid = false;
         return;
       }
-      sectors[checkpointIndex].rows.push({ lapIndex, ...getGpsSectorMetrics(sectorStart, crossing.time, crossing.speed) });
+      sectors[passageIndex].rows.push({ lapIndex, ...getGpsSectorMetrics(sectorStart, crossing.time, crossing.speed) });
       sectorStart = crossing.time;
     });
     if (valid) {
@@ -4002,7 +4032,7 @@ function calculateGpsLaps() {
 
   // 첫 통과 방향을 정방향으로 삼고 반대 방향 통과와 근접 중복 검출을 제거합니다.
   const forwardDirection = candidates[0].direction;
-  const minLapSeconds = Math.max(5, Number(gpsLapMinTime?.value) || 20);
+  const minLapSeconds = Math.max(0.5, Number(gpsLapMinTime?.value) || 5);
   const crossings = [];
   candidates.forEach(candidate => {
     if (candidate.direction !== forwardDirection) return;
@@ -6100,7 +6130,8 @@ function handleFile(file, options = {}) {
         rows: globalData,
         gpsPoints: gpsLapPoints,
         laps: gpsLapResults,
-        checkpoints: gpsCheckpoints
+        checkpoints: gpsCheckpoints,
+        timingMode: gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit'
       };
       if (!options.skipUpload) primaryDashboardSnapshot = snapshot;
       if (typeof options.onComplete === 'function') {
