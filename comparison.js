@@ -676,9 +676,23 @@
     return Number.isFinite(projected) ? directedDistance(projected) : NaN;
   }
 
+  function isSprintMode(items = []) {
+    if (typeof gpsTimingMode !== 'undefined' && gpsTimingMode?.value === 'sprint') return true;
+    if (items?.[0]?.session?.timingMode === 'sprint') return true;
+    if (state.sessions.some(s => s.timingMode === 'sprint')) return true;
+    return false;
+  }
+
+  function getComparisonCheckpoints(items = []) {
+    if (typeof gpsCheckpoints !== 'undefined' && Array.isArray(gpsCheckpoints) && gpsCheckpoints.length) return gpsCheckpoints;
+    if (items?.[0]?.session?.checkpoints?.length) return items[0].session.checkpoints;
+    if (state.sessions[0]?.checkpoints?.length) return state.sessions[0].checkpoints;
+    return [];
+  }
+
   function checkpointDistances(items) {
-    if (items[0]?.session.timingMode === 'sprint') return orderedCheckpointLines(items).map(item => item.distance);
-    const source = items[0]?.session.checkpoints || [];
+    if (isSprintMode(items)) return orderedCheckpointLines(items).map(item => item.distance);
+    const source = getComparisonCheckpoints(items);
     return source.map(checkpointReferenceDistance)
       .filter(Number.isFinite).filter(distance => distance > 2 && distance < totalDistance() - 2).sort((a, b) => a - b);
   }
@@ -699,8 +713,8 @@
   }
 
   function orderedCheckpointLines(items) {
-    const source = items[0]?.session.checkpoints || [];
-    if (items[0]?.session.timingMode === 'sprint') {
+    const source = getComparisonCheckpoints(items);
+    if (isSprintMode(items)) {
       const referenceItem = items[0];
       const passages = [];
       source.forEach((line, sourceIndex) => {
@@ -1075,7 +1089,7 @@
     const options = bounds.slice(0, -1).map((_, index) => `<option value="${index}" ${index === state.activeSector ? 'selected' : ''}>S${index + 1}</option>`).join('');
     const endOptions = bounds.slice(0, -1).map((_, index) => `<option value="${index}" ${index === state.activeSectorEnd ? 'selected' : ''}>S${index + 1}</option>`).join('');
     const passageDefinitions = orderedCheckpointLines(items);
-    const sectorCaption = index => items[0]?.session.timingMode === 'sprint'
+    const sectorCaption = index => isSprintMode(items)
       ? (index === 0
         ? `START → ${passageDefinitions[0]?.label || 'FINISH'}`
         : `${passageDefinitions[index - 1]?.label || 'START'} → ${passageDefinitions[index]?.label || 'FINISH'}`)
@@ -1279,7 +1293,7 @@
   function updateCount() { if (ui.count) ui.count.textContent = `${state.selected.size} / 4 선택`; }
   function render() {
     const items = selectedLaps(); updateCount(); renderSummary(items); renderCharts(items); renderSectors(items); syncPlaybackUi(items); renderMap(items);
-    if (items.length) setStatus(items[0]?.session.timingMode === 'sprint'
+    if (items.length) setStatus(isSprintMode(items)
       ? `${items.length}개 스키드 랩 · 실제 체크포인트 통과 시각 순서로 비교 중입니다.`
       : `${items.length}개 랩을 1 m 간격 공통 중심선 거리축으로 비교 중입니다.`);
   }
