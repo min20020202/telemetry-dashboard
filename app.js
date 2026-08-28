@@ -458,6 +458,15 @@ const GPS_SHARED_FIXED_LINES = Object.freeze({
     [{ lat: 35.291994991833526, lon: 126.5742762386799 }, { lat: 35.291979657534064, lon: 126.57436341047288 }]
   ]
 });
+const GPS_SHARED_EXTRA_PRESETS = Object.freeze([{
+  id: 'track-1787918061692-zwyq8',
+  name: '테윅2',
+  mode: 'sprint',
+  start: [{ lat: 35.2921619790249, lon: 126.57441705465318 }, { lat: 35.29218058776346, lon: 126.57446533441546 }],
+  finish: [{ lat: 35.292424690231904, lon: 126.57429099082948 }, { lat: 35.292443298910065, lon: 126.57434329390529 }],
+  checkpoints: GPS_SHARED_FIXED_LINES.checkpoints,
+  savedAt: '2026-08-28T13:07:14.390Z'
+}]);
 let gpsFixedLinePresets = [];
 let gpsActivePresetId = '';
 const CSV_GPS_UTC_OFFSET_SEC = 9 * 3600; // Logger gps_time is stored as Korea Standard Time (UTC+9).
@@ -1335,6 +1344,18 @@ function initializeGpsFixedLinePresets() {
     gpsActivePresetId = preset.id;
     persistGpsFixedLinePresets();
   }
+  GPS_SHARED_EXTRA_PRESETS.forEach(shared => {
+    const existingIndex = gpsFixedLinePresets.findIndex(item => item.id === shared.id);
+    const sharedCopy = {
+      ...shared,
+      start: cloneGpsLines(shared.start),
+      finish: cloneGpsLines(shared.finish),
+      checkpoints: cloneGpsLines(shared.checkpoints)
+    };
+    if (existingIndex >= 0) gpsFixedLinePresets[existingIndex] = sharedCopy;
+    else gpsFixedLinePresets.push(sharedCopy);
+  });
+  persistGpsFixedLinePresets();
   renderGpsFixedLinePresetControl();
 }
 
