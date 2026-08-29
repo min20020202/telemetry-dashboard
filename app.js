@@ -2488,15 +2488,69 @@ function activatePage4SessionLap(sessionId, lapIndex) {
 }
 
 function importPage4SessionFile(file) {
+  // The shared CSV parser temporarily writes into the dashboard globals.  Page 4's
+  // "add CSV" action is comparative, so keep the currently active session and its
+  // timing mode intact and restore them as soon as the added file has been parsed.
+  const activeSession = page4SessionStore.find(item => item.id === page4ActiveSessionId) || null;
+  const activeLapIndex = page4SelectedLapIndex;
+  const previousSelections = page4SelectedSessionLaps.map(item => ({ ...item }));
+  const previousTimingMode = gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit';
+  const previousStartPoints = cloneGpsLines(gpsStartPoints);
+  const previousFinishPoints = cloneGpsLines(gpsFinishPoints);
+  const previousCheckpoints = cloneGpsLines(gpsCheckpoints);
+
+  const restoreActiveSession = () => {
+    if (!activeSession) return;
+    globalData = activeSession.rows;
+    if (gpsTimingMode) gpsTimingMode.value = previousTimingMode;
+    gpsStartPoints = cloneGpsLines(previousStartPoints);
+    gpsFinishPoints = cloneGpsLines(previousFinishPoints);
+    gpsCheckpoints = cloneGpsLines(previousCheckpoints);
+    initDataAndDashboard({ preserveActivePreset: true });
+    gpsLapPoints = activeSession.gpsPoints.map(point => ({ ...point }));
+    gpsLapResults = activeSession.laps.map(lap => ({ ...lap }));
+    gpsCheckpoints = activeSession.checkpoints.map(line => line.map(point => ({ ...point })));
+    page4ActiveSessionId = activeSession.id;
+    page4SelectedLapIndex = activeLapIndex;
+    page4SelectedSessionLaps = previousSelections;
+    if (loadedFileBadge) {
+      loadedFileBadge.textContent = `📄 ${activeSession.fileName}`;
+      loadedFileBadge.style.display = 'inline-block';
+    }
+  };
+
   return new Promise((resolve, reject) => {
     handleFile(file, {
       skipUpload: true,
+      preserveActivePreset: true,
       onComplete: snapshot => {
-        const session = registerPage4Session(snapshot, true);
+        const session = registerPage4Session(snapshot, false);
+        restoreActiveSession();
+        if (session && page4SelectedSessionLaps.length < 2
+            && !page4SelectedSessionLaps.some(item => item.sessionId === session.id)) {
+          const bestLapIndex = page4BestLapIndex(session);
+          if (bestLapIndex >= 0) {
+            page4SelectedSessionLaps.push({ sessionId: session.id, lapIndex: bestLapIndex });
+          }
+        }
         window.registerComparisonSession?.(snapshot, true);
-        session ? resolve(session) : reject(new Error(`${file.name}: 완성 랩이 없습니다.`));
+        if (session) {
+          refreshPage4Selectors();
+          page4SelectedLapIndex = activeLapIndex;
+          if (activeLapIndex >= 0 && p4LapSelect) p4LapSelect.value = String(activeLapIndex);
+          refreshPage4SectorOptions();
+          renderPage4SessionDrawer();
+          applyPage4Selection();
+          syncPage4SelectionToComparison();
+          resolve(session);
+        } else {
+          reject(new Error(`${file.name}: 완성 랩이 없습니다.`));
+        }
       },
-      onError: reject
+      onError: error => {
+        restoreActiveSession();
+        reject(error);
+      }
     });
   });
 }
