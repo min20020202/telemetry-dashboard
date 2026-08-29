@@ -1534,7 +1534,15 @@ function applyGpsFixedLinePreset(presetId) {
     primaryDashboardSnapshot.timingMode = preset.mode === 'sprint' ? 'sprint' : 'circuit';
     primaryDashboardSnapshot.checkpoints = cloneGpsLines(gpsCheckpoints);
   }
-  window.updateComparisonTimingMode?.(preset.mode, gpsCheckpoints);
+  // The selected track preset is one shared setting for every open CSV.
+  // Never let an individual session restore its old mode when selected later.
+  page4SessionStore.forEach(session => {
+    session.timingMode = preset.mode === 'sprint' ? 'sprint' : 'circuit';
+    session.startLine = cloneGpsLines(gpsStartPoints);
+    session.finishLine = cloneGpsLines(gpsFinishPoints);
+    session.checkpoints = cloneGpsLines(gpsCheckpoints);
+  });
+  window.updateComparisonTimingMode?.(preset.mode, gpsCheckpoints, gpsStartPoints, gpsFinishPoints);
   updateGpsVideoControlAvailability();
   setGpsLapStatus(`${preset.name} 적용 완료 · 체크포인트 ${gpsCheckpoints.length}개`, 'ok');
   return true;
@@ -2446,10 +2454,11 @@ function registerPage4Session(snapshot, makeActive = true) {
   applyPage4FiveHzFilter(session.rows);
   session.gpsPoints = (snapshot.gpsPoints || []).map(point => ({ ...point }));
   session.laps = (snapshot.laps || []).map(lap => ({ ...lap }));
-  session.checkpoints = (snapshot.checkpoints || []).map(line => line.map(point => ({ ...point })));
-  session.startLine = (snapshot.startLine || []).map(point => ({ ...point }));
-  session.finishLine = (snapshot.finishLine || []).map(point => ({ ...point }));
-  session.timingMode = snapshot.timingMode === 'sprint' ? 'sprint' : 'circuit';
+  // Track mode/lines are shared by all open CSVs, not owned by a session.
+  session.checkpoints = cloneGpsLines(gpsCheckpoints);
+  session.startLine = cloneGpsLines(gpsStartPoints);
+  session.finishLine = cloneGpsLines(gpsFinishPoints);
+  session.timingMode = gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit';
   if (makeActive) {
     const bestLapIndex = page4BestLapIndex(session);
     page4ActiveSessionId = session.id;
@@ -2476,13 +2485,11 @@ function activatePage4SessionLap(sessionId, lapIndex) {
       loadedFileBadge.textContent = `📄 ${session.fileName}`;
       loadedFileBadge.style.display = 'inline-block';
     }
-    initDataAndDashboard();
+    // Selecting another CSV must not invoke automatic nearest-preset detection;
+    // that used to change a manually selected Skid preset back to Acceleration.
+    initDataAndDashboard({ preserveActivePreset: true });
     gpsLapPoints = session.gpsPoints.map(point => ({ ...point }));
     gpsLapResults = session.laps.map(lap => ({ ...lap }));
-    gpsCheckpoints = session.checkpoints.map(line => line.map(point => ({ ...point })));
-    gpsStartPoints = (session.startLine || []).map(point => ({ ...point }));
-    gpsFinishPoints = (session.finishLine || []).map(point => ({ ...point }));
-    if (gpsTimingMode) gpsTimingMode.value = session.timingMode === 'sprint' ? 'sprint' : 'circuit';
   }
   page4ActiveSessionId = sessionId;
   page4SelectedLapIndex = lapIndex;
@@ -3005,10 +3012,10 @@ function drawPage4TrackMap(targetTime) {
   // Lines belong to each imported session. Using the dashboard globals here
   // mixed the primary CSV's finish line with an added CSV's track and expanded
   // the mini-map bounds until both lines appeared detached in the corners.
-  const mapStartLine = primaryItem?.session?.startLine || gpsStartPoints;
-  const mapFinishLine = primaryItem?.session?.finishLine || gpsFinishPoints;
-  const mapCheckpoints = primaryItem?.session?.checkpoints || gpsCheckpoints;
-  const mapTimingMode = primaryItem?.session?.timingMode || (gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit');
+  const mapStartLine = gpsStartPoints;
+  const mapFinishLine = gpsFinishPoints;
+  const mapCheckpoints = gpsCheckpoints;
+  const mapTimingMode = gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit';
   const allMapPoints = [...points, ...comparisonPointSets.flat()];
   if (Array.isArray(mapFinishLine) && mapFinishLine.length === 2) {
     allMapPoints.push(...mapFinishLine);
@@ -4375,7 +4382,13 @@ gpsTimingMode?.addEventListener('change', () => {
     primaryDashboardSnapshot.timingMode = preset.mode === 'sprint' ? 'sprint' : 'circuit';
     primaryDashboardSnapshot.checkpoints = cloneGpsLines(gpsCheckpoints);
   }
-  window.updateComparisonTimingMode?.(preset.mode, gpsCheckpoints);
+  page4SessionStore.forEach(session => {
+    session.timingMode = preset.mode;
+    session.startLine = cloneGpsLines(gpsStartPoints);
+    session.finishLine = cloneGpsLines(gpsFinishPoints);
+    session.checkpoints = cloneGpsLines(gpsCheckpoints);
+  });
+  window.updateComparisonTimingMode?.(preset.mode, gpsCheckpoints, gpsStartPoints, gpsFinishPoints);
   if (gpsFinishPoints.length === 2) calculateGpsLaps();
   else setGpsLapStatus(preset.mode === 'sprint'
     ? '스타트라인과 피니시라인을 각각 설정하십시오.'
