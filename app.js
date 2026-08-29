@@ -4004,7 +4004,7 @@ function calculateGpsLaps() {
       ...starts.map(item => ({ ...item, type: 'start' })),
       ...finishes.map(item => ({ ...item, type: 'finish' }))
     ].sort((a, b) => a.time - b.time);
-    const minSeconds = Math.max(0.5, Number(gpsLapMinTime?.value) || 5);
+    const minSeconds = Math.max(0.5, Number(gpsLapMinTime?.value) || 3);
     const laps = [];
     const acceptedCrossings = [];
     let pendingStart = null;
@@ -4095,7 +4095,7 @@ function calculateGpsLaps() {
 
   // 첫 통과 방향을 정방향으로 삼고 반대 방향 통과와 근접 중복 검출을 제거합니다.
   const forwardDirection = candidates[0].direction;
-  const minLapSeconds = Math.max(0.5, Number(gpsLapMinTime?.value) || 5);
+  const minLapSeconds = Math.max(0.5, Number(gpsLapMinTime?.value) || 3);
   const crossings = [];
   candidates.forEach(candidate => {
     if (candidate.direction !== forwardDirection) return;
@@ -4480,7 +4480,7 @@ gpsSharedSettingsCopy?.addEventListener('click', async () => {
   }
 });
 gpsLapMinTime?.addEventListener('change', () => {
-  const clamped = Math.max(0.5, Math.min(600, Number(gpsLapMinTime.value) || 5));
+  const clamped = Math.max(0.5, Math.min(600, Number(gpsLapMinTime.value) || 3));
   gpsLapMinTime.value = String(clamped);
   if (gpsFinishPoints.length === 2) calculateGpsLaps();
 });
