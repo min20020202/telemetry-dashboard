@@ -54,6 +54,7 @@ let gpsImuCursorDragging = false;
 let globalData = [];
 let primaryDashboardFile = null;
 let primaryDashboardSnapshot = null;
+let suppressPrimaryDashboardSync = false;
 let currentStartSec = 0;
 let currentEndSec = 30;
 let totalDurationSec = 0;
@@ -3836,6 +3837,9 @@ function renderGpsLapResults(crossings, laps) {
 }
 
 function syncPrimaryDashboardLapSnapshot() {
+  // Additional CSVs on pages 4/5 temporarily reuse the global parser. They must
+  // never be treated as a replacement of the header-opened primary CSV.
+  if (suppressPrimaryDashboardSync) return;
   if (!primaryDashboardSnapshot || primaryDashboardSnapshot.file !== primaryDashboardFile) return;
   primaryDashboardSnapshot.rows = globalData;
   primaryDashboardSnapshot.gpsPoints = gpsLapPoints.map(point => ({ ...point }));
@@ -6196,7 +6200,13 @@ function handleFile(file, options = {}) {
     skipEmptyLines: true,
     complete: function (results) {
       globalData = results.data;
-      initDataAndDashboard(options);
+      const previousSyncSuppression = suppressPrimaryDashboardSync;
+      if (options.skipUpload) suppressPrimaryDashboardSync = true;
+      try {
+        initDataAndDashboard(options);
+      } finally {
+        suppressPrimaryDashboardSync = previousSyncSuppression;
+      }
       if (!options.skipUpload) uploadFileToServer(file);
       const snapshot = {
         file,
