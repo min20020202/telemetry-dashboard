@@ -3955,9 +3955,7 @@ function calculateGpsLaps() {
       ...starts.map(item => ({ ...item, type: 'start' })),
       ...finishes.map(item => ({ ...item, type: 'finish' }))
     ].sort((a, b) => a.time - b.time);
-    const minSeconds = gpsTimingMode?.value === 'sprint'
-      ? Math.max(3, Number(gpsLapMinTime?.value) || 3)
-      : Math.max(5, Number(gpsLapMinTime?.value) || 20);
+    const minSeconds = Math.max(0.5, Number(gpsLapMinTime?.value) || 5);
     const laps = [];
     const acceptedCrossings = [];
     let pendingStart = null;
@@ -4427,7 +4425,7 @@ gpsSharedSettingsCopy?.addEventListener('click', async () => {
   }
 });
 gpsLapMinTime?.addEventListener('change', () => {
-  const clamped = Math.max(5, Math.min(600, Number(gpsLapMinTime.value) || 20));
+  const clamped = Math.max(0.5, Math.min(600, Number(gpsLapMinTime.value) || 5));
   gpsLapMinTime.value = String(clamped);
   if (gpsFinishPoints.length === 2) calculateGpsLaps();
 });
