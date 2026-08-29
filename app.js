@@ -2489,36 +2489,10 @@ function activatePage4SessionLap(sessionId, lapIndex) {
 }
 
 function importPage4SessionFile(file) {
-  // The shared CSV parser temporarily writes into the dashboard globals.  Page 4's
-  // "add CSV" action is comparative, so keep the currently active session and its
-  // timing mode intact and restore them as soon as the added file has been parsed.
-  const activeSession = page4SessionStore.find(item => item.id === page4ActiveSessionId) || null;
+  // handleFile() restores the primary dashboard before this callback runs.
+  // Keep only Page 4's selection state here.
   const activeLapIndex = page4SelectedLapIndex;
   const previousSelections = page4SelectedSessionLaps.map(item => ({ ...item }));
-  const previousTimingMode = gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit';
-  const previousStartPoints = cloneGpsLines(gpsStartPoints);
-  const previousFinishPoints = cloneGpsLines(gpsFinishPoints);
-  const previousCheckpoints = cloneGpsLines(gpsCheckpoints);
-
-  const restoreActiveSession = () => {
-    if (!activeSession) return;
-    globalData = activeSession.rows;
-    if (gpsTimingMode) gpsTimingMode.value = previousTimingMode;
-    gpsStartPoints = cloneGpsLines(previousStartPoints);
-    gpsFinishPoints = cloneGpsLines(previousFinishPoints);
-    gpsCheckpoints = cloneGpsLines(previousCheckpoints);
-    initDataAndDashboard({ preserveActivePreset: true });
-    gpsLapPoints = activeSession.gpsPoints.map(point => ({ ...point }));
-    gpsLapResults = activeSession.laps.map(lap => ({ ...lap }));
-    gpsCheckpoints = activeSession.checkpoints.map(line => line.map(point => ({ ...point })));
-    page4ActiveSessionId = activeSession.id;
-    page4SelectedLapIndex = activeLapIndex;
-    page4SelectedSessionLaps = previousSelections;
-    if (loadedFileBadge) {
-      loadedFileBadge.textContent = `📄 ${activeSession.fileName}`;
-      loadedFileBadge.style.display = 'inline-block';
-    }
-  };
 
   return new Promise((resolve, reject) => {
     handleFile(file, {
@@ -2526,7 +2500,7 @@ function importPage4SessionFile(file) {
       preserveActivePreset: true,
       onComplete: snapshot => {
         const session = registerPage4Session(snapshot, false);
-        restoreActiveSession();
+        page4SelectedSessionLaps = previousSelections;
         if (session && page4SelectedSessionLaps.length < 2
             && !page4SelectedSessionLaps.some(item => item.sessionId === session.id)) {
           const bestLapIndex = page4BestLapIndex(session);
@@ -2548,10 +2522,7 @@ function importPage4SessionFile(file) {
           reject(new Error(`${file.name}: 완성 랩이 없습니다.`));
         }
       },
-      onError: error => {
-        restoreActiveSession();
-        reject(error);
-      }
+      onError: reject
     });
   });
 }
@@ -6180,6 +6151,20 @@ function handleFile(file, options = {}) {
   }
   if (!options.skipUpload) primaryDashboardFile = file;
 
+  // Pages 4 and 5 use this parser to build additional-session snapshots. Capture
+  // the shared dashboard state so an added CSV can never replace the active CSV.
+  const restoreState = options.skipUpload && globalData.length ? {
+    rows: globalData,
+    gpsPoints: cloneGpsLines(gpsLapPoints),
+    laps: cloneGpsLines(gpsLapResults),
+    checkpoints: cloneGpsLines(gpsCheckpoints),
+    start: cloneGpsLines(gpsStartPoints),
+    finish: cloneGpsLines(gpsFinishPoints),
+    timingMode: gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit',
+    badgeText: loadedFileBadge?.textContent || '',
+    badgeDisplay: loadedFileBadge?.style.display || ''
+  } : null;
+
   if (loadedFileBadge) {
     loadedFileBadge.textContent = '📄 ' + file.name;
     loadedFileBadge.style.display = 'inline-block';
@@ -6199,30 +6184,51 @@ function handleFile(file, options = {}) {
     dynamicTyping: header => !/^can\d+_data$/i.test(String(header)),
     skipEmptyLines: true,
     complete: function (results) {
-      globalData = results.data;
       const previousSyncSuppression = suppressPrimaryDashboardSync;
       if (options.skipUpload) suppressPrimaryDashboardSync = true;
       try {
+        globalData = results.data;
         initDataAndDashboard(options);
+        if (!options.skipUpload) uploadFileToServer(file);
+        const snapshot = {
+          file,
+          rows: globalData,
+          gpsPoints: cloneGpsLines(gpsLapPoints),
+          laps: cloneGpsLines(gpsLapResults),
+          checkpoints: cloneGpsLines(gpsCheckpoints),
+          startLine: cloneGpsLines(gpsStartPoints),
+          finishLine: cloneGpsLines(gpsFinishPoints),
+          timingMode: gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit'
+        };
+
+        // Restore before notifying pages 4/5. Their callbacks render charts and
+        // synchronize selections, so they must see the primary CSV as active.
+        if (restoreState) {
+          globalData = restoreState.rows;
+          gpsStartPoints = restoreState.start;
+          gpsFinishPoints = restoreState.finish;
+          gpsCheckpoints = restoreState.checkpoints;
+          if (gpsTimingMode) gpsTimingMode.value = restoreState.timingMode;
+          initDataAndDashboard({ preserveActivePreset: true });
+          gpsLapPoints = restoreState.gpsPoints;
+          gpsLapResults = restoreState.laps;
+          gpsCheckpoints = restoreState.checkpoints;
+          gpsStartPoints = restoreState.start;
+          gpsFinishPoints = restoreState.finish;
+          if (loadedFileBadge) {
+            loadedFileBadge.textContent = restoreState.badgeText;
+            loadedFileBadge.style.display = restoreState.badgeDisplay;
+          }
+        }
+
+        if (!options.skipUpload) primaryDashboardSnapshot = snapshot;
+        if (typeof options.onComplete === 'function') options.onComplete(snapshot);
+        if (!options.skipUpload) {
+          window.setPrimaryPage4Session?.(snapshot);
+          window.setPrimaryComparisonSession?.(snapshot);
+        }
       } finally {
         suppressPrimaryDashboardSync = previousSyncSuppression;
-      }
-      if (!options.skipUpload) uploadFileToServer(file);
-      const snapshot = {
-        file,
-        rows: globalData,
-        gpsPoints: gpsLapPoints,
-        laps: gpsLapResults,
-        checkpoints: gpsCheckpoints,
-        timingMode: gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit'
-      };
-      if (!options.skipUpload) primaryDashboardSnapshot = snapshot;
-      if (typeof options.onComplete === 'function') {
-        options.onComplete(snapshot);
-      }
-      if (!options.skipUpload) {
-        window.setPrimaryPage4Session?.(snapshot);
-        window.setPrimaryComparisonSession?.(snapshot);
       }
     },
     error: function (err) {
@@ -6240,14 +6246,20 @@ window.restorePrimaryDashboardFile = function () {
     // Comparison imports temporarily reuse the dashboard parser. Restore the
     // already parsed primary session from memory instead of parsing the same CSV again.
     if (primaryDashboardSnapshot?.file === primaryDashboardFile) {
-      globalData = primaryDashboardSnapshot.rows;
-      initDataAndDashboard({ preserveActivePreset: true });
-      gpsLapPoints = primaryDashboardSnapshot.gpsPoints;
-      gpsLapResults = primaryDashboardSnapshot.laps;
-      gpsCheckpoints = primaryDashboardSnapshot.checkpoints;
-      if (loadedFileBadge) {
-        loadedFileBadge.textContent = `📄 ${primaryDashboardFile.name}`;
-        loadedFileBadge.style.display = 'inline-block';
+      const previousSyncSuppression = suppressPrimaryDashboardSync;
+      suppressPrimaryDashboardSync = true;
+      try {
+        globalData = primaryDashboardSnapshot.rows;
+        initDataAndDashboard({ preserveActivePreset: true });
+        gpsLapPoints = cloneGpsLines(primaryDashboardSnapshot.gpsPoints);
+        gpsLapResults = cloneGpsLines(primaryDashboardSnapshot.laps);
+        gpsCheckpoints = cloneGpsLines(primaryDashboardSnapshot.checkpoints);
+        if (loadedFileBadge) {
+          loadedFileBadge.textContent = `📄 ${primaryDashboardFile.name}`;
+          loadedFileBadge.style.display = 'inline-block';
+        }
+      } finally {
+        suppressPrimaryDashboardSync = previousSyncSuppression;
       }
       resolve(true);
       return;

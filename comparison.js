@@ -264,7 +264,8 @@
       try { await importOne(files[index]); }
       catch (error) { failures.push(error.message); }
     }
-    if (typeof window.restorePrimaryDashboardFile === 'function') await window.restorePrimaryDashboardFile();
+    // handleFile(skipUpload) already restores the shared primary dashboard
+    // before resolving. A second restore here erased the session just added.
     renderSessions();
     if (state.selected.size >= 1) {
       render();
