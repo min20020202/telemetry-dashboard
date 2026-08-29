@@ -6522,7 +6522,22 @@ function initDataAndDashboard(options = {}) {
         gpsRouteLine.setLatLngs([]);
       }
       gpsLapPoints = buildGpsLapPoints(globalData);
+      // Additional comparison CSVs must be measured with the exact active track
+      // preset. clearGpsLapAnalysis() normally removes the start/finish lines, so
+      // preserve and restore them around that reset when requested by the caller.
+      const preservedGpsLines = options.preserveActivePreset ? {
+        start: cloneGpsLines(gpsStartPoints),
+        finish: cloneGpsLines(gpsFinishPoints),
+        checkpoints: cloneGpsLines(gpsCheckpoints),
+        mode: gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit'
+      } : null;
       clearGpsLapAnalysis();
+      if (preservedGpsLines) {
+        gpsStartPoints = preservedGpsLines.start;
+        gpsFinishPoints = preservedGpsLines.finish;
+        gpsCheckpoints = preservedGpsLines.checkpoints;
+        if (gpsTimingMode) gpsTimingMode.value = preservedGpsLines.mode;
+      }
       const restoredFixedLines = options.preserveActivePreset ? true : restoreGpsFixedLines();
       if (options.preserveActivePreset) {
         drawGpsFinishLine();
