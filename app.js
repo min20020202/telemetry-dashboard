@@ -2447,6 +2447,9 @@ function registerPage4Session(snapshot, makeActive = true) {
   session.gpsPoints = (snapshot.gpsPoints || []).map(point => ({ ...point }));
   session.laps = (snapshot.laps || []).map(lap => ({ ...lap }));
   session.checkpoints = (snapshot.checkpoints || []).map(line => line.map(point => ({ ...point })));
+  session.startLine = (snapshot.startLine || []).map(point => ({ ...point }));
+  session.finishLine = (snapshot.finishLine || []).map(point => ({ ...point }));
+  session.timingMode = snapshot.timingMode === 'sprint' ? 'sprint' : 'circuit';
   if (makeActive) {
     const bestLapIndex = page4BestLapIndex(session);
     page4ActiveSessionId = session.id;
@@ -2477,6 +2480,9 @@ function activatePage4SessionLap(sessionId, lapIndex) {
     gpsLapPoints = session.gpsPoints.map(point => ({ ...point }));
     gpsLapResults = session.laps.map(lap => ({ ...lap }));
     gpsCheckpoints = session.checkpoints.map(line => line.map(point => ({ ...point })));
+    gpsStartPoints = (session.startLine || []).map(point => ({ ...point }));
+    gpsFinishPoints = (session.finishLine || []).map(point => ({ ...point }));
+    if (gpsTimingMode) gpsTimingMode.value = session.timingMode === 'sprint' ? 'sprint' : 'circuit';
   }
   page4ActiveSessionId = sessionId;
   page4SelectedLapIndex = lapIndex;
@@ -2996,14 +3002,21 @@ function drawPage4TrackMap(targetTime) {
   const ctx = p4TrackMap.getContext('2d'); ctx.setTransform(scale, 0, 0, scale, 0, 0); ctx.clearRect(0, 0, width, height);
 
   const comparisonPointSets = selectedItems.map(item => (item.session.gpsPoints || []).filter(point => point.time >= item.lap.startTime && point.time <= item.lap.endTime));
+  // Lines belong to each imported session. Using the dashboard globals here
+  // mixed the primary CSV's finish line with an added CSV's track and expanded
+  // the mini-map bounds until both lines appeared detached in the corners.
+  const mapStartLine = primaryItem?.session?.startLine || gpsStartPoints;
+  const mapFinishLine = primaryItem?.session?.finishLine || gpsFinishPoints;
+  const mapCheckpoints = primaryItem?.session?.checkpoints || gpsCheckpoints;
+  const mapTimingMode = primaryItem?.session?.timingMode || (gpsTimingMode?.value === 'sprint' ? 'sprint' : 'circuit');
   const allMapPoints = [...points, ...comparisonPointSets.flat()];
-  if (Array.isArray(gpsFinishPoints) && gpsFinishPoints.length === 2) {
-    allMapPoints.push(...gpsFinishPoints);
+  if (Array.isArray(mapFinishLine) && mapFinishLine.length === 2) {
+    allMapPoints.push(...mapFinishLine);
   }
-  if (Array.isArray(gpsStartPoints) && gpsStartPoints.length === 2) {
-    allMapPoints.push(...gpsStartPoints);
+  if (Array.isArray(mapStartLine) && mapStartLine.length === 2) {
+    allMapPoints.push(...mapStartLine);
   }
-  gpsCheckpoints.forEach(cp => {
+  mapCheckpoints.forEach(cp => {
     if (Array.isArray(cp) && cp.length === 2) {
       allMapPoints.push(...cp);
     }
@@ -3049,15 +3062,15 @@ function drawPage4TrackMap(targetTime) {
   }
 
   // 3. Draw Finish Line
-  if (gpsTimingMode?.value === 'sprint' && Array.isArray(gpsStartPoints) && gpsStartPoints.length === 2) {
-    const from = project(gpsStartPoints[0]);
-    const to = project(gpsStartPoints[1]);
+  if (mapTimingMode === 'sprint' && Array.isArray(mapStartLine) && mapStartLine.length === 2) {
+    const from = project(mapStartLine[0]);
+    const to = project(mapStartLine[1]);
     ctx.save(); ctx.setLineDash([7, 4]); ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
     ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke(); ctx.restore();
   }
-  if (Array.isArray(gpsFinishPoints) && gpsFinishPoints.length === 2) {
-    let from = project(gpsFinishPoints[0]);
-    let to = project(gpsFinishPoints[1]);
+  if (Array.isArray(mapFinishLine) && mapFinishLine.length === 2) {
+    let from = project(mapFinishLine[0]);
+    let to = project(mapFinishLine[1]);
     const isFinishActive = activeLabels.has('FINISH') || activeLabels.has('START');
 
     if (isFinishActive) {
@@ -3078,7 +3091,7 @@ function drawPage4TrackMap(targetTime) {
   }
 
   // 4. Draw Checkpoints
-  gpsCheckpoints.forEach((checkpoint, index) => {
+  mapCheckpoints.forEach((checkpoint, index) => {
     if (!Array.isArray(checkpoint) || checkpoint.length !== 2) return;
     let from = project(checkpoint[0]);
     let to = project(checkpoint[1]);
